@@ -15,7 +15,6 @@ trait IP extends Location {
   override def toString: String = addressString
 }
 
-// TODO: Add IP address interpolation
 object IP {
   def LocalHost: IP = IPv4.LocalHost
 
