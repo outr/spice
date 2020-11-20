@@ -1,4 +1,4 @@
-package spice
+package spice.http
 
 import io.circe.Decoder.Result
 import io.circe._
@@ -20,21 +20,13 @@ object HttpMethod {
   }
 
   case object Get extends HttpMethod
-
   case object Put extends HttpMethod
-
   case object Trace extends HttpMethod
-
   case object Connect extends HttpMethod
-
   case object Head extends HttpMethod
-
   case object Delete extends HttpMethod
-
   case object Patch extends HttpMethod
-
   case object Post extends HttpMethod
-
   case object Options extends HttpMethod
 
   def get(name: String): Option[HttpMethod] = map.get(name.toUpperCase)

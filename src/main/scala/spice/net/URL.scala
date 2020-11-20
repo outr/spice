@@ -1,4 +1,4 @@
-package spice
+package spice.net
 
 import io.circe.Decoder.Result
 import io.circe._

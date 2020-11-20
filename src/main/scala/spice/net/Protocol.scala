@@ -1,4 +1,4 @@
-package spice
+package spice.net
 
 case class Protocol private(scheme: String, description: String, rfc: String, defaultPort: Option[Int] = None) {
   Protocol.schemeMap += scheme -> this
