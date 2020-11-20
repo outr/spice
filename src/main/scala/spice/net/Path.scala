@@ -1,13 +1,15 @@
 package spice.net
 
+import spice.net.PathPart._
+
 import scala.reflect.macros.blackbox
 
 case class Path(parts: List[PathPart]) extends Location {
   lazy val absolute: Path = {
     var entries = Vector.empty[PathPart]
     parts.foreach {
-      case UpLevelPathPart => entries = entries.dropRight(1)
-      case SameLevelPathPart => // Ignore
+      case UpLevel => entries = entries.dropRight(1)
+      case SameLevel => // Ignore
       case part => entries = entries :+ part
     }
     Path(entries.toList)
@@ -16,11 +18,11 @@ case class Path(parts: List[PathPart]) extends Location {
   lazy val decoded: String = absolute.parts.map(_.value).mkString("/", "/", "")
 
   lazy val arguments: List[String] = parts.collect {
-    case part: ArgumentPathPart => part.name
+    case part: Argument => part.name
   }
 
   def withArguments(arguments: Map[String, String]): Path = copy(parts = parts.map {
-    case part: ArgumentPathPart if arguments.contains(part.name) => new LiteralPathPart(arguments(part.name))
+    case part: Argument if arguments.contains(part.name) => new Literal(arguments(part.name))
     case part => part
   })
 
@@ -34,7 +36,7 @@ case class Path(parts: List[PathPart]) extends Location {
     assert(parts.length == literal.parts.length, s"Literal path must have the same number of parts as the one being extracted for")
     parts.zip(literal.parts).flatMap {
       case (p1, p2) => p1 match {
-        case ap: ArgumentPathPart => Some(ap.name -> p2.value)
+        case ap: Argument => Some(ap.name -> p2.value)
         case _ => None
       }
     }.toMap
