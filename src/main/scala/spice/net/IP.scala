@@ -1,8 +1,9 @@
 package spice.net
 
-import fabric.rw._
+import fabric.rw.*
 
 import scala.collection.immutable.Vector
+import scala.util.Try
 import scala.util.matching.Regex
 
 sealed trait IP {
@@ -42,22 +43,24 @@ object IP {
   }
 
   case class v6(a: Int = 0,
-                  b: Int = 0,
-                  c: Int = 0,
-                  d: Int = 0,
-                  e: Int = 0,
-                  f: Int = 0,
-                  g: Int = 0,
-                  h: Int = 1,
-                  scope: Option[String] = None) extends IP {
-    private def nc(i: Int): String = f"$i%04x"
+                b: Int = 0,
+                c: Int = 0,
+                d: Int = 0,
+                e: Int = 0,
+                f: Int = 0,
+                g: Int = 0,
+                h: Int = 1,
+                scope: Option[String] = None) extends IP {
+    private def nc(i: Int): String = i.toHexString
 
-    private def cs(i: Int): String = i.toHexString
+    private def cs(i: Int): String = f"$i%04x"
+
+    private lazy val s: String = scope.map(s => s"%$s").getOrElse("")
 
     override val address: Vector[Int] = Vector(a, b, c, d, e, f, g, h)
-    override val addressString: String = s"${nc(a)}:${nc(b)}:${nc(c)}:${nc(d)}:${nc(e)}:${nc(f)}:${nc(g)}:${nc(h)}${scope.getOrElse("")}"
+    override val addressString: String = s"${nc(a)}:${nc(b)}:${nc(c)}:${nc(d)}:${nc(e)}:${nc(f)}:${nc(g)}:${nc(h)}$s"
 
-    lazy val canonicalString: String = s"${cs(a)}:${cs(b)}:${cs(c)}:${cs(d)}:${cs(e)}:${cs(f)}:${cs(g)}:${cs(h)}${scope.getOrElse("")}"
+    lazy val canonicalString: String = s"${cs(a)}:${cs(b)}:${cs(c)}:${cs(d)}:${cs(e)}:${cs(f)}:${cs(g)}:${cs(h)}$s"
   }
 
   object v6 {
@@ -80,7 +83,7 @@ object IP {
         left ::: middle ::: right
       } else {
         a.split(':').map(Option.apply).toList
-      }).map(o => Integer.parseInt(o.getOrElse("0"), 16)).toVector
+      }).flatMap(o => Try(Integer.parseInt(o.getOrElse("0"), 16)).toOption).toVector
       if (v.length != 8) {
         None
       } else {
