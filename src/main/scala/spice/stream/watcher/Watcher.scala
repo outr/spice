@@ -1,12 +1,12 @@
 package spice.stream.watcher
 
-import java.nio.file.*
+import java.nio.file._
 import java.nio.file.LinkOption.NOFOLLOW_LINKS
 import java.nio.file.StandardWatchEventKinds.{ENTRY_CREATE, ENTRY_DELETE, ENTRY_MODIFY}
 import java.nio.file.attribute.BasicFileAttributes
 import scala.annotation.tailrec
 import scala.collection.mutable
-import scala.jdk.CollectionConverters.*
+import scala.jdk.CollectionConverters._
 
 abstract class Watcher(directory: Path,
                        ignoreMatchers: Set[String] = Watcher.DefaultIgnores,

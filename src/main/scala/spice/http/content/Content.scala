@@ -1,6 +1,6 @@
 package spice.http.content
 
-import fabric.*
+import fabric._
 import fabric.parse.JsonParser
 
 import java.io.File

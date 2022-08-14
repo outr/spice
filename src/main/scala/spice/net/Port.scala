@@ -1,7 +1,7 @@
 package spice.net
 
 import fabric.Json
-import fabric.rw.*
+import fabric.rw._
 
 case class Port private(value: Int)
 

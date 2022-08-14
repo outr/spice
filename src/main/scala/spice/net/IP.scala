@@ -1,8 +1,7 @@
 package spice.net
 
-import fabric.rw.*
+import fabric.rw._
 
-import scala.collection.immutable.Vector
 import scala.util.Try
 import scala.util.matching.Regex
 

@@ -1,10 +1,8 @@
 package spice.net
 
-import scala.util.Try
 import scala.util.matching.Regex
-import fabric.rw.*
+import fabric.rw._
 
-import scala.annotation.tailrec
 import scala.collection.mutable
 
 case class URL(protocol: Protocol = Protocol.Http,
