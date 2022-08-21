@@ -1,8 +1,8 @@
 package spice.http
 
-import spice.http.cookie.{ResponseCookie, SameSite}
+import spice.http.cookie.{Cookie, SameSite}
 
-object SetCookie extends ListTypedHeaderKey[ResponseCookie] {
+object SetCookie extends ListTypedHeaderKey[Cookie.Response] {
   private[http] val KeyValueRegex = """(.+)=(.*)""".r
   private val ExpiresRegex = """(?i)Expires=(.+)""".r
   private val MaxAgeRegex = """(?i)Max-Age=(\d+)""".r
@@ -12,13 +12,13 @@ object SetCookie extends ListTypedHeaderKey[ResponseCookie] {
   override def key: String = "Set-Cookie"
   override protected def commaSeparated: Boolean = false
 
-  override def value(headers: Headers): List[ResponseCookie] = {
+  override def value(headers: Headers): List[Cookie.Response] = {
     headers.get(this).map { headerValue =>
       val list = headerValue.split(';').map(_.trim).toList
       val (name, value) = list.head match {
         case KeyValueRegex(k, v) => k -> v
       }
-      var cookie = ResponseCookie(name, value)
+      var cookie = Cookie.Response(name, value)
       list.tail.foreach {
         case ExpiresRegex(date) => cookie = cookie.copy(expires = DateHeaderKey.parse(date))
         case MaxAgeRegex(seconds) => cookie = cookie.copy(maxAge = Some(seconds.toLong))
@@ -33,5 +33,5 @@ object SetCookie extends ListTypedHeaderKey[ResponseCookie] {
     }
   }
 
-  override def apply(value: ResponseCookie): Header = Header(this, value.http)
+  override def apply(value: Cookie.Response): Header = Header(this, value.http)
 }

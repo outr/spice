@@ -1,16 +1,18 @@
 package spice.stream
 
+import cats.effect.IO
+
 import java.io.{File, FileOutputStream, IOException}
 import scala.annotation.tailrec
 import scala.concurrent.duration.{DurationInt, FiniteDuration}
 
 object Stream {
   final def apply(reader: Reader,
-                  writer: Writer,
-                  monitor: Monitor = Monitor.Ignore,
-                  monitorDelay: FiniteDuration = 15.millis,
-                  buffer: Array[Byte] = new Array[Byte](1024),
-                  closeOnComplete: Boolean = true): Writer = {
+                 writer: Writer,
+                 monitor: Monitor = Monitor.Ignore,
+                 monitorDelay: FiniteDuration = 15.millis,
+                 buffer: Array[Byte] = new Array[Byte](1024),
+                 closeOnComplete: Boolean = true): IO[Writer] = IO {
     val length = reader.length
     monitor.open(length)
     var total = 0L

@@ -12,18 +12,18 @@ case class FormDataContent(data: List[FormData]) extends Content {
   override def withContentType(contentType: ContentType): Content = this
   override def withLastModified(lastModified: Long): Content = this
 
-  def fileOption(key: String): Option[FileEntry] = data.find(_.key == key).map(_.entries.head.asInstanceOf[FileEntry])
-  def stringOption(key: String): Option[StringEntry] = data.find(_.key == key).map(_.entries.head.asInstanceOf[StringEntry])
-  def file(key: String): FileEntry = fileOption(key).getOrElse(throw new RuntimeException(s"Not found: $key in $this."))
-  def string(key: String): StringEntry = stringOption(key).getOrElse(throw new RuntimeException(s"Not found: $key in $this."))
+  def fileOption(key: String): Option[FormDataEntry.FileEntry] = data.find(_.key == key).map(_.entries.head.asInstanceOf[FormDataEntry.FileEntry])
+  def stringOption(key: String): Option[FormDataEntry.StringEntry] = data.find(_.key == key).map(_.entries.head.asInstanceOf[FormDataEntry.StringEntry])
+  def file(key: String): FormDataEntry.FileEntry = fileOption(key).getOrElse(throw new RuntimeException(s"Not found: $key in $this."))
+  def string(key: String): FormDataEntry.StringEntry = stringOption(key).getOrElse(throw new RuntimeException(s"Not found: $key in $this."))
 
   def withFile(key: String, fileName: String, file: File, headers: Headers = Headers.empty): FormDataContent = {
-    val entry = FileEntry(fileName, file, headers)
+    val entry = FormDataEntry.FileEntry(fileName, file, headers)
     withEntry(key, entry)
   }
 
   def withString(key: String, value: String, headers: Headers = Headers.empty): FormDataContent = {
-    val entry = StringEntry(value, headers)
+    val entry = FormDataEntry.StringEntry(value, headers)
     withEntry(key, entry)
   }
 

@@ -1,7 +1,7 @@
 package spice.http
 
 import spice.http.content.Content
-import spice.http.cookie.RequestCookie
+import spice.http.cookie.Cookie
 import spice.net.{IP, URL}
 
 case class HttpRequest(method: HttpMethod = HttpMethod.Get,
@@ -10,7 +10,7 @@ case class HttpRequest(method: HttpMethod = HttpMethod.Get,
                        headers: Headers = Headers.empty,
                        content: Option[Content] = None,
                        timestamp: Long = System.currentTimeMillis()) {
-  lazy val cookies: List[RequestCookie] = Headers.Request.`Cookie`.value(headers)
+  lazy val cookies: List[Cookie.Request] = Headers.Request.`Cookie`.value(headers)
   def withHeader(header: Header): HttpRequest = copy(headers = headers.withHeader(header))
   def withHeader(key: String, value: String): HttpRequest = copy(headers = headers.withHeader(key, value))
   def withContent(content: Content): HttpRequest = copy(content = Some(content))

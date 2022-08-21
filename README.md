@@ -10,9 +10,9 @@ core focus on OpenAPI / Swagger support.
   - [X] URL support + compile-time interpolation
   - [X] Fabric JSON encoding/decoding support for all types
   - [X] ContentType implementation
-- [ ] Stream support
+- [X] Stream support
   - [X] Porting of IO from YouI into Stream
-  - [ ] Migration from blocking to cats-effect
+  - [X] Migration from blocking to cats-effect
 - [ ] HTTP Foundation
   - [X] Migration of YouI HTTP classes
   - [ ] Cleanup and updates to representations

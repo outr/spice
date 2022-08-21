@@ -1,12 +1,13 @@
 package spice.http
 
 import spice.http.content.Content
-import spice.http.cookie.ResponseCookie
+import spice.http.cookie.Cookie
+import spice.http.cookie.Cookie.Response
 
 case class HttpResponse(status: HttpStatus = HttpStatus.OK,
                         headers: Headers = Headers.empty,
                         content: Option[Content] = None) {
-  lazy val cookies: List[ResponseCookie] = Headers.Response.`Set-Cookie`.value(headers)
+  lazy val cookies: List[Cookie.Response] = Headers.Response.`Set-Cookie`.value(headers)
 
   def withStatus(status: HttpStatus): HttpResponse = copy(status = status)
   def withHeader(header: Header): HttpResponse = copy(headers = headers.withHeader(header))
