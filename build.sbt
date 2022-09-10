@@ -11,16 +11,53 @@ scalacOptions ++= Seq("-deprecation")
 
 crossScalaVersions := Seq(scala213, scala3)
 
-libraryDependencies ++= Seq(
-	"com.outr" %% "profig" % "3.4.1",
-	"com.outr" %% "scribe" % "3.10.3",
-	"com.outr" %% "fabric-parse" % "1.3.0",
-	"com.outr" %% "reactify" % "4.0.8",
-	"org.typelevel" %% "cats-effect" % "3.3.14",
-	"co.fs2" %% "fs2-core" % "3.2.12",
-	"org.typelevel" %% "literally" % "1.1.0",
-	"com.squareup.okhttp3" % "okhttp" % "4.10.0",
-	"io.undertow" % "undertow-core" % "2.2.19.Final",
-	"com.outr" %% "moduload" % "1.1.6",
-	"org.scalatest" %% "scalatest" % "3.2.13" % Test
-)
+def dep: Dependencies.type = Dependencies
+
+lazy val root = project.in(file("."))
+	.aggregate(
+		coreJS, coreJVM, clientJS, clientJVM, clientImplementationOkHttp
+	)
+	.settings(
+		publish := {},
+		publishLocal := {}
+	)
+
+lazy val core = crossProject(JSPlatform, JVMPlatform).in(file("core"))
+	.settings(
+		name := "youi-core",
+		description := "Core functionality leveraged and shared by most other sub-projects of YouI.",
+		libraryDependencies ++= Seq(
+			dep.profig, dep.scribe, dep.fabricParse, dep.reactify, dep.catsEffect, dep.fs2, dep.literally, dep.moduload,
+			dep.scalaTest, dep.catsEffectTesting
+		)
+	)
+	.jsSettings(
+		libraryDependencies ++= Seq(
+			"org.scala-js" %%% "scalajs-dom" % dep.version.scalaJSDOM
+		)
+	)
+
+lazy val coreJS = core.js
+lazy val coreJVM = core.jvm
+
+lazy val client = crossProject(JSPlatform, JVMPlatform)
+	.in(file("client"))
+	.dependsOn(core)
+	.settings(
+		name := "youi-client",
+		libraryDependencies ++= Seq(
+			dep.scalaTest, dep.catsEffectTesting
+		)
+	)
+
+lazy val clientJS = client.js
+lazy val clientJVM = client.jvm
+
+lazy val clientImplementationOkHttp = project
+	.dependsOn(clientJVM)
+	.in(file("client/implementation/okhttp"))
+	.settings(
+		libraryDependencies ++= Seq(
+			dep.okHttp
+		)
+	)

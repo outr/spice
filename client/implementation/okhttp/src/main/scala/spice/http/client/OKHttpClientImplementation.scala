@@ -17,6 +17,7 @@ import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicLong
 import javax.net.ssl._
 import scala.collection.mutable
+import scala.concurrent.duration.FiniteDuration
 import scala.jdk.CollectionConverters._
 import scala.util.{Failure, Success, Try}
 
@@ -206,6 +207,9 @@ class OKHttpClientImplementation(config: HttpClientConfig) extends HttpClientImp
       content = content
     )
   }
+
+  override def connectionPool(maxIdleConnections: Int, keepAlive: FiniteDuration): ConnectionPool =
+    OkHttpConnectionPool(maxIdleConnections, keepAlive)
 
   protected def contentToString(contentType: ContentType, contentLength: Option[Long]): Boolean = {
     contentType.`type` == "text" || contentType.subType == "json"

@@ -18,6 +18,6 @@ object ConnectionPool {
   lazy val default: ConnectionPool = apply()
 
   def apply(maxIdleConnections: Int = maxIdleConnections, keepAlive: FiniteDuration = keepAlive): ConnectionPool = {
-    ClientPlatform.createPool(maxIdleConnections, keepAlive)
+    HttpClientImplementation().connectionPool(maxIdleConnections, keepAlive)
   }
 }
