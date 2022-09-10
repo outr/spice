@@ -204,7 +204,7 @@ case class HttpClient(request: HttpRequest,
 
 object HttpClient extends HttpClient(
   request = HttpRequest(),
-  implementation = HttpClientImplementation(),
+  implementation = HttpClientImplementationManager(HttpClientConfig.default()),
   retries = HttpClientConfig.default().retries,
   retryDelay = HttpClientConfig.default().retryDelay,
   sessionManager = HttpClientConfig.default().sessionManager,

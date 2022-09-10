@@ -2,6 +2,7 @@ package spice.http.client
 
 import cats.effect.unsafe.implicits.global
 import cats.effect.{Deferred, IO}
+import moduload.Moduload
 import spice.http._
 import spice.http.content.FormDataEntry.{FileEntry, StringEntry}
 import spice.http.content._
@@ -13,7 +14,7 @@ import java.net.{InetAddress, Socket}
 import java.security.SecureRandom
 import java.security.cert.X509Certificate
 import java.util
-import java.util.concurrent.TimeUnit
+import java.util.concurrent.{ConcurrentHashMap, TimeUnit}
 import java.util.concurrent.atomic.AtomicLong
 import javax.net.ssl._
 import scala.collection.mutable
@@ -26,7 +27,7 @@ import scala.util.{Failure, Success, Try}
   *
   * Adds support for simple restful request/response JSON support.
   */
-class OKHttpClientImplementation(config: HttpClientConfig) extends HttpClientImplementation(config) {
+class OkHttpClientImplementation(config: HttpClientConfig) extends HttpClientImplementation(config) {
   private lazy val client = {
     val b = new okhttp3.OkHttpClient.Builder()
     b.sslSocketFactory(new SSLSocketFactory {
@@ -128,7 +129,7 @@ class OKHttpClientImplementation(config: HttpClientConfig) extends HttpClientImp
 
       override def onFailure(call: okhttp3.Call, exc: IOException): Unit = deferred.complete(Failure(exc))
     })
-    OKHttpClientImplementation.process(deferred.get)
+    OkHttpClientImplementation.process(deferred.get)
   }
 
   private def requestToOk(request: HttpRequest): okhttp3.Request = {
@@ -235,16 +236,30 @@ class OKHttpClientImplementation(config: HttpClientConfig) extends HttpClientImp
   }
 
   def logStats(): Unit = {
-    val g = OKHttpClientImplementation
+    val g = OkHttpClientImplementation
     scribe.info(s"HttpClient stats - Pool[active: ${config.connectionPool.active}, idle: ${config.connectionPool.idle}, total: ${config.connectionPool.total}], Global[active: ${g.active}, successful: ${g.successful}, failure: ${g.failure}, total: ${g.total}]")
   }
 }
 
-object OKHttpClientImplementation {
+object OkHttpClientImplementation extends Moduload {
+  private val cached = new ConcurrentHashMap[HttpClientConfig, HttpClientImplementation]
+
   private[client] val _total = new AtomicLong(0L)
   private[client] val _active = new AtomicLong(0L)
   private[client] val _successful = new AtomicLong(0L)
   private[client] val _failure = new AtomicLong(0L)
+
+  override def load(): Unit = {
+    scribe.info(s"Registering OkHttpClientImplementation...")
+    HttpClientImplementationManager.register(creator)
+  }
+
+  override def error(t: Throwable): Unit = {
+    scribe.error("Error while attempting to register OkHttpClientImplementation", t)
+  }
+
+  private def creator(config: HttpClientConfig): HttpClientImplementation =
+    cached.computeIfAbsent(config, config => new OkHttpClientImplementation(config))
 
   private[client] def process(io: IO[Try[HttpResponse]]): IO[Try[HttpResponse]] = {
     _total.incrementAndGet()

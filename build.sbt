@@ -58,6 +58,7 @@ lazy val clientImplementationOkHttp = project
 	.in(file("client/implementation/okhttp"))
 	.settings(
 		libraryDependencies ++= Seq(
-			dep.okHttp
+			dep.okHttp,
+			dep.scalaTest, dep.catsEffectTesting
 		)
 	)
