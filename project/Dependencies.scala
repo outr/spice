@@ -21,6 +21,7 @@ object Dependencies {
 
   val profig: ModuleID = "com.outr" %% "profig" % version.profig
 	val scribe: ModuleID = "com.outr" %% "scribe" % version.scribe
+  val scribeCats: ModuleID = "com.outr" %% "scribe-cats" % version.scribe
 	val fabricParse: ModuleID = "com.outr" %% "fabric-parse" % version.fabric
 	val reactify: ModuleID = "com.outr" %% "reactify" % version.reactify
 	val catsEffect: ModuleID = "org.typelevel" %% "cats-effect" % version.cats

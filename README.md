@@ -2,6 +2,10 @@
 A new framework for server and client HTTP communication. Intentional speed and simplicity with a
 core focus on OpenAPI / Swagger support.
 
+## Pre-Release
+Because this project is being used in development of other projects, pre-releases are being made as
+I work toward 1.0. The current pre-release is `0.0.1`.
+
 ## 1.0
 - [X] Net Foundation
   - [X] Port + compile-time interpolation
@@ -21,13 +25,13 @@ core focus on OpenAPI / Swagger support.
   - [ ] Cross-platform code
   - [ ] Scala.js
   - [ ] ScalaNative considerations?
-- [ ] HTTP Client support
-  - [ ] JVM implementation using okhttp
-  - [ ] JS implementation using AJAX
+- [X] HTTP Client support
+  - [X] JVM implementation using okhttp
+  - [X] JS implementation using AJAX
   - [ ] ScalaNative?
-  - [ ] Testing
+  - [X] Testing
 - [ ] HTTP Server support
-  - [ ] Moduload for implementation details
+  - [X] Moduload for implementation details
   - [ ] JVM implementation using Undertow
   - [ ] Migration from YouI
   - [ ] Updates to using cats-effect and fs2
