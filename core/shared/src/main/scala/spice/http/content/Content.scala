@@ -1,10 +1,5 @@
 package spice.http.content
 
-import fabric._
-import fabric.parse.JsonParser
-
-import java.io.File
-import java.net.URL
 import spice.net.ContentType
 
 trait Content {

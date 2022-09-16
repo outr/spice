@@ -1,6 +1,6 @@
 package spice.http.content
 
-import fabric.parse.JsonParser
+import fabric.io.JsonFormatter
 import fabric.{Json, Null, obj, str}
 import spice.net.ContentType
 
@@ -20,7 +20,7 @@ trait SharedContentHelpers {
   }
 
   def json(value: Json, pretty: Boolean = false): Content = {
-    string(JsonParser.format(value), ContentType.`application/json`)
+    string(JsonFormatter.Default(value), ContentType.`application/json`)
   }
 
   def string(value: String, contentType: ContentType): Content = StringContent(value, contentType)

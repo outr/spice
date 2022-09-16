@@ -2,7 +2,7 @@ package spice.http.client
 
 import cats.effect.IO
 import fabric.Json
-import fabric.parse.JsonParser
+import fabric.io.{Format, JsonFormatter, JsonParser}
 import fabric.rw._
 import spice.http._
 import spice.http.client.intercept.Interceptor
@@ -98,7 +98,7 @@ case class HttpClient(request: HttpRequest,
    * @param json the JSON content to send
    * @return HttpClient
    */
-  def json(json: Json): HttpClient = content(StringContent(JsonParser.format(json), ContentType.`application/json`))
+  def json(json: Json): HttpClient = content(StringContent(JsonFormatter.Default(json), ContentType.`application/json`))
 
   /**
    * Sends an HttpRequest and receives an asynchronous HttpResponse future.
@@ -153,7 +153,7 @@ case class HttpClient(request: HttpRequest,
           val responseJson = response.content.map(implementation.content2String).getOrElse("")
           if (!failOnHttpStatus || response.status.isSuccess) {
             if (responseJson.isEmpty) throw new ClientException(s"No content received in response for ${request.url}.", request, response, None)
-            Success(JsonParser.parse(responseJson).as[Response])
+            Success(JsonParser(responseJson, Format.Json).as[Response])
           } else {
             throw new ClientException("HttpStatus was not successful", request, response, None)
           }
@@ -192,9 +192,9 @@ case class HttpClient(request: HttpRequest,
         val responseJson = response.content.map(implementation.content2String).getOrElse("")
         if (responseJson.isEmpty) throw new ClientException(s"No content received in response for ${this.request.url}.", this.request, response, None)
         if (response.status.isSuccess) {
-          Right(JsonParser.parse(responseJson).as[Success])
+          Right(JsonParser(responseJson, Format.Json).as[Success])
         } else {
-          Left(JsonParser.parse(responseJson).as[Failure])
+          Left(JsonParser(responseJson, Format.Json).as[Failure])
         }
       }
       case Failure(exception) => throw exception
