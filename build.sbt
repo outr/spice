@@ -28,6 +28,7 @@ ThisBuild / developers := List(
 )
 
 ThisBuild / versionScheme := Some("semver-spec")
+ThisBuild / outputStrategy := Some(StdoutOutput)
 
 def dep: Dependencies.type = Dependencies
 
@@ -102,7 +103,7 @@ lazy val serverImplementationUndertow = project
 	.settings(
 		name := "spice-server-undertow",
 		libraryDependencies ++= Seq(
-			dep.undertow,
+			dep.undertow, dep.scribeSlf4j,
 			dep.scalaTest, dep.catsEffectTesting
 		)
 	)

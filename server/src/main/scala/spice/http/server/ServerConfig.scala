@@ -1,5 +1,7 @@
 package spice.http.server
 
+import cats.effect.unsafe.IORuntimeConfig
+
 import java.io.File
 import java.util.concurrent.TimeUnit
 import fabric.rw._
@@ -11,7 +13,18 @@ class ServerConfig(server: HttpServer) {
   /**
     * The Server name set in the HTTP header
     */
-  val name: Var[String] = Var(Profig("server.name").asOr[String]("youi"))
+  val name: Var[String] = Var(Profig("server.name").asOr("spice"))
+  /**
+   * Enables HTTP/2 support for the server. Defaults to true.
+   */
+  val enableHTTP2: Var[Boolean] = Var(Profig("server.enableHTTP2").asOr(true))
+  /**
+   * Enables reuse of connections. Defaults to true.
+   */
+  val persistentConnections: Var[Boolean] = Var(Profig("server.persistentConnections").asOr(true))
+  val webSocketCompression: Var[Boolean] = Var(Profig("server.webSocketCompression").asOr(true))
+
+  val ioRuntimeConfig: Var[IORuntimeConfig] = Var(IORuntimeConfig())
 
   object session {
     private val config = Profig("session").as[SessionConfig]

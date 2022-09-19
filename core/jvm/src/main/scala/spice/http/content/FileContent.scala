@@ -1,7 +1,7 @@
 package spice.http.content
 
 import spice.net.ContentType
-import spice.stream._
+import spice.stream
 
 import java.io.File
 import scala.collection.mutable
@@ -18,5 +18,5 @@ case class FileContent(file: File, contentType: ContentType, lastModifiedOverrid
 
   override def toString: String = s"FileContent(file: ${file.getAbsolutePath}, contentType: $contentType)"
 
-  override def asString: String = Stream(file, new mutable.StringBuilder).toString
+  override def asString: String = stream.Stream(file, new mutable.StringBuilder).toString
 }
