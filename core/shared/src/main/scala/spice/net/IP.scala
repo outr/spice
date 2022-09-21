@@ -18,7 +18,7 @@ sealed trait IP {
 }
 
 object IP {
-  implicit val rw: RW[IP] = ReaderWriter.string[IP](
+  implicit val rw: RW[IP] = RW.string[IP](
     asString = (ip: IP) => ip.addressString,
     fromString = (s: String) => fromString(s).getOrElse(throw new RuntimeException(s"Invalid IP address: $s"))
   )

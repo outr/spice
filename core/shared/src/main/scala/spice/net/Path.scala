@@ -1,6 +1,6 @@
 package spice.net
 
-import fabric.rw.{RW, ReaderWriter}
+import fabric.rw.RW
 import spice.net.PathPart._
 
 case class Path(parts: List[PathPart]) {
@@ -63,7 +63,7 @@ case class Path(parts: List[PathPart]) {
 }
 
 object Path {
-  implicit val rw: RW[Path] = ReaderWriter.string[Path](
+  implicit val rw: RW[Path] = RW.string[Path](
     asString = _.encoded,
     fromString = (s: String) => parse(s)
   )

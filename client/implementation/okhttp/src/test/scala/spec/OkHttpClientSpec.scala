@@ -81,6 +81,6 @@ class OkHttpClientSpec extends AnyWordSpec with Matchers {
   case class Placeholder(userId: Int, id: Int, title: String, completed: Boolean)
 
   object Placeholder {
-    implicit val rw: ReaderWriter[Placeholder] = ccRW
+    implicit val rw: RW[Placeholder] = ccRW
   }
 }

@@ -6,7 +6,7 @@ import fabric.rw._
 case class Port private(value: Int)
 
 object Port {
-  implicit val rw: RW[Port] = ReaderWriter[Port](
+  implicit val rw: RW[Port] = RW[Port](
     r = _.value.json,
     w = (json: Json) => Port.fromInt(json.asInt).getOrElse(throw new RuntimeException(s"Invalid port: $json"))
   )

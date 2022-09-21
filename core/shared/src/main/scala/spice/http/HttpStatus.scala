@@ -30,7 +30,7 @@ case class HttpStatus(code: Int, message: String) extends Ordered[HttpStatus] {
 object HttpStatus {
   private var codeMap = Map.empty[Int, HttpStatus]
 
-  implicit val rw: ReaderWriter[HttpStatus] = ccRW
+  implicit val rw: RW[HttpStatus] = ccRW
 
   val Continue = new HttpStatus(100, "Continue")
   val SwitchingProtocols = new HttpStatus(101, "Switching Protocols")
