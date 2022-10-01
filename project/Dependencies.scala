@@ -13,7 +13,7 @@ object Dependencies {
     val undertow: String = "2.2.19.Final"
     val moduload: String = "1.1.6"
 
-    val scalaJSDOM: String = "2.2.0"
+    val scalaJSDOM: String = "2.3.0"
 
     val scalaTest: String = "3.2.13"
     val catsEffectTesting: String = "1.4.0"
