@@ -7,7 +7,7 @@ object Dependencies {
     val fabric: String = "1.6.1"
     val reactify: String = "4.0.8"
     val cats: String = "3.3.14"
-    val fs2: String = "3.2.12"
+    val fs2: String = "3.2.14"
     val literally: String = "1.1.0"
     val okHttp: String = "4.10.0"
     val undertow: String = "2.2.19.Final"
