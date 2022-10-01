@@ -1,7 +1,11 @@
 package spice
 
+import moduload.Moduload
+
 trait ImplementationManager[Implementation, Config] {
   private var creator: Option[Config => Implementation] = None
+
+  Moduload.load()
 
   def apply(config: Config): Implementation = creator
     .getOrElse(throw new NoImplementationException)

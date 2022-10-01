@@ -16,9 +16,9 @@ object ResourceServer {
   def serve(exchange: HttpServerExchange, content: FileContent): Unit = {
     if (DirectoryUtils.sendRequestedBlobs(exchange)) return
     val cache: ResponseCache = exchange.getAttachment(ResponseCache.ATTACHMENT_KEY)
-    val cachable: Boolean = true
+    val cacheable: Boolean = true
     //we set caching headers before we try and serve from the cache
-    if (cache != null && cachable) if (cache.tryServeResponse) return
+    if (cache != null && cacheable) if (cache.tryServeResponse) return
     //we now dispatch to a worker thread
     //as resource manager methods are potentially blocking
     val dispatchTask: HttpHandler = new HttpHandler() {
