@@ -7,16 +7,16 @@ import spice.http.content.Content
 import spice.net.ContentType
 import spice.stream._
 
-class StreamZipContent(entries: List[ZipFileEntry],
-                       lastModified: Long = System.currentTimeMillis(),
-                       length: Long = -1,
-                       contentType: ContentType = ContentType.`application/zip`) extends StreamContent(contentType, lastModified, length) {
+class IOStreamZipContent(entries: List[ZipFileEntry],
+                         lastModified: Long = System.currentTimeMillis(),
+                         length: Long = -1,
+                         contentType: ContentType = ContentType.`application/zip`) extends IOStreamContent(contentType, lastModified, length) {
   override def withContentType(contentType: ContentType): Content = {
-    new StreamZipContent(entries, lastModified, length, contentType)
+    new IOStreamZipContent(entries, lastModified, length, contentType)
   }
 
   override def withLastModified(lastModified: Long): Content = {
-    new StreamZipContent(entries, lastModified, length, contentType)
+    new IOStreamZipContent(entries, lastModified, length, contentType)
   }
 
   override def stream(out: OutputStream): Unit = {

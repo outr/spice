@@ -8,7 +8,7 @@ import io.undertow.server.handlers.encoding.{ContentEncodingRepository, DeflateE
 import moduload.Moduload
 import reactify._
 import scribe.Logger
-import spice.http.{HttpConnection, HttpResponse}
+import spice.http.{HttpExchange, HttpResponse}
 import spice.http.server.{HttpServer, HttpServerImplementation, HttpServerImplementationManager, HttpServerListener, HttpsServerListener, SSLUtil}
 import spice.net.{MalformedURLException, URL}
 
@@ -70,7 +70,7 @@ class UndertowServerImplementation(server: HttpServer) extends HttpServerImpleme
       exchange.dispatch(new Runnable {
         override def run(): Unit = {
           val io = UndertowRequestParser(exchange, url).flatMap { request =>
-            val connection = HttpConnection(request, HttpResponse())
+            val connection = HttpExchange(request, HttpResponse())
             server.handle(connection)
               .redeemWith(server.errorRecovery(connection, _), IO.pure)
           }.flatMap { connection =>

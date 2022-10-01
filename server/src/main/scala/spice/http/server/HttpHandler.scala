@@ -3,24 +3,28 @@ package spice.http.server
 import cats.effect.IO
 import scribe.Priority
 import spice.http.content.Content
-import spice.http.{HttpConnection, HttpStatus, StringHeaderKey}
+import spice.http.{HttpExchange, HttpStatus, StringHeaderKey}
 
 trait HttpHandler extends Ordered[HttpHandler] {
   def priority: Priority = Priority.Normal
 
-  def handle(connection: HttpConnection): IO[HttpConnection]
+  def handle(exchange: HttpExchange): IO[HttpExchange]
 
   override def compare(that: HttpHandler): Int = Priority.PriorityOrdering.compare(this.priority, that.priority)
 }
 
 object HttpHandler {
-  def redirect(connection: HttpConnection, location: String): HttpConnection = {
-    val isStreaming = connection.request.headers.first(new StringHeaderKey("streaming")).contains("true")
-    if (isStreaming) {
-      val status = HttpStatus.NetworkAuthenticationRequired(s"Redirect to $location")
-      connection.modify(_.withStatus(status).withContent(Content.empty))
-    } else {
-      connection.modify(_.withRedirect(location))
-    }.finish()
+  def redirect(exchange: HttpExchange, location: String): IO[HttpExchange] = {
+    val isStreaming = exchange.request.headers.first(new StringHeaderKey("streaming")).contains("true")
+    exchange.modify { response => IO {
+      if (isStreaming) {
+        val status = HttpStatus.NetworkAuthenticationRequired(s"Redirect to $location")
+        response
+          .withStatus(status)
+          .withContent(Content.empty)
+      } else {
+        response.withRedirect(location)
+      }
+    }}.map(_.finish())
   }
 }

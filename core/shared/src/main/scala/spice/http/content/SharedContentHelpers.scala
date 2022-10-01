@@ -1,6 +1,5 @@
 package spice.http.content
 
-import fabric.io.JsonFormatter
 import fabric.rw.Reader
 import fabric.{Json, Null, obj, str}
 import spice.net.ContentType

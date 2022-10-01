@@ -3,7 +3,7 @@ package spice.http.server
 import cats.effect.IO
 import cats.effect.unsafe.{IORuntime, IORuntimeConfig, Scheduler}
 import scribe.cats.{io => logger}
-import spice.http.HttpConnection
+import spice.http.HttpExchange
 import spice.{ErrorSupport, ImplementationManager, Initializable}
 
 import java.util.concurrent.atomic.{AtomicInteger, AtomicLong}
@@ -24,7 +24,6 @@ trait HttpServer extends HttpHandler with Initializable with ErrorSupport {
       t
     }
   }))
-  IORuntime.createDefaultScheduler()
   protected def computeExecutionContext: ExecutionContext = defaultExecutionContext
   protected def blockingExecutionContext: ExecutionContext = defaultExecutionContext
   protected val (scheduler, shutdownScheduler) = IORuntime.createDefaultScheduler(s"${config.name}-scheduler")
@@ -53,7 +52,7 @@ trait HttpServer extends HttpHandler with Initializable with ErrorSupport {
     ()
   }
 
-  def errorRecovery(connection: HttpConnection, throwable: Throwable): IO[HttpConnection] = IO.pure(connection)
+  def errorRecovery(exchange: HttpExchange, throwable: Throwable): IO[HttpExchange] = IO.pure(exchange)
 
   def stop(): IO[Unit] = implementation.stop(this)
 

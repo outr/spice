@@ -17,14 +17,12 @@ I work toward 1.0. The current pre-release is `0.0.1`.
 - [X] Stream support
   - [X] Porting of IO from YouI into Stream
   - [X] Migration from blocking to cats-effect
-- [ ] HTTP Foundation
+- [X] HTTP Foundation
   - [X] Migration of YouI HTTP classes
-  - [ ] Cleanup and updates to representations
-  - [ ] Fabric JSON encoding/decoding support for request and response
-- [ ] Extraction into multi-platform
-  - [ ] Cross-platform code
-  - [ ] Scala.js
-  - [ ] ScalaNative considerations?
+  - [X] Cleanup and updates to representations
+- [X] Extraction into multi-platform
+  - [X] Cross-platform code
+  - [X] Scala.js
 - [X] HTTP Client support
   - [X] JVM implementation using okhttp
   - [X] JS implementation using AJAX
@@ -32,9 +30,9 @@ I work toward 1.0. The current pre-release is `0.0.1`.
   - [X] Testing
 - [ ] HTTP Server support
   - [X] Moduload for implementation details
-  - [ ] JVM implementation using Undertow
-  - [ ] Migration from YouI
-  - [ ] Updates to using cats-effect and fs2
+  - [X] JVM implementation using Undertow
+  - [X] Migration from YouI
+  - [X] Updates to using cats-effect and fs2
   - [ ] OpenAPI-focused DSL for end-points
 - [ ] Preliminary benchmarks
 - [ ] MDoc
