@@ -37,3 +37,4 @@ I work toward 1.0. The current pre-release is `0.0.1`.
   - [ ] Updates to using cats-effect and fs2
   - [ ] OpenAPI-focused DSL for end-points
 - [ ] Preliminary benchmarks
+- [ ] MDoc

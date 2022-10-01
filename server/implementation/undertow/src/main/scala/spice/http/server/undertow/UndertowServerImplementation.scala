@@ -1,16 +1,14 @@
 package spice.http.server.undertow
 
 import cats.effect.IO
-import cats.effect.unsafe.implicits.global
 import io.undertow.{Undertow, UndertowOptions}
 import io.undertow.predicate.Predicates
 import io.undertow.server.{HttpServerExchange, HttpHandler => UndertowHttpHandler}
 import io.undertow.server.handlers.encoding.{ContentEncodingRepository, DeflateEncodingProvider, EncodingHandler, GzipEncodingProvider}
-import io.undertow.util.HttpString
 import moduload.Moduload
-import reactify.Var
+import reactify._
 import scribe.Logger
-import spice.http.{Headers, HttpConnection, HttpResponse}
+import spice.http.{HttpConnection, HttpResponse}
 import spice.http.server.{HttpServer, HttpServerImplementation, HttpServerImplementationManager, HttpServerListener, HttpsServerListener, SSLUtil}
 import spice.net.{MalformedURLException, URL}
 

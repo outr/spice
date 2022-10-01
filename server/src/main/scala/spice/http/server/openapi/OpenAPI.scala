@@ -2,7 +2,7 @@ package spice.http.server.openapi
 
 import fabric.io.YamlFormatter
 import fabric.rw._
-import spice.net.{URL, interpolation}
+import spice.net._
 
 case class OpenAPI(openapi: String = "3.0.0",
                    info: OpenAPIInfo,

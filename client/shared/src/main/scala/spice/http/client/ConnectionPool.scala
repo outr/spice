@@ -2,6 +2,8 @@ package spice.http.client
 
 import scala.concurrent.duration._
 
+import reactify._
+
 trait ConnectionPool {
   def maxIdleConnections: Int
   def keepAlive: FiniteDuration

@@ -10,6 +10,7 @@ import spice.http.content.FormDataEntry.{FileEntry, StringEntry}
 import spice.http.{Headers, HttpMethod, HttpRequest}
 import spice.net.{ContentType, IP, URL}
 import spice.stream
+import spice.stream._
 
 import scala.collection.mutable
 import scala.jdk.CollectionConverters.IterableHasAsScala

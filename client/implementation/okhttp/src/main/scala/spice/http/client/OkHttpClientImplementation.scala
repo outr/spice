@@ -8,6 +8,7 @@ import spice.http.content.FormDataEntry.{FileEntry, StringEntry}
 import spice.http.content._
 import spice.net.ContentType
 import spice.stream
+import spice.stream._
 
 import java.io.{File, IOException}
 import java.net.{InetAddress, Socket}

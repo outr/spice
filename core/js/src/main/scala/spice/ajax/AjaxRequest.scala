@@ -26,7 +26,7 @@ class AjaxRequest(url: URL,
   val percentage: Val[Int] = Var(0)
   val cancelled: Val[Boolean] = Var(false)
 
-  req.onreadystatechange = { _: dom.Event =>
+  req.onreadystatechange = { (_: dom.Event) =>
     if (req.readyState == 4) {
       if ((req.status >= 200 && req.status < 300) || req.status == 304) {
         deferred.complete(Success(req))

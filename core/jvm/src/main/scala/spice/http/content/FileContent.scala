@@ -2,6 +2,7 @@ package spice.http.content
 
 import spice.net.ContentType
 import spice.stream
+import spice.stream._
 
 import java.io.File
 import scala.collection.mutable
