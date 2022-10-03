@@ -13,28 +13,28 @@ class TemplateGeneratorSpec extends AnyWordSpec with Matchers {
           |<head>
           |</head>
           |<body>
-          |<h1 data-youi="object" id="heading">Heading</h1>
+          |<h1 data-spice="object" id="heading">Heading</h1>
           |<ul>
-          | <li data-youi="class" data-youi-class="listItem" id="entry">Entry</li>
+          | <li data-spice="class" data-spice-class="listItem" id="entry">Entry</li>
           |</ul>
           |</body>
           |</html>""".stripMargin)
       val result = html.stream(deltas = List(
         Delta.Process(
-          selector = Selector.HasAtribute("data-youi"),
+          selector = Selector.HasAtribute("data-spice"),
           replace = true,
           onlyOpenTag = false,
           processor = (tag, content) => {
-            val `type` = tag.attributes("data-youi")
+            val `type` = tag.attributes("data-spice")
             val id = tag.attributes.getOrElse("id", throw new RuntimeException(s"No id defined for: $content"))
-            val className = tag.attributes.getOrElse("data-youi-class", id)
-            println(s"Tag: $tag, Content: $content, Type: ${`type`}, Class: $className")
+            val className = tag.attributes.getOrElse("data-spice-class", id)
+            scribe.info(s"Tag: $tag, Content: $content, Type: ${`type`}, Class: $className")
             "REPLACED"
           },
           closeTagProcessor = None
         )
       ))
-      println(result)
+      scribe.info(s"Result[$result]")
     }
   }
 }

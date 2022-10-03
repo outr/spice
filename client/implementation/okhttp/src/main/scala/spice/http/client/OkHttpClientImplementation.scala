@@ -196,7 +196,7 @@ class OkHttpClientImplementation(config: HttpClientConfig) extends HttpClientImp
         Content.bytes(responseBody.bytes(), contentType)
       } else {
         val suffix = contentType.extension.getOrElse("client")
-        val file = File.createTempFile("youi", s".$suffix", new File(config.saveDirectory))
+        val file = File.createTempFile("spice", s".$suffix", new File(config.saveDirectory))
         Streamer(responseBody.byteStream(), file)
         Content.file(file, contentType)
       }

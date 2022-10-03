@@ -23,9 +23,9 @@ object HTMLParser {
   /**
     * The set of attributes to limit to if filterAttributes is set to true.
     *
-    * Defaults to "id", "class", and "data-youi".
+    * Defaults to "id", "class", and "data-spice".
     */
-  var validAttributes: Set[String] = Set("id", "class", "data-youi", "data-youi-class")
+  var validAttributes: Set[String] = Set("id", "class", "data-spice", "data-spice-class")
 
   private val parsers = new ConcurrentHashMap[File, StreamableHTML]().asScala
 

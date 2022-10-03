@@ -18,7 +18,7 @@ class URLSpec extends AnyWordSpec with Matchers {
         URL.get("test") should be(Left(URLParseFailure("test is not a valid URL", URLParseFailure.QuickFail)))
       }
       "fail to parse an email address" in {
-        URL.get("test@youi.io") should be(Left(URLParseFailure("test@youi.io appears to be an email address", URLParseFailure.EmailAddress)))
+        URL.get("test@spice.io") should be(Left(URLParseFailure("test@spice.io appears to be an email address", URLParseFailure.EmailAddress)))
       }
       "fail to parse 'it...'" in {
         URL.get("it...") should be(Left(URLParseFailure("it... is not a valid URL", URLParseFailure.QuickFail)))
@@ -59,16 +59,16 @@ class URLSpec extends AnyWordSpec with Matchers {
         url.toString should be("https://outr.com/")
       }
       "properly parse a fairly long URL" in {
-        val url = URL("https://www.youi.io/testing/1/favicon-32x32.png?arg1=true&v=0.7.0-1586440828356")
-        url.toString should be("https://www.youi.io/testing/1/favicon-32x32.png?arg1=true&v=0.7.0-1586440828356")
+        val url = URL("https://www.spice.io/testing/1/favicon-32x32.png?arg1=true&v=0.7.0-1586440828356")
+        url.toString should be("https://www.spice.io/testing/1/favicon-32x32.png?arg1=true&v=0.7.0-1586440828356")
       }
       "properly detect an invalid TLD" in {
         val url = URL.get("event.which")
         url should be(Left(URLParseFailure(s"Invalid top-level domain: [which]", URLParseFailure.InvalidTopLevelDomain)))
       }
       "properly unapply from a String" in {
-        "http://youi.io" match {
-          case URL(url) => url.domain should be("youi.io")
+        "http://spice.io" match {
+          case URL(url) => url.domain should be("spice.io")
           case _ => fail("unapply did not match")
         }
       }
@@ -83,8 +83,8 @@ class URLSpec extends AnyWordSpec with Matchers {
         url.domain should be("127.0.0.1")
       }
       "properly encode a URL with a pipe" in {
-        val url = URL("http://youi.io").withParam("testing", "one|two")
-        url.encoded.toString should be("http://youi.io/?testing=one%7Ctwo")
+        val url = URL("http://spice.io").withParam("testing", "one|two")
+        url.encoded.toString should be("http://spice.io/?testing=one%7Ctwo")
       }
       "properly parse a relative URL" in {
         val url = URL("http://www.outr.com/examples/../images/test.png")
@@ -144,10 +144,10 @@ class URLSpec extends AnyWordSpec with Matchers {
         url.toString should be("https://test.com/a+b+c")
       }
       "properly interpolate a URL" in {
-        val url = url"http://www.youi.io"
-        url.encoded.toString should be("http://www.youi.io/")
+        val url = url"http://www.spice.io"
+        url.encoded.toString should be("http://www.spice.io/")
         url.protocol should be(Protocol.Http)
-        url.host should be("www.youi.io")
+        url.host should be("www.spice.io")
         url.path.toString should be("/")
         url.parameters should be(Parameters.empty)
       }
@@ -156,40 +156,40 @@ class URLSpec extends AnyWordSpec with Matchers {
         url.toString should be("https://user1:detail@example.com/more/complex")
       }
       "fail to parse an invalid URL" in {
-        val result = URL.get("http:www:youi:io")
-        result should be(Left(URLParseFailure("Invalid host: http:www:youi:io", URLParseFailure.InvalidHost)))
+        val result = URL.get("http:www:spice:io")
+        result should be(Left(URLParseFailure("Invalid host: http:www:spice:io", URLParseFailure.InvalidHost)))
       }
       "fail to compile when interpolating a URL with a param" in {
         assertDoesNotCompile(
           """
             |val path = "wahoo"
-            |url"http://www.youi.io/$path"
+            |url"http://www.spice.io/$path"
           """.stripMargin)
       }
       "fail to compile an invalid URL" in {
-        assertDoesNotCompile("""url"http:www:youi:io"""")
+        assertDoesNotCompile("""url"http:www:spice:io"""")
       }
     }
     "applying parts" should {
-      val url = URL("http://www.youi.io/testing/1/test.html?arg1=true")
+      val url = URL("http://www.spice.io/testing/1/test.html?arg1=true")
 
       "replace one URL with another" in {
         url.withPart("http://google.com") should be(URL("http://google.com"))
       }
       "replace the path" in {
-        url.withPart("/index.html") should be(URL("http://www.youi.io/index.html"))
+        url.withPart("/index.html") should be(URL("http://www.spice.io/index.html"))
       }
       "replace params" in {
-        url.withPart("?wahoo=true") should be(URL("http://www.youi.io/testing/1/test.html?wahoo=true"))
+        url.withPart("?wahoo=true") should be(URL("http://www.spice.io/testing/1/test.html?wahoo=true"))
       }
       "replace the path and params" in {
-        url.withPart("/index.html?wahoo=true") should be(URL("http://www.youi.io/index.html?arg1=true&wahoo=true"))
+        url.withPart("/index.html?wahoo=true") should be(URL("http://www.spice.io/index.html?arg1=true&wahoo=true"))
       }
       "apply relative path" in {
-        url.withPart("../2/test.html") should be(URL("http://www.youi.io/testing/2/test.html"))
+        url.withPart("../2/test.html") should be(URL("http://www.spice.io/testing/2/test.html"))
       }
       "apply a new path without forward-slash" in {
-        url.withPart("favicon-32x32.png?v=0.7.0-1586440828356") should be(URL("http://www.youi.io/testing/1/favicon-32x32.png?arg1=true&v=0.7.0-1586440828356"))
+        url.withPart("favicon-32x32.png?v=0.7.0-1586440828356") should be(URL("http://www.spice.io/testing/1/favicon-32x32.png?arg1=true&v=0.7.0-1586440828356"))
       }
     }
     "encoding to path" should {
