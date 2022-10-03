@@ -36,6 +36,7 @@ lazy val root = project.in(file("."))
 	.aggregate(
 		coreJS, coreJVM,
 		clientJS, clientJVM, clientImplementationOkHttp,
+		delta,
 		server, serverImplementationUndertow
 	)
 	.settings(
@@ -87,8 +88,18 @@ lazy val clientImplementationOkHttp = project
 		)
 	)
 
-lazy val server = project
+lazy val delta = project
 	.dependsOn(coreJVM)
+	.in(file("delta"))
+	.settings(
+		name := "spice-delta",
+		libraryDependencies ++= Seq(
+			dep.scalaTest, dep.catsEffectTesting
+		)
+	)
+
+lazy val server = project
+	.dependsOn(coreJVM, delta)
 	.in(file("server"))
 	.settings(
 		name := "spice-server",

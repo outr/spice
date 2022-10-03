@@ -18,7 +18,7 @@ package object net {
       import c.universe.{Try => _, _}
       Try(s.toInt).toOption.flatMap(Port.fromInt) match {
         case None => Left(s"Invalid port - must be integer between ${Port.MinValue} and ${Port.MaxValue}")
-        case Some(_) => Right(c.Expr(q"Port.fromInt($s.toInt).get"))
+        case Some(_) => Right(c.Expr(q"_root_.spice.net.Port.fromInt($s.toInt).get"))
       }
     }
 
@@ -30,7 +30,7 @@ package object net {
       import c.universe._
       IP.fromString(s) match {
         case None => Left(s"Invalid IP address: $s")
-        case Some(_) => Right(c.Expr(q"IP.fromString($s).get"))
+        case Some(_) => Right(c.Expr(q"_root_.spice.net.IP.fromString($s).get"))
       }
     }
 
@@ -40,7 +40,7 @@ package object net {
   object PathLiteral extends Literally[Path] {
     def validate(c: Context)(s: String): Either[String, c.Expr[Path]] = {
       import c.universe._
-      Right(c.Expr(q"Path.parse($s)"))
+      Right(c.Expr(q"_root_.spice.net.Path.parse($s)"))
     }
 
     def make(c: Context)(args: c.Expr[Any]*): c.Expr[Path] = apply(c)(args: _*)
@@ -51,7 +51,7 @@ package object net {
       import c.universe._
       URL.get(s) match {
         case Left(f) => Left(f.message)
-        case Right(_) => Right(c.Expr(q"URL($s)"))
+        case Right(_) => Right(c.Expr(q"_root_.spice.net.URL($s)"))
       }
     }
 

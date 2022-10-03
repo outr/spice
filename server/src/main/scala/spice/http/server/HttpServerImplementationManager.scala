@@ -1,0 +1,5 @@
+package spice.http.server
+
+import spice.ImplementationManager
+
+object HttpServerImplementationManager extends ImplementationManager[HttpServerImplementation, HttpServer]

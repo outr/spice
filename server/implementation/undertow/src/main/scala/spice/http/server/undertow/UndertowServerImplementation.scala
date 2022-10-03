@@ -60,21 +60,21 @@ class UndertowServerImplementation(server: HttpServer) extends HttpServerImpleme
     }
   }
 
-  override def handleRequest(exchange: HttpServerExchange): Unit = server.errorSupport {
+  override def handleRequest(undertow: HttpServerExchange): Unit = server.errorSupport {
     try {
-      val url = URL(s"${exchange.getRequestURL}?${exchange.getQueryString}")
+      val url = URL(s"${undertow.getRequestURL}?${undertow.getQueryString}")
       if (!server.config.persistentConnections()) {
-        exchange.setPersistent(false)
+        undertow.setPersistent(false)
       }
 
-      exchange.dispatch(new Runnable {
+      undertow.dispatch(new Runnable {
         override def run(): Unit = {
-          val io = UndertowRequestParser(exchange, url).flatMap { request =>
-            val connection = HttpExchange(request, HttpResponse())
-            server.handle(connection)
-              .redeemWith(server.errorRecovery(connection, _), IO.pure)
-          }.flatMap { connection =>
-            UndertowResponseSender(exchange, server, connection)
+          val io = UndertowRequestParser(undertow, url).flatMap { request =>
+            val exchange = HttpExchange(request, HttpResponse())
+            server.handle(exchange)
+              .redeemWith(server.errorRecovery(exchange, _), IO.pure)
+          }.flatMap { exchange =>
+            UndertowResponseSender(undertow, server, exchange)
           }
           io.unsafeRunAndForget()(server.ioRuntime)
         }

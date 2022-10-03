@@ -1,4 +1,4 @@
-package spice.http.server
+package spice.http.server.handler
 
 import cats.effect.IO
 import scribe.Priority

@@ -1,4 +1,4 @@
-package spice.stream
+package spice.streamer
 
 import cats.effect.IO
 
@@ -6,7 +6,7 @@ import java.io.{File, FileOutputStream, IOException}
 import scala.annotation.tailrec
 import scala.concurrent.duration.{DurationInt, FiniteDuration}
 
-object Stream {
+object Streamer {
   final def apply(reader: Reader,
                  writer: Writer,
                  monitor: Monitor = Monitor.Ignore,

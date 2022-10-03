@@ -7,8 +7,7 @@ import spice.http._
 import spice.http.content.FormDataEntry.{FileEntry, StringEntry}
 import spice.http.content._
 import spice.net.ContentType
-import spice.stream
-import spice.stream._
+import spice.streamer.Streamer
 
 import java.io.{File, IOException}
 import java.net.{InetAddress, Socket}
@@ -198,7 +197,7 @@ class OkHttpClientImplementation(config: HttpClientConfig) extends HttpClientImp
       } else {
         val suffix = contentType.extension.getOrElse("client")
         val file = File.createTempFile("youi", s".$suffix", new File(config.saveDirectory))
-        stream.Stream.apply(responseBody.byteStream(), file)
+        Streamer(responseBody.byteStream(), file)
         Content.file(file, contentType)
       }
     }
@@ -221,7 +220,7 @@ class OkHttpClientImplementation(config: HttpClientConfig) extends HttpClientImp
   override def content2String(content: Content): String = content match {
     case c: StringContent => c.value
     case c: BytesContent => String.valueOf(c.value)
-    case c: FileContent => stream.Stream.apply(c.file, new mutable.StringBuilder).toString
+    case c: FileContent => Streamer(c.file, new mutable.StringBuilder).toString
     case _ => throw new RuntimeException(s"$content not supported")
   }
 
@@ -232,7 +231,7 @@ class OkHttpClientImplementation(config: HttpClientConfig) extends HttpClientImp
   protected def content2Bytes(content: Content): Array[Byte] = content match {
     case c: StringContent => c.value.getBytes("UTF-8")
     case c: BytesContent => c.value
-    case c: FileContent => stream.Stream.apply(c.file, new mutable.StringBuilder).toString.getBytes("UTF-*")
+    case c: FileContent => Streamer(c.file, new mutable.StringBuilder).toString.getBytes("UTF-*")
     case _ => throw new RuntimeException(s"$content not supported")
   }
 

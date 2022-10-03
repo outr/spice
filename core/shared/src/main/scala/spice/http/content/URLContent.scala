@@ -1,7 +1,7 @@
 package spice.http.content
 
 import spice.net.ContentType
-import spice.stream._
+import spice.streamer.Streamer
 import sun.net.www.protocol.file.FileURLConnection
 
 import java.net.{HttpURLConnection, JarURLConnection, URL}
@@ -14,8 +14,8 @@ case class URLContent(url: URL, contentType: ContentType, lastModifiedOverride: 
   override def withLastModified(lastModified: Long): Content = copy(lastModifiedOverride = Some(lastModified))
 
   private lazy val (contentLength, contentModified) = {
-    val connection = url.openConnection()
-    connection match {
+    val exchange = url.openConnection()
+    exchange match {
       case c: HttpURLConnection => try {
         c.setRequestMethod("HEAD")
         c.getInputStream
@@ -38,5 +38,5 @@ case class URLContent(url: URL, contentType: ContentType, lastModifiedOverride: 
 
   override def toString: String = s"URLContent(url: $url, contentType: $contentType)"
 
-  override def asString: String = Stream.apply(url, new mutable.StringBuilder).toString
+  override def asString: String = Streamer(url, new mutable.StringBuilder).toString
 }

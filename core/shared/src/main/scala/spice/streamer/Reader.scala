@@ -1,4 +1,4 @@
-package spice.stream
+package spice.streamer
 
 trait Reader {
   def length: Option[Long]

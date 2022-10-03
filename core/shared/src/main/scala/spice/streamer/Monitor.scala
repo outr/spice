@@ -1,4 +1,4 @@
-package spice.stream
+package spice.streamer
 
 trait Monitor {
   def open(length: Option[Long]): Unit

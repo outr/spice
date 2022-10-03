@@ -9,8 +9,7 @@ import spice.http.content.{Content, FormData, FormDataContent, FormDataEntry, St
 import spice.http.content.FormDataEntry.{FileEntry, StringEntry}
 import spice.http.{Headers, HttpMethod, HttpRequest}
 import spice.net.{ContentType, IP, URL}
-import spice.stream
-import spice.stream._
+import spice.streamer.Streamer
 
 import scala.collection.mutable
 import scala.jdk.CollectionConverters.IterableHasAsScala
@@ -44,7 +43,7 @@ object UndertowRequestParser {
           Some(FormDataContent(data))
         case ct =>
           val cis = new ChannelInputStream(exchange.getRequestChannel)
-          val data = stream.Stream.apply(cis, new mutable.StringBuilder).toString
+          val data = Streamer(cis, new mutable.StringBuilder).toString
           Some(StringContent(data, ct))
       }
     } else {

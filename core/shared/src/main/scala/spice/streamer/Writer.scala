@@ -1,4 +1,4 @@
-package spice.stream
+package spice.streamer
 
 trait Writer {
   def write(buffer: Array[Byte], offset: Int, length: Int): Unit

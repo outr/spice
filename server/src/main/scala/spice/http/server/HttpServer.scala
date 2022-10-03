@@ -4,6 +4,7 @@ import cats.effect.IO
 import cats.effect.unsafe.{IORuntime, IORuntimeConfig, Scheduler}
 import scribe.cats.{io => logger}
 import spice.http.HttpExchange
+import spice.http.server.handler.HttpHandler
 import spice.{ErrorSupport, ImplementationManager, Initializable}
 
 import java.util.concurrent.atomic.{AtomicInteger, AtomicLong}
@@ -69,12 +70,3 @@ trait HttpServer extends HttpHandler with Initializable with ErrorSupport {
 
   def dispose(): Unit = stop()
 }
-
-trait HttpServerImplementation {
-  def isRunning: Boolean
-
-  def start(server: HttpServer): IO[Unit]
-  def stop(server: HttpServer): IO[Unit]
-}
-
-object HttpServerImplementationManager extends ImplementationManager[HttpServerImplementation, HttpServer]

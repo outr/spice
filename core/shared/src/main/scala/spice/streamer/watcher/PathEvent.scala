@@ -1,4 +1,4 @@
-package spice.stream.watcher
+package spice.streamer.watcher
 
 import java.nio.file.Path
 

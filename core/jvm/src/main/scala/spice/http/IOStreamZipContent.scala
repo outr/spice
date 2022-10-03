@@ -2,10 +2,9 @@ package spice.http
 
 import java.io.OutputStream
 import java.util.zip.{ZipEntry, ZipOutputStream}
-
 import spice.http.content.Content
 import spice.net.ContentType
-import spice.stream._
+import spice.streamer.Streamer
 
 class IOStreamZipContent(entries: List[ZipFileEntry],
                          lastModified: Long = System.currentTimeMillis(),
@@ -24,7 +23,7 @@ class IOStreamZipContent(entries: List[ZipFileEntry],
     entries.foreach { e =>
       val entry = new ZipEntry(e.path)
       zos.putNextEntry(entry)
-      Stream.apply(e.file, zos, closeOnComplete = false)
+      Streamer(e.file, zos, closeOnComplete = false)
       zos.closeEntry()
     }
     zos.flush()
