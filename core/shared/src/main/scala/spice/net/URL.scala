@@ -133,7 +133,7 @@ case class URL(protocol: Protocol = Protocol.Http,
 }
 
 object URL {
-  implicit val rw: RW[URL] = RW(_.toString.json, v => apply(v.asStr.value))
+  implicit val rw: RW[URL] = RW.from(_.toString.json, v => apply(v.asStr.value))
 
   def build(protocol: String,
             host: String,

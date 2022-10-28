@@ -1,6 +1,6 @@
 name := "spice"
 ThisBuild / organization := "com.outr"
-ThisBuild / version := "0.0.1"
+ThisBuild / version := "0.0.2-SNAPSHOT"
 
 val scala213: String = "2.13.10"
 val scala3: String = "3.2.0"
@@ -13,7 +13,6 @@ ThisBuild / sonatypeCredentialHost := "s01.oss.sonatype.org"
 ThisBuild / sonatypeRepository := "https://s01.oss.sonatype.org/service/local"
 ThisBuild / publishTo := sonatypePublishToBundle.value
 ThisBuild / sonatypeProfileName := "com.outr"
-//ThisBuild / publishMavenStyle := true
 ThisBuild / licenses := Seq("MIT" -> url("https://github.com/outr/spice/blob/master/LICENSE"))
 ThisBuild / sonatypeProjectHosting := Some(xerial.sbt.Sonatype.GitHubHosting("outr", "spice", "matt@matthicks.com"))
 ThisBuild / homepage := Some(url("https://github.com/outr/spice"))

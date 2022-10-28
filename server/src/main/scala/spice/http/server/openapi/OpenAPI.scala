@@ -10,7 +10,7 @@ case class OpenAPI(openapi: String = "3.0.0",
                    paths: Map[String, Map[String, OpenAPIPath]])
 
 object OpenAPI {
-  implicit val rw: RW[OpenAPI] = ccRW
+  implicit val rw: RW[OpenAPI] = RW.gen
 }
 
 case class OpenAPIInfo(title: String,
@@ -18,13 +18,13 @@ case class OpenAPIInfo(title: String,
                        version: String)
 
 object OpenAPIInfo {
-  implicit val rw: RW[OpenAPIInfo] = ccRW
+  implicit val rw: RW[OpenAPIInfo] = RW.gen
 }
 
 case class OpenAPIServer(url: URL, description: String)
 
 object OpenAPIServer {
-  implicit val rw: RW[OpenAPIServer] = ccRW
+  implicit val rw: RW[OpenAPIServer] = RW.gen
 }
 
 case class OpenAPIPath(summary: String,
@@ -32,13 +32,13 @@ case class OpenAPIPath(summary: String,
                        responses: Map[String, OpenAPIResponse])
 
 object OpenAPIPath {
-  implicit val rw: RW[OpenAPIPath] = ccRW
+  implicit val rw: RW[OpenAPIPath] = RW.gen
 }
 
 case class OpenAPIResponse(description: String)
 
 object OpenAPIResponse {
-  implicit val rw: RW[OpenAPIResponse] = ccRW
+  implicit val rw: RW[OpenAPIResponse] = RW.gen
 }
 
 object Test2 {
