@@ -1,7 +1,7 @@
 package spice.http.content
 
 import spice.net.ContentType
-import spice.streamer.Streamer
+import spice.streamer._
 import sun.net.www.protocol.file.FileURLConnection
 
 import java.net.{HttpURLConnection, JarURLConnection, URL}

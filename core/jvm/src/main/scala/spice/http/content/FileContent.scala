@@ -1,7 +1,7 @@
 package spice.http.content
 
 import spice.net.ContentType
-import spice.streamer.Streamer
+import spice.streamer._
 
 import java.io.File
 import scala.collection.mutable

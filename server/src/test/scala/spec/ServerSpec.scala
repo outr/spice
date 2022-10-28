@@ -13,7 +13,7 @@ import spice.http.server.handler.HttpHandler
 import spice.http.{HttpExchange, HttpMethod, HttpRequest, HttpStatus, path}
 import spice.http.server.{HttpServer, MutableHttpServer}
 import spice.http.server.rest.{Restful, RestfulResponse}
-import spice.net.{ContentType, URL, interpolation}
+import spice.net._
 
 class ServerSpec extends AsyncWordSpec with AsyncIOSpec with Matchers {
   object server extends MutableHttpServer

@@ -78,7 +78,7 @@ package object dsl {
         .filter(_.isFile)
         .map { file =>
           SenderHandler(Content.file(file)).handle(exchange)
-        }.map(_.map(FilterResponse.Continue)).getOrElse(IO.pure(FilterResponse.Stop(exchange)))
+        }.map(_.map(FilterResponse.Continue.apply)).getOrElse(IO.pure(FilterResponse.Stop(exchange)))
     }
   }
 

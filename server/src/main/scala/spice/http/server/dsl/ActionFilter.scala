@@ -5,7 +5,7 @@ import spice.http.HttpExchange
 
 class ActionFilter(f: HttpExchange => IO[HttpExchange]) extends ConnectionFilter {
   override def filter(exchange: HttpExchange): IO[FilterResponse] = {
-    f(exchange).map(FilterResponse.Continue)
+    f(exchange).map(FilterResponse.Continue.apply)
   }
 }
 

@@ -1,7 +1,7 @@
 package spice.delta
 
 import spice.http.content.{Content, FileContent, StringContent, URLContent}
-import spice.streamer
+import spice.streamer._
 
 import java.io.{File, FileInputStream, InputStream}
 import java.net.URL
@@ -40,14 +40,14 @@ object HTMLParser {
   def cache(url: URL): StreamableHTML = {
     val file = File.createTempFile("htmlparser", "cache")
     file.deleteOnExit()
-    streamer.Streamer.apply(url, file)
+    Streamer(url, file)
     cache(file)
   }
 
   def cache(html: String): StreamableHTML = {
     val file = File.createTempFile("htmlparser", "cache")
     file.deleteOnExit()
-    streamer.Streamer.apply(html, file)
+    Streamer(html, file)
     cache(file)
   }
 

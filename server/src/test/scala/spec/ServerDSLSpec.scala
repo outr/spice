@@ -6,7 +6,7 @@ import org.scalatest.wordspec.AsyncWordSpec
 import spice.http.server.{DefaultErrorHandler, HttpServer, MutableHttpServer}
 import spice.http.{HttpExchange, HttpMethod, HttpRequest, HttpStatus}
 import spice.http.server.dsl._
-import spice.net.{ContentType, interpolation}
+import spice.net._
 
 class ServerDSLSpec extends AsyncWordSpec with AsyncIOSpec with Matchers {
   private lazy val text = "Hello, World!".withContentType(ContentType.`text/plain`)
