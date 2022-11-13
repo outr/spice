@@ -3,7 +3,7 @@ ThisBuild / organization := "com.outr"
 ThisBuild / version := "0.0.2-SNAPSHOT"
 
 val scala213: String = "2.13.10"
-val scala3: String = "3.2.0"
+val scala3: String = "3.2.1"
 
 ThisBuild / scalaVersion := scala213
 ThisBuild / scalacOptions ++= Seq("-deprecation")
