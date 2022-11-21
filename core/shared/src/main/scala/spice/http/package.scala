@@ -11,16 +11,16 @@ package object http {
     def any(matchers: URLMatcher*): URLMatcher = (url: URL) => matchers.exists(_.matches(url))
   }
 
-  object url {
+  object urls {
     def exact(urlString: String): URLMatcher = (url: URL) => url.decoded.toString == urlString
   }
 
-  object host {
+  object hosts {
     def exact(host: String): URLMatcher = (url: URL) => url.host.equalsIgnoreCase(host)
     def matches(regex: String): URLMatcher = (url: URL) => url.host.matches(regex)
   }
 
-  object path {
+  object paths {
     def exact(path: String): URLMatcher = (url: URL) => url.path.decoded == path
     def exact(path: Path): URLMatcher = (url: URL) => url.path == path
     def matches(regex: String): URLMatcher = (url: URL) => url.path.decoded.matches(regex)

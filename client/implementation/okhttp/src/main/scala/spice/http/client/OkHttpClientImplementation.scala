@@ -124,10 +124,12 @@ class OkHttpClientImplementation(config: HttpClientConfig) extends HttpClientImp
     client.newCall(req).enqueue(new okhttp3.Callback {
       override def onResponse(call: okhttp3.Call, res: okhttp3.Response): Unit = {
         val response = responseFromOk(res)
-        deferred.complete(Success(response))
+        deferred.complete(Success(response)).unsafeRunSync()
       }
 
-      override def onFailure(call: okhttp3.Call, exc: IOException): Unit = deferred.complete(Failure(exc))
+      override def onFailure(call: okhttp3.Call, exc: IOException): Unit = {
+        deferred.complete(Failure(exc)).unsafeRunSync()
+      }
     })
     OkHttpClientImplementation.process(deferred.get)
   }
@@ -197,7 +199,7 @@ class OkHttpClientImplementation(config: HttpClientConfig) extends HttpClientImp
       } else {
         val suffix = contentType.extension.getOrElse("client")
         val file = File.createTempFile("spice", s".$suffix", new File(config.saveDirectory))
-        Streamer(responseBody.byteStream(), file)
+        Streamer(responseBody.byteStream(), file).unsafeRunSync()
         Content.file(file, contentType)
       }
     }
@@ -220,7 +222,7 @@ class OkHttpClientImplementation(config: HttpClientConfig) extends HttpClientImp
   override def content2String(content: Content): String = content match {
     case c: StringContent => c.value
     case c: BytesContent => String.valueOf(c.value)
-    case c: FileContent => Streamer(c.file, new mutable.StringBuilder).toString
+    case c: FileContent => Streamer(c.file, new mutable.StringBuilder).unsafeRunSync().toString
     case _ => throw new RuntimeException(s"$content not supported")
   }
 
@@ -231,7 +233,7 @@ class OkHttpClientImplementation(config: HttpClientConfig) extends HttpClientImp
   protected def content2Bytes(content: Content): Array[Byte] = content match {
     case c: StringContent => c.value.getBytes("UTF-8")
     case c: BytesContent => c.value
-    case c: FileContent => Streamer(c.file, new mutable.StringBuilder).toString.getBytes("UTF-*")
+    case c: FileContent => Streamer(c.file, new mutable.StringBuilder).unsafeRunSync().toString.getBytes("UTF-*")
     case _ => throw new RuntimeException(s"$content not supported")
   }
 

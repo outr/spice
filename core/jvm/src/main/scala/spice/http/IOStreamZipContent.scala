@@ -1,5 +1,7 @@
 package spice.http
 
+import cats.effect.unsafe.implicits.global
+
 import java.io.OutputStream
 import java.util.zip.{ZipEntry, ZipOutputStream}
 import spice.http.content.Content
@@ -23,7 +25,7 @@ class IOStreamZipContent(entries: List[ZipFileEntry],
     entries.foreach { e =>
       val entry = new ZipEntry(e.path)
       zos.putNextEntry(entry)
-      Streamer(e.file, zos, closeOnComplete = false)
+      Streamer(e.file, zos, closeOnComplete = false).unsafeRunSync()
       zos.closeEntry()
     }
     zos.flush()

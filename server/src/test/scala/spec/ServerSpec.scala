@@ -10,7 +10,7 @@ import spice.ValidationError
 import spice.http.content.{Content, StringContent}
 import spice.http.server.dsl._
 import spice.http.server.handler.HttpHandler
-import spice.http.{HttpExchange, HttpMethod, HttpRequest, HttpStatus, path}
+import spice.http.{HttpExchange, HttpMethod, HttpRequest, HttpStatus, paths}
 import spice.http.server.{HttpServer, MutableHttpServer}
 import spice.http.server.rest.{Restful, RestfulResponse}
 import spice.net._
@@ -20,7 +20,7 @@ class ServerSpec extends AsyncWordSpec with AsyncIOSpec with Matchers {
 
   "TestHttpApplication" should {
     "configure the TestServer" in {
-      server.handler.matcher(path.exact("/test.html")).wrap(new HttpHandler {
+      server.handler.matcher(paths.exact("/test.html")).wrap(new HttpHandler {
         override def handle(exchange: HttpExchange): IO[HttpExchange] = {
           exchange.modify { response =>
             IO(response.withContent(Content.string("test!", ContentType.`text/plain`)))

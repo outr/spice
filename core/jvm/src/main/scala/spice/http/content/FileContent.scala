@@ -1,5 +1,6 @@
 package spice.http.content
 
+import cats.effect.unsafe.implicits.global
 import spice.net.ContentType
 import spice.streamer._
 
@@ -18,5 +19,5 @@ case class FileContent(file: File, contentType: ContentType, lastModifiedOverrid
 
   override def toString: String = s"FileContent(file: ${file.getAbsolutePath}, contentType: $contentType)"
 
-  override def asString: String = Streamer(file, new mutable.StringBuilder).toString
+  override def asString: String = Streamer(file, new mutable.StringBuilder).unsafeRunSync().toString
 }

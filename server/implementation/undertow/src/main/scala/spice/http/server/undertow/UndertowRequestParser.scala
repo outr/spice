@@ -1,6 +1,7 @@
 package spice.http.server.undertow
 
 import cats.effect.IO
+import cats.effect.unsafe.implicits.global
 import io.undertow.server.HttpServerExchange
 import io.undertow.server.handlers.form.FormDataParser
 import io.undertow.util.HeaderMap
@@ -43,7 +44,7 @@ object UndertowRequestParser {
           Some(FormDataContent(data))
         case ct =>
           val cis = new ChannelInputStream(exchange.getRequestChannel)
-          val data = Streamer(cis, new mutable.StringBuilder).toString
+          val data = Streamer(cis, new mutable.StringBuilder).unsafeRunSync().toString
           Some(StringContent(data, ct))
       }
     } else {

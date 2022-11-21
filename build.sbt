@@ -1,6 +1,6 @@
 name := "spice"
 ThisBuild / organization := "com.outr"
-ThisBuild / version := "0.0.3"
+ThisBuild / version := "0.0.5"
 
 val scala213: String = "2.13.10"
 val scala3: String = "3.2.1"
@@ -108,10 +108,11 @@ lazy val server = project
 	)
 
 lazy val serverImplementationUndertow = project
-	.dependsOn(server)
+	.dependsOn(server, clientImplementationOkHttp % "test->test")
 	.in(file("server/implementation/undertow"))
 	.settings(
 		name := "spice-server-undertow",
+		fork := true,
 		libraryDependencies ++= Seq(
 			dep.undertow, dep.scribeSlf4j,
 			dep.scalaTest, dep.catsEffectTesting

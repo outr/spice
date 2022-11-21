@@ -95,7 +95,9 @@ object RestfulHandler {
     }
   }
 
-  def jsonFromContent(content: Content): Either[ValidationError, Json] = Right(JsonParser(content.asString))
+  def jsonFromContent(content: Content): Either[ValidationError, Json] = {
+    Right(JsonParser(content.asString))
+  }
 
   def jsonFromURL(url: URL): Json = {
     val entries = url.parameters.map.toList.map {

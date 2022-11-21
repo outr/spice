@@ -1,5 +1,6 @@
 package spice.http.content
 
+import cats.effect.unsafe.implicits.global
 import spice.net.ContentType
 import spice.streamer._
 import sun.net.www.protocol.file.FileURLConnection
@@ -38,5 +39,5 @@ case class URLContent(url: URL, contentType: ContentType, lastModifiedOverride: 
 
   override def toString: String = s"URLContent(url: $url, contentType: $contentType)"
 
-  override def asString: String = Streamer(url, new mutable.StringBuilder).toString
+  override def asString: String = Streamer(url, new mutable.StringBuilder).unsafeRunSync().toString
 }
