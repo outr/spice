@@ -2,9 +2,9 @@ import sbt._
 
 object Dependencies {
   object version {
-    val profig: String = "3.4.4"
+    val profig: String = "3.4.5"
     val scribe: String = "3.10.5"
-    val fabric: String = "1.7.0"
+    val fabric: String = "1.7.3"
     val reactify: String = "4.0.8"
     val cats: String = "3.3.14"
     val fs2: String = "3.3.0"
@@ -23,7 +23,7 @@ object Dependencies {
 	val scribe: ModuleID = "com.outr" %% "scribe" % version.scribe
   val scribeSlf4j: ModuleID = "com.outr" %% "scribe-slf4j" % version.scribe
   val scribeCats: ModuleID = "com.outr" %% "scribe-cats" % version.scribe
-	val fabricParse: ModuleID = "com.outr" %% "fabric-io" % version.fabric
+	val fabricParse: ModuleID = "org.typelevel" %% "fabric-io" % version.fabric
 	val reactify: ModuleID = "com.outr" %% "reactify" % version.reactify
 	val catsEffect: ModuleID = "org.typelevel" %% "cats-effect" % version.cats
 	val fs2: ModuleID = "co.fs2" %% "fs2-core" % version.fs2
