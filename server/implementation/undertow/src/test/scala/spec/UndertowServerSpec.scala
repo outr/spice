@@ -29,7 +29,8 @@ class UndertowServerSpec extends AsyncWordSpec with AsyncIOSpec with Matchers {
         filters(
           path"/test/reverse" / ReverseService,
           path"/test/reverse/:value" / ReverseService,
-          path"/test/time" / ServerTimeService
+          path"/test/time" / ServerTimeService,
+          path"/test/letters" / LettersOnlyService
         )
       )
       server.handlers.size should be(2)
@@ -100,6 +101,15 @@ class UndertowServerSpec extends AsyncWordSpec with AsyncIOSpec with Matchers {
           time should be >= begin
         }
     }
+    "call a Restful endpoint that takes a String as the request" in {
+      client
+        .path(path"/test/letters")
+        .restful[String, String]("test1test2test3")
+        .map(_.getOrElse(throw new RuntimeException("Failure!")))
+        .map { result =>
+          result should be("testtesttest")
+        }
+    }
     "stop the server" in {
       server.stop().map { _ =>
         server.isRunning should be(false)
@@ -127,6 +137,14 @@ class UndertowServerSpec extends AsyncWordSpec with AsyncIOSpec with Matchers {
     override def error(errors: List[ValidationError], status: HttpStatus): RestfulResponse[ReverseResponse] = {
       RestfulResponse(ReverseResponse(None, errors), status)
     }
+  }
+
+  object LettersOnlyService extends Restful[String, String] {
+    override def apply(exchange: HttpExchange, request: String): IO[RestfulResponse[String]] =
+      IO.pure(RestfulResponse(request.filter((c: Char) => c.isLetter), HttpStatus.OK))
+
+    override def error(errors: List[ValidationError], status: HttpStatus): RestfulResponse[String] =
+      RestfulResponse("failure!", status)
   }
 
   object ServerTimeService extends Restful[Unit, Long] {

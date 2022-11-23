@@ -20,7 +20,7 @@ trait HttpServer extends HttpHandler with Initializable with ErrorSupport {
 
     override def newThread(r: Runnable): Thread = {
       val t = new Thread(r)
-      t.setName(s"${config.name}-${counter.incrementAndGet()}")
+      t.setName(s"${config.name()}-${counter.incrementAndGet()}")
       t.setDaemon(true)
       t
     }
