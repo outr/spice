@@ -1,21 +1,30 @@
 package spice.http.server.openapi
 
-import fabric.io.YamlFormatter
+import fabric.Json
+import fabric.filter.RemoveNullsFilter
+import fabric.io.{JsonFormatter, YamlFormatter}
 import fabric.rw._
 import spice.net._
 
-case class OpenAPI(openapi: String = "3.0.0",
+case class OpenAPI(openapi: String = "3.1.0",
                    info: OpenAPIInfo,
-                   servers: List[OpenAPIServer],
-                   paths: Map[String, Map[String, OpenAPIPath]])
+                   servers: Option[List[OpenAPIServer]] = None,
+                   paths: Map[String, Map[String, OpenAPIPath]] = Map.empty) {
+  lazy val asJson: Json = OpenAPI.asJson(this)
+  lazy val asJsonString: String = JsonFormatter.Default(asJson)
+
+  override def toString: String = asJsonString
+}
 
 object OpenAPI {
   implicit val rw: RW[OpenAPI] = RW.gen
+
+  private def asJson(api: OpenAPI): Json = api.json.filter(RemoveNullsFilter).get
 }
 
 case class OpenAPIInfo(title: String,
-                       description: String,
-                       version: String)
+                       version: String,
+                       description: Option[String] = None)
 
 object OpenAPIInfo {
   implicit val rw: RW[OpenAPIInfo] = RW.gen
@@ -46,10 +55,10 @@ object Test2 {
     val api = OpenAPI(
       info = OpenAPIInfo(
         title = "Sample API",
-        description = "Optional multiline or single-line description in [CommonMark](http://commonmark.org/help/) or HTML.",
-        version = "0.1.9"
+        version = "0.1.9",
+        description = Some("Optional multiline or single-line description in [CommonMark](http://commonmark.org/help/) or HTML.")
       ),
-      servers = List(
+      servers = Some(List(
         OpenAPIServer(
           url = url"https://api.example.com/v1",
           description = "Optional server description, e.g. Main (production) server"
@@ -58,7 +67,7 @@ object Test2 {
           url = url"https://staging-api.example.com",
           description = "Optional server description, e.g. Internal staging server for testing"
         )
-      ),
+      )),
       paths = Map(
         "/users" -> Map(
           "get" -> OpenAPIPath(
