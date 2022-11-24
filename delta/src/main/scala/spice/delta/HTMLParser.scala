@@ -1,5 +1,6 @@
 package spice.delta
 
+import cats.effect.unsafe.implicits.global
 import spice.http.content.{Content, FileContent, StringContent, URLContent}
 import spice.streamer._
 
@@ -40,14 +41,14 @@ object HTMLParser {
   def cache(url: URL): StreamableHTML = {
     val file = File.createTempFile("htmlparser", "cache")
     file.deleteOnExit()
-    Streamer(url, file)
+    Streamer(url, file).unsafeRunSync()
     cache(file)
   }
 
   def cache(html: String): StreamableHTML = {
     val file = File.createTempFile("htmlparser", "cache")
     file.deleteOnExit()
-    Streamer(html, file)
+    Streamer(html, file).unsafeRunSync()
     cache(file)
   }
 

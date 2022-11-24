@@ -40,12 +40,12 @@ class ServerSpec extends AsyncWordSpec with AsyncIOSpec with Matchers {
       server.handlers.size should be(2)
     }
     "receive OK for test.html" in {
-      server.handle(HttpExchange(HttpRequest(url = URL("http://localhost/test.html")))).map { exchange =>
+      server.handle(HttpExchange(HttpRequest(url = url"http://localhost/test.html"))).map { exchange =>
         exchange.response.status should be(HttpStatus.OK)
       }
     }
     "receive NotFound for other.html" in {
-      server.handle(HttpExchange(HttpRequest(url = URL("http://localhost/other.html")))).map { exchange =>
+      server.handle(HttpExchange(HttpRequest(url = url"http://localhost/other.html"))).map { exchange =>
         exchange.response.status should be(HttpStatus.NotFound)
       }
     }
@@ -53,7 +53,7 @@ class ServerSpec extends AsyncWordSpec with AsyncIOSpec with Matchers {
       val content = Content.json(ReverseRequest("Testing").json)
       server.handle(HttpExchange(HttpRequest(
         method = HttpMethod.Post,
-        url = URL("http://localhost/test/reverse"),
+        url = url"http://localhost/test/reverse",
         content = Some(content)
       ))).map { exchange =>
         exchange.response.status should be(HttpStatus.OK)
@@ -66,7 +66,7 @@ class ServerSpec extends AsyncWordSpec with AsyncIOSpec with Matchers {
     "reverse a String with the Restful endpoint via GET" in {
       server.handle(HttpExchange(HttpRequest(
         method = HttpMethod.Get,
-        url = URL("http://localhost/test/reverse?value=Testing")
+        url = url"http://localhost/test/reverse?value=Testing"
       ))).map { exchange =>
         exchange.response.status should be(HttpStatus.OK)
         val jsonString = exchange.response.content.get.asInstanceOf[StringContent].value
@@ -78,7 +78,7 @@ class ServerSpec extends AsyncWordSpec with AsyncIOSpec with Matchers {
     "reverse a String with the Restful endpoint via GET with path-based arg" in {
       server.handle(HttpExchange(HttpRequest(
         method = HttpMethod.Get,
-        url = URL("http://localhost/test/reverse/Testing")
+        url = url"http://localhost/test/reverse/Testing"
       ))).map { exchange =>
         exchange.response.status should be(HttpStatus.OK)
         val jsonString = exchange.response.content.get.asInstanceOf[StringContent].value
@@ -91,7 +91,7 @@ class ServerSpec extends AsyncWordSpec with AsyncIOSpec with Matchers {
       val begin = System.currentTimeMillis()
       server.handle(HttpExchange(HttpRequest(
         method = HttpMethod.Get,
-        url = URL("http://localhost/test/time")
+        url = url"http://localhost/test/time"
       ))).map { exchange =>
         exchange.response.status should be(HttpStatus.OK)
         val jsonString = exchange.response.content.get.asInstanceOf[StringContent].value

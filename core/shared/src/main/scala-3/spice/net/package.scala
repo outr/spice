@@ -34,5 +34,5 @@ package object net {
     def validate(s: String)(using Quotes): Either[String, Expr[URL]] =
       URL.get(s) match
         case Left(f) => Left(f.message)
-        case Right(_) => Right('{URL(${Expr(s)})})
+        case Right(_) => Right('{URL.parse(${Expr(s)})})
 }

@@ -51,7 +51,7 @@ package object net {
       import c.universe._
       URL.get(s) match {
         case Left(f) => Left(f.message)
-        case Right(_) => Right(c.Expr(q"_root_.spice.net.URL($s)"))
+        case Right(_) => Right(c.Expr(q"_root_.spice.net.URL.parse($s)"))
       }
     }
 

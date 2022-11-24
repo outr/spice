@@ -34,7 +34,9 @@ class TemplateGeneratorSpec extends AnyWordSpec with Matchers {
           closeTagProcessor = None
         )
       ))
-      scribe.info(s"Result[$result]")
+      result.replaceAll("\\s", "") should be(
+        "<html><head></head><body>REPLACED<ul>REPLACED</ul></body></html>"
+      )
     }
   }
 }

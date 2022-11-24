@@ -25,15 +25,15 @@ case class URL(protocol: Protocol = Protocol.Http,
     hostParts.takeRight(2).mkString(".")
   }
 
-  def replaceBase(base: String): URL = URL(s"$base${encoded.pathAndArgs}")
-  def replacePathAndParams(pathAndParams: String): URL = URL(s"$base$pathAndParams")
+  def replaceBase(base: String): URL = URL.parse(s"$base${encoded.pathAndArgs}")
+  def replacePathAndParams(pathAndParams: String): URL = URL.parse(s"$base$pathAndParams")
 
   def withProtocol(protocol: Protocol): URL = copy(protocol = protocol)
 
   def withPart(part: String): URL = if (part.indexOf("://") != -1) {
-    URL(part)
+    URL.parse(part)
   } else if (part.startsWith("//")) {
-    URL(s"${protocol.scheme}:$part")
+    URL.parse(s"${protocol.scheme}:$part")
   } else if (part.startsWith("?")) {
     copy(parameters = Parameters.parse(part))
   } else {
@@ -133,7 +133,7 @@ case class URL(protocol: Protocol = Protocol.Http,
 }
 
 object URL {
-  implicit val rw: RW[URL] = RW.from(_.toString.json, v => apply(v.asStr.value))
+  implicit val rw: RW[URL] = RW.from(_.toString.json, v => parse(v.asStr.value))
 
   def build(protocol: String,
             host: String,
@@ -145,16 +145,23 @@ object URL {
     URL(Protocol(protocol), host, port, Path.parse(path), params, fragment)
   }
 
-  def apply(url: String): URL = apply(url, absolutizePath = true)
-
-  def apply(url: String, absolutizePath: Boolean): URL = get(url, absolutizePath) match {
+  def parse(url: String,
+            absolutizePath: Boolean = true,
+            validateTLD: Boolean = true,
+            defaultProtocol: Protocol = Protocol.Https): URL = get(url, absolutizePath, validateTLD, defaultProtocol) match {
     case Left(parseFailure) => throw MalformedURLException(s"Unable to parse URL: [$url] (${parseFailure.message})", url, parseFailure.cause)
     case Right(url) => url
   }
 
-  def get(url: String): Either[URLParseFailure, URL] = get(url, absolutizePath = true)
-
-  def get(url: String, absolutizePath: Boolean): Either[URLParseFailure, URL] = URLParser(url, absolutizePath)
+  def get(url: String,
+          absolutizePath: Boolean = true,
+          validateTLD: Boolean = true,
+          defaultProtocol: Protocol = Protocol.Https): Either[URLParseFailure, URL] = URLParser(
+    s = url,
+    absolutizePath = absolutizePath,
+    validateTLD = validateTLD,
+    defaultProtocol = defaultProtocol
+  )
 
   private val unreservedCharacters = Set('A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M', 'N', 'O', 'P',
     'Q', 'R', 'S', 'T', 'U', 'V', 'W', 'X', 'Y', 'Z', 'a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'k', 'l', 'm',

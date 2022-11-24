@@ -51,11 +51,11 @@ object Test2 {
       ),
       servers = List(
         OpenAPIServer(
-          url = url"http://api.example.com/v1",
+          url = url"https://api.example.com/v1",
           description = "Optional server description, e.g. Main (production) server"
         ),
         OpenAPIServer(
-          url = url"http://staging-api.example.com",
+          url = url"https://staging-api.example.com",
           description = "Optional server description, e.g. Internal staging server for testing"
         )
       ),

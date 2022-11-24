@@ -62,7 +62,7 @@ class UndertowServerImplementation(server: HttpServer) extends HttpServerImpleme
 
   override def handleRequest(undertow: HttpServerExchange): Unit = server.errorSupport {
     try {
-      val url = URL(s"${undertow.getRequestURL}?${undertow.getQueryString}")
+      val url = URL.parse(s"${undertow.getRequestURL}?${undertow.getQueryString}")
       if (!server.config.persistentConnections()) {
         undertow.setPersistent(false)
       }
