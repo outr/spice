@@ -8,8 +8,9 @@ import io.undertow.server.handlers.encoding.{ContentEncodingRepository, DeflateE
 import moduload.Moduload
 import reactify._
 import scribe.Logger
+import spice.http.server.config.{HttpServerListener, HttpsServerListener}
 import spice.http.{HttpExchange, HttpResponse}
-import spice.http.server.{HttpServer, HttpServerImplementation, HttpServerImplementationManager, HttpServerListener, HttpsServerListener, SSLUtil}
+import spice.http.server.{HttpServer, HttpServerImplementation, HttpServerImplementationManager, SSLUtil}
 import spice.net.{MalformedURLException, URL}
 
 import java.util.logging.LogManager

@@ -1,5 +1,7 @@
 package spice.net
 
+import fabric.rw.RW
+
 case class Protocol private(scheme: String, description: String, rfc: String, defaultPort: Option[Int] = None) {
   Protocol.schemeMap += scheme -> this
 
@@ -7,6 +9,8 @@ case class Protocol private(scheme: String, description: String, rfc: String, de
 }
 
 object Protocol {
+  implicit val rw: RW[Protocol] = RW.gen
+
   private var schemeMap = Map.empty[String, Protocol]
 
   val Aaa: Protocol = Protocol("aaa", "Diameter Protocol", "RFC6733")

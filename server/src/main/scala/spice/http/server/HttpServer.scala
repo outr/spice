@@ -4,6 +4,7 @@ import cats.effect.IO
 import cats.effect.unsafe.{IORuntime, IORuntimeConfig, Scheduler}
 import scribe.cats.{io => logger}
 import spice.http.HttpExchange
+import spice.http.server.config.ServerConfig
 import spice.http.server.handler.HttpHandler
 import spice.{ErrorSupport, ImplementationManager, Initializable}
 

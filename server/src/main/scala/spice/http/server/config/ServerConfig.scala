@@ -1,13 +1,14 @@
-package spice.http.server
+package spice.http.server.config
 
 import cats.effect.unsafe.IORuntimeConfig
+import fabric.rw._
+import profig._
+import reactify._
+import spice.http.cookie.SameSite
+import spice.http.server.{HttpServer, ServerUtil}
 
 import java.io.File
 import java.util.concurrent.TimeUnit
-import fabric.rw._
-import reactify._
-import profig._
-import spice.http.cookie.SameSite
 
 class ServerConfig(server: HttpServer) {
   /**
@@ -111,47 +112,4 @@ class ServerConfig(server: HttpServer) {
     }
     v
   }
-}
-
-trait ServerSocketListener {
-  def host: String
-  def port: Int
-  def enabled: Boolean
-}
-
-case class HttpServerListener(host: String = "127.0.0.1",
-                              port: Int = 8080,
-                              enabled: Boolean = true) extends ServerSocketListener {
-  override def toString: String = if (host == "0.0.0.0") {
-    s"HTTP ${ServerUtil.localIPs().map(ip => s"$ip:$port").mkString(", ")}"
-  } else {
-    s"HTTP $host:$port"
-  }
-}
-
-object HttpServerListener {
-  implicit val rw: RW[HttpServerListener] = RW.gen
-}
-
-case class HttpsServerListener(host: String = "127.0.0.1",
-                               port: Int = 8443,
-                               keyStore: KeyStore = KeyStore(),
-                               enabled: Boolean = false) extends ServerSocketListener {
-  override def toString: String = if (host == "0.0.0.0") {
-    s"HTTPS ${ServerUtil.localIPs().map(ip => s"$ip:$port").mkString(", ")}"
-  } else {
-    s"HTTPS $host:$port"
-  }
-}
-
-object HttpsServerListener {
-  implicit val rw: RW[HttpsServerListener] = RW.gen
-}
-
-case class KeyStore(path: String = "keystore.jks", password: String = "password") {
-  lazy val location: File = new File(path)
-}
-
-object KeyStore {
-  implicit val rw: RW[KeyStore] = RW.gen
 }
