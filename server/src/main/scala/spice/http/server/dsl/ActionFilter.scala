@@ -4,7 +4,7 @@ import cats.effect.IO
 import spice.http.HttpExchange
 
 class ActionFilter(f: HttpExchange => IO[HttpExchange]) extends ConnectionFilter {
-  override def filter(exchange: HttpExchange): IO[FilterResponse] = {
+  override def apply(exchange: HttpExchange): IO[FilterResponse] = {
     f(exchange).map(FilterResponse.Continue.apply)
   }
 }

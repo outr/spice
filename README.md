@@ -1,4 +1,6 @@
 # spice
+[![CI](https://github.com/outr/spice/actions/workflows/ci.yml/badge.svg)](https://github.com/outr/spice/actions/workflows/ci.yml)
+
 A new framework for server and client HTTP communication. Intentional speed and simplicity with a
 core focus on OpenAPI / Swagger support.
 

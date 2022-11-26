@@ -5,7 +5,7 @@ import spice.http.HttpExchange
 import spice.net.Path
 
 case class PathFilter(path: Path) extends ConnectionFilter {
-  override def filter(exchange: HttpExchange): IO[FilterResponse] = IO {
+  override def apply(exchange: HttpExchange): IO[FilterResponse] = IO {
     if (path == exchange.request.url.path) {
       val args = path.extractArguments(exchange.request.url.path)
       if (args.nonEmpty) {

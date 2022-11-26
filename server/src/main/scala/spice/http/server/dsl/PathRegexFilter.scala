@@ -6,7 +6,7 @@ import spice.http.HttpExchange
 import scala.util.matching.Regex
 
 case class PathRegexFilter(regex: Regex) extends ConnectionFilter {
-  override def filter(exchange: HttpExchange): IO[FilterResponse] = IO {
+  override def apply(exchange: HttpExchange): IO[FilterResponse] = IO {
     val path = exchange.request.url.path.decoded
     if (path.matches(regex.regex)) {
       FilterResponse.Continue(exchange)

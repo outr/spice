@@ -19,7 +19,7 @@ package object dsl {
   implicit class ValidatorFilter(val validator: Validator) extends ConnectionFilter {
     private lazy val list = List(validator)
 
-    override def filter(exchange: HttpExchange): IO[FilterResponse] = {
+    override def apply(exchange: HttpExchange): IO[FilterResponse] = {
       ValidatorHttpHandler.validate(exchange, list).map {
         case ValidationResult.Continue(c) => FilterResponse.Continue(c)
         case vr => FilterResponse.Stop(vr.exchange)
@@ -50,7 +50,7 @@ package object dsl {
 //  })
 
   implicit class StringFilter(val s: String) extends ConnectionFilter {
-    override def filter(exchange: HttpExchange): IO[FilterResponse] = IO {
+    override def apply(exchange: HttpExchange): IO[FilterResponse] = IO {
       PathPart.take(exchange, s) match {
         case Some(c) => FilterResponse.Continue(c)
         case None => FilterResponse.Stop(exchange)
@@ -67,7 +67,7 @@ package object dsl {
       directory
     }
 
-    override def filter(exchange: HttpExchange): IO[FilterResponse] = {
+    override def apply(exchange: HttpExchange): IO[FilterResponse] = {
       val path = pathTransform(exchange.request.url.path.decoded)
       val resourcePath = s"$dir$path" match {
         case s if s.startsWith("/") => s.substring(1)
@@ -104,7 +104,7 @@ package object dsl {
   }
 
   def redirect(path: Path): ConnectionFilter = new ConnectionFilter {
-    override def filter(exchange: HttpExchange): IO[FilterResponse] = {
+    override def apply(exchange: HttpExchange): IO[FilterResponse] = {
       HttpHandler.redirect(exchange, path.encoded).map { redirected =>
         FilterResponse.Continue(redirected)
       }

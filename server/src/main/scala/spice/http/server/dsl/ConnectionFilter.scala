@@ -5,7 +5,7 @@ import spice.http.HttpExchange
 import spice.http.server.handler.HttpHandler
 
 trait ConnectionFilter extends HttpHandler {
-  def filter(exchange: HttpExchange): IO[FilterResponse]
+  def apply(exchange: HttpExchange): IO[FilterResponse]
 
   protected def continue(exchange: HttpExchange): FilterResponse = FilterResponse.Continue(exchange)
   protected def stop(exchange: HttpExchange): FilterResponse = FilterResponse.Stop(exchange)
@@ -26,7 +26,7 @@ trait ConnectionFilter extends HttpHandler {
   }
 
   override def handle(exchange: HttpExchange): IO[HttpExchange] = {
-    filter(exchange).flatMap {
+    apply(exchange).flatMap {
       case FilterResponse.Continue(c) => {
         val last = c.store.getOrElse[List[ConnectionFilter]](ConnectionFilter.LastKey, Nil)
         ConnectionFilter.recurse(c, last).map(_.exchange)
@@ -43,7 +43,7 @@ object ConnectionFilter {
     IO.pure(FilterResponse.Continue(exchange))
   } else {
     val filter = filters.head
-    filter.filter(exchange).flatMap {
+    filter.apply(exchange).flatMap {
       case stop: FilterResponse.Stop => IO.pure(stop)
       case FilterResponse.Continue(c) => recurse(c, filters.tail)
     }

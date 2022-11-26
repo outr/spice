@@ -140,8 +140,9 @@ class UndertowServerSpec extends AsyncWordSpec with AsyncIOSpec with Matchers {
   }
 
   object LettersOnlyService extends Restful[String, String] {
-    override def apply(exchange: HttpExchange, request: String): IO[RestfulResponse[String]] =
-      IO.pure(RestfulResponse(request.filter((c: Char) => c.isLetter), HttpStatus.OK))
+    override def apply(exchange: HttpExchange, text: String): IO[RestfulResponse[String]] = {
+      IO.pure(RestfulResponse[String](text.filter((c: Char) => c.isLetter), HttpStatus.OK))
+    }
 
     override def error(errors: List[ValidationError], status: HttpStatus): RestfulResponse[String] =
       RestfulResponse("failure!", status)

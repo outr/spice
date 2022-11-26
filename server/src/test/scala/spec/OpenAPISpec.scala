@@ -1,13 +1,11 @@
 package spec
 
 import cats.effect.unsafe.implicits.global
-import fabric.filter.RemoveNullsFilter
-import fabric.io.{JsonFormatter, YamlFormatter}
-import fabric.rw.Convertible
+import fabric.io.JsonParser
 import org.scalatest.matchers.should.Matchers
 import org.scalatest.wordspec.AnyWordSpec
 import spice.http.server.openapi.{OpenAPI, OpenAPIInfo, OpenAPIPath, OpenAPIResponse}
-import spice.streamer.Streamer
+import spice.streamer._
 
 import scala.collection.mutable
 
@@ -20,11 +18,11 @@ class OpenAPISpec extends AnyWordSpec with Matchers {
           version = "0.0.1"
         )
       )
-      val expected = Streamer(
+      val expected = JsonParser(Streamer(
         getClass.getClassLoader.getResourceAsStream("openapi-minimal.json"),
         new mutable.StringBuilder
-      ).unsafeRunSync().toString
-      api.asJsonString should be(expected)
+      ).unsafeRunSync().toString)
+      api.asJson should be(expected)
     }
     "create a tic tac toe example manually" in {
       val api = OpenAPI(
@@ -47,7 +45,7 @@ class OpenAPISpec extends AnyWordSpec with Matchers {
           )
         )
       )
-      println(api.asJsonString)
+//      println(api.asJsonString)
       // TODO: Should map to openapi-tictactoe.json
     }
   }
