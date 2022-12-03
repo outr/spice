@@ -13,9 +13,9 @@ case class ContentType(`type`: String,
   }
 
   lazy val mimeType: String = s"${`type`}/$subType"
-  lazy val boundary: String = extras("boundary")
-  lazy val charSet: String = extras("charset")
-  lazy val start: String = extras("start")
+  lazy val boundary: Option[String] = extras.get("boundary")
+  lazy val charSet: Option[String] = extras.get("charset")
+  lazy val start: Option[String] = extras.get("start")
   lazy val outputString: String = {
     val b = new mutable.StringBuilder(mimeType)
     extras.foreach {

@@ -5,6 +5,12 @@ import fabric.rw._
 sealed abstract class HttpMethod private(val value: String) {
   HttpMethod.map += value -> this
 
+  def unapply(exchange: HttpExchange): Option[HttpExchange] = if (exchange.request.method == this) {
+    Some(exchange)
+  } else {
+    None
+  }
+
   override def toString: String = value
 }
 
