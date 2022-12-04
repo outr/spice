@@ -4,6 +4,7 @@ import fabric._
 import fabric.filter.{RemoveEmptyFilter, RemoveNullsFilter}
 import fabric.io.{JsonFormatter, YamlFormatter}
 import fabric.rw._
+import spice.http.HttpStatus
 import spice.net._
 
 case class OpenAPI(openapi: String = "3.1.0",
@@ -43,7 +44,7 @@ object OpenAPITag {
   implicit val rw: RW[OpenAPITag] = RW.gen
 }
 
-case class OpenAPIServer(url: URL, description: String)
+case class OpenAPIServer(url: URL, description: Option[String])
 
 object OpenAPIServer {
   implicit val rw: RW[OpenAPIServer] = RW.gen
@@ -96,7 +97,7 @@ object OpenAPIContent {
   def apply(content: (ContentType, OpenAPIContentType)*): OpenAPIContent = OpenAPIContent(content.toList)
 }
 
-case class OpenAPIContentType(schema: OpenAPISchema,
+case class OpenAPIContentType(schema: Either[OpenAPIComponentSchema, OpenAPISchema],
                               example: Option[String] = None,
                               examples: Map[String, OpenAPIValue] = Map.empty)
 

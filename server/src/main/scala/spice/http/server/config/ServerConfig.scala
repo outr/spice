@@ -6,6 +6,7 @@ import profig._
 import reactify._
 import spice.http.cookie.SameSite
 import spice.http.server.{HttpServer, ServerUtil}
+import spice.net.{Path, interpolation}
 
 import java.io.File
 import java.util.concurrent.TimeUnit
@@ -90,16 +91,8 @@ class ServerConfig(server: HttpServer) {
     this
   }
 
-  def addHttpListener(host: String = "127.0.0.1", port: Int = 8080): ServerConfig = {
-    listeners @= HttpServerListener(host, port) :: listeners()
-    this
-  }
-
-  def addHttpsListener(host: String = "127.0.0.1",
-                       port: Int = 8443,
-                       keyStorePassword: String = "password",
-                       keyStoreLocation: File = new File("keystore.jks")): ServerConfig = {
-    listeners @= HttpsServerListener(host, port, KeyStore(keyStoreLocation.getAbsolutePath, keyStorePassword), enabled = true) :: listeners()
+  def addListeners(listeners: ServerSocketListener*): ServerConfig = {
+    this.listeners @= this.listeners() ::: listeners.toList
     this
   }
 

@@ -1,23 +1,14 @@
 package spec
 
-import cats.effect.unsafe.implicits.global
 import fabric._
-import fabric.io.JsonParser
 import org.scalatest.matchers.should.Matchers
 import org.scalatest.wordspec.AnyWordSpec
+import spec.TestUtils._
 import spice.http.server.openapi._
-import spice.net.ContentType
-import spice.streamer._
-
-import scala.collection.mutable
+import spice.net.{ContentType, interpolation}
 
 class OpenAPISpec extends AnyWordSpec with Matchers {
   "OpenAPI Generation" should {
-    def loadJson(name: String): Json = JsonParser(Streamer(
-        getClass.getClassLoader.getResourceAsStream(name),
-        new mutable.StringBuilder
-      ).unsafeRunSync().toString)
-
     "create a minimal OpenAPI document manually" in {
       val api = OpenAPI(
         info = OpenAPIInfo(
@@ -27,6 +18,46 @@ class OpenAPISpec extends AnyWordSpec with Matchers {
       )
       val expected = loadJson("openapi-minimal.json")
       api.asJson should be(expected)
+    }
+    "create a simple OpenAPI document manually" in {
+      val api = OpenAPI(
+        openapi = "3.0.0",
+        info = OpenAPIInfo(
+          title = "Sample API",
+          description = Some("Optional multiline or single-line description in [CommonMark](http://commonmark.org/help/) or HTML."),
+          version = "0.1.9"
+        ),
+        servers = List(
+          OpenAPIServer(url = url"http://api.example.com/v1", description = Some("Optional server description, e.g. Main (production) server")),
+          OpenAPIServer(url = url"http://staging-api.example.com", description = Some("Optional server description, e.g. Internal staging server for testing"))
+        ),
+        paths = Map(
+          "/users" -> OpenAPIPath(
+            get = Some(OpenAPIPathEntry(
+              summary = "Returns a list of users.",
+              description = "Optional extended description in CommonMark or HTML.",
+              responses = Map(
+                "200" -> OpenAPIResponse(
+                  description = "A JSON array of user names",
+                  content = OpenAPIContent(
+                    ContentType.`application/json` -> OpenAPIContentType(
+                      schema = Left(OpenAPIComponentSchema(
+                        `type` = "array",
+                        items = Some(Left(OpenAPIComponentSchema(
+                          `type` = "string"
+                        )))
+                      ))
+                    )
+                  )
+                )
+              )
+            ))
+          )
+        )
+      )
+      val expected = loadYaml("openapi-simple.yml")
+      println(api.asYaml)
+      api.asYaml should be(expected)
     }
     "create a tic tac toe example manually" in {
       val api = OpenAPI(
@@ -52,7 +83,7 @@ class OpenAPISpec extends AnyWordSpec with Matchers {
                   description = "OK",
                   content = OpenAPIContent(
                     ContentType.`application/json` -> OpenAPIContentType(
-                      schema = OpenAPISchema(ref = "#/components/schemas/status")
+                      schema = Right(OpenAPISchema(ref = "#/components/schemas/status"))
                     )
                   )
                 )
@@ -74,7 +105,7 @@ class OpenAPISpec extends AnyWordSpec with Matchers {
                   description = "OK",
                   content = OpenAPIContent(
                     ContentType.`application/json` -> OpenAPIContentType(
-                      schema = OpenAPISchema("#/components/schemas/mark")
+                      schema = Right(OpenAPISchema("#/components/schemas/mark"))
                     )
                   )
                 ),
@@ -82,7 +113,7 @@ class OpenAPISpec extends AnyWordSpec with Matchers {
                   description = "The provided parameters are incorrect",
                   content = OpenAPIContent(
                     ContentType.`text/html` -> OpenAPIContentType(
-                      schema = OpenAPISchema("#/components/schemas/errorMessage"),
+                      schema = Right(OpenAPISchema("#/components/schemas/errorMessage")),
                       example = Some("Illegal coordinates")
                     )
                   )
@@ -98,7 +129,7 @@ class OpenAPISpec extends AnyWordSpec with Matchers {
                 required = true,
                 content = OpenAPIContent(
                   ContentType.`application/json` -> OpenAPIContentType(
-                    schema = OpenAPISchema("#/components/schemas/mark")
+                    schema = Right(OpenAPISchema("#/components/schemas/mark"))
                   )
                 )
               )),
@@ -107,7 +138,7 @@ class OpenAPISpec extends AnyWordSpec with Matchers {
                   description = "OK",
                   content = OpenAPIContent(
                     ContentType.`application/json` -> OpenAPIContentType(
-                      schema = OpenAPISchema("#/components/schemas/status")
+                      schema = Right(OpenAPISchema("#/components/schemas/status"))
                     )
                   )
                 ),
@@ -115,7 +146,7 @@ class OpenAPISpec extends AnyWordSpec with Matchers {
                   description = "The provided parameters are incorrect",
                   content = OpenAPIContent(
                     ContentType.`text/html` -> OpenAPIContentType(
-                      schema = OpenAPISchema("#/components/schemas/errorMessage"),
+                      schema = Right(OpenAPISchema("#/components/schemas/errorMessage")),
                       examples = Map(
                         "illegalCoordinates" -> OpenAPIValue("Illegal coordinates."),
                         "notEmpty" -> OpenAPIValue("Square is not empty."),

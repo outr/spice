@@ -2,16 +2,23 @@ package spice.http.server.config
 
 import fabric.rw.RW
 import spice.http.server.ServerUtil
+import spice.net.{Path, Protocol, URL, interpolation}
 
 case class HttpsServerListener(host: String = "127.0.0.1",
                                port: Int = 8443,
                                keyStore: KeyStore = KeyStore(),
-                               enabled: Boolean = false) extends ServerSocketListener {
-  override def toString: String = if (host == "0.0.0.0") {
-    s"HTTPS ${ServerUtil.localIPs().map(ip => s"$ip:$port").mkString(", ")}"
+                               enabled: Boolean = false,
+                               basePath: Path = path"/",
+                               description: Option[String] = None) extends ServerSocketListener {
+  override lazy val urls: List[URL] = if (host == "0.0.0.0") {
+    ServerUtil.localIPs().map { ip =>
+      URL(protocol = Protocol.Https, host = ip.toString, path = basePath, port = port)
+    }
   } else {
-    s"HTTPS $host:$port"
+    List(URL(protocol = Protocol.Https, host = host, path = basePath, port = port))
   }
+
+  override def toString: String = urls.mkString(", ")
 }
 
 object HttpsServerListener {
