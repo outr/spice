@@ -3,7 +3,7 @@ package spec
 import cats.effect.IO
 import cats.effect.testing.scalatest.AsyncIOSpec
 import fabric.io.JsonFormatter
-import fabric.obj
+import fabric.{Json, JsonType, obj}
 import fabric.rw._
 import org.scalatest.matchers.should.Matchers
 import org.scalatest.wordspec.AsyncWordSpec
@@ -19,8 +19,6 @@ class OpenAPIServerSpec extends AsyncWordSpec with AsyncIOSpec with Matchers {
     "validate a proper swagger.yml file" in {
       val expected = TestUtils.loadYaml("openapi-simple.yml")
       val json = SimpleOpenAPIServer.api.asJson
-      println(JsonFormatter.Default(json))
-      println(JsonFormatter.Default(expected))
       json should be(expected)
     }
   }
@@ -51,7 +49,9 @@ class OpenAPIServerSpec extends AsyncWordSpec with AsyncIOSpec with Matchers {
       override val get: ServiceCall = ServiceCall[Unit, List[String]](
         summary = "Returns a list of users.",
         description = "Optional extended description in CommonMark or HTML.",
-        successDescription = "A JSON array of user names"
+        successDescription = "A JSON array of user names",
+        exampleRequest = (),
+        exampleResponse = List("username1", "username2", "username3")
       ) { request =>
         request.response(List("root", "john.doe"))
       }
@@ -120,16 +120,11 @@ trait ServiceCall {
 
   def successDescription: String
 
-  def requestRW: RW[Request]
-  def responseRW: RW[Response]
+  def exampleRequest: Request
+  def exampleResponse: Response
 
-  implicit class HttpExchangeExtras(exchange: HttpExchange) {
-    def withResponse(response: Response)(implicit reader: Reader[Response]): IO[ServiceResponse[Response]] = {
-      exchange.withContent(Content.json(response.json)).map { exchange =>
-        ServiceResponse[Response](exchange)
-      }
-    }
-  }
+  implicit def requestRW: RW[Request]
+  implicit def responseRW: RW[Response]
 
   def apply(request: ServiceRequest[Request]): IO[ServiceResponse[Response]]
 
@@ -147,18 +142,24 @@ trait ServiceCall {
           description = successDescription,
           content = OpenAPIContent(
             ContentType.`application/json` -> OpenAPIContentType(
-              schema = Left(OpenAPIComponentSchema(   // TODO: Support
-                `type` = "array",
-                items = Some(Left(OpenAPIComponentSchema(
-                  `type` = "string"
-                )))
-              ))
+              schema = Left(schemaFrom(exampleResponse.json))
             )
-          )   // TODO: Implement
+          )
         )
         // TODO: Support errors
       )
     ))
+  }
+
+  private def schemaFrom(json: Json): OpenAPIComponentSchema = json.`type` match {
+    case t if t.is(JsonType.Arr) => OpenAPIComponentSchema(
+      `type` = "array",
+      items = Some(Left(schemaFrom(json.asVector.head)))
+    )
+    case t if t.is(JsonType.Str) => OpenAPIComponentSchema(
+      `type` = "string"
+    )
+    case t => throw new UnsupportedOperationException(s"JSON type $t is not supported!")
   }
 }
 
@@ -170,7 +171,9 @@ object ServiceCall {
                                         override val tags: List[String] = Nil,
                                         override val operationId: Option[String] = None,
                                         requestRW: RW[Req],
-                                        responseRW: RW[Res]) extends ServiceCall {
+                                        responseRW: RW[Res],
+                                        exampleRequest: Req,
+                                        exampleResponse: Res) extends ServiceCall {
     override type Request = Req
     override type Response = Res
 
@@ -180,6 +183,8 @@ object ServiceCall {
   def apply[Request, Response](summary: String,
                                description: String,
                                successDescription: String,
+                               exampleRequest: Request,
+                               exampleResponse: Response,
                                tags: List[String] = Nil,
                                operationId: Option[String] = None)
                               (call: ServiceRequest[Request] => IO[ServiceResponse[Response]])
@@ -192,11 +197,13 @@ object ServiceCall {
       tags = tags,
       operationId = operationId,
       requestRW = requestRW,
-      responseRW = responseRW
+      responseRW = responseRW,
+      exampleRequest = exampleRequest,
+      exampleResponse = exampleResponse
     )
   }
 
-  lazy val NotSupported = apply[Unit, Unit]("", "", "") { request =>
+  lazy val NotSupported = apply[Unit, Unit]("", "", "", (), ()) { request =>
     request.exchange.modify { response =>
       IO(response.withContent(Content.json(obj(
         "error" -> "Unsupported method"
