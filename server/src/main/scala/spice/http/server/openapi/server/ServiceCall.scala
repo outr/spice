@@ -2,13 +2,20 @@ package spice.http.server.openapi.server
 
 import cats.effect.IO
 import fabric._
+import fabric.io.JsonParser
 import fabric.rw._
-import spice.http.HttpStatus
+import spice.http.{HttpExchange, HttpStatus}
 import spice.http.content.Content
+import spice.http.server.handler.HttpHandler
 import spice.http.server.openapi._
-import spice.net.ContentType
+import spice.http.server.rest.RestfulHandler.jsonFromContent
+import spice.net
+import spice.net.{ContentType, interpolation}
 
-trait ServiceCall {
+import scala.collection.immutable.ListMap
+import scala.util.Try
+
+trait ServiceCall extends HttpHandler {
   type Request
   type Response
 
@@ -18,6 +25,8 @@ trait ServiceCall {
   def operationId: Option[String] = None
   def successDescription: String
 
+  def service: Service
+
   def exampleRequest: Request
   def exampleResponse: Response
 
@@ -25,6 +34,22 @@ trait ServiceCall {
   implicit def responseRW: RW[Response]
 
   def apply(request: ServiceRequest[Request]): IO[ServiceResponse[Response]]
+
+  override def handle(exchange: HttpExchange): IO[HttpExchange] = {
+    val args = exchange.request.url.path.extractArguments(service.path).toList.map {
+      case (key, value) => key -> Try(JsonParser(value)).getOrElse(Str(value))
+    }
+    val argsJson = obj(args: _*)
+    // TODO: Support GET params
+    val contentJson = exchange.request.content.map(jsonFromContent).flatMap(_.toOption).getOrElse(obj())
+    val requestJson = if (argsJson.isEmpty) {
+      contentJson
+    } else {
+      argsJson.merge(contentJson)
+    }
+    val request = requestJson.as[Request]
+    apply(ServiceRequest[Request](request, exchange)).map(_.exchange)
+  }
 
   lazy val openAPI: Option[OpenAPIPathEntry] = if (this eq ServiceCall.NotSupported) {
     None
@@ -62,46 +87,11 @@ trait ServiceCall {
 }
 
 object ServiceCall {
-  case class TypedServiceCall[Req, Res](call: ServiceRequest[Req] => IO[ServiceResponse[Res]],
-                                        summary: String,
-                                        description: String,
-                                        successDescription: String,
-                                        override val tags: List[String] = Nil,
-                                        override val operationId: Option[String] = None,
-                                        requestRW: RW[Req],
-                                        responseRW: RW[Res],
-                                        exampleRequest: Req,
-                                        exampleResponse: Res) extends ServiceCall {
-    override type Request = Req
-    override type Response = Res
-
-    override def apply(request: ServiceRequest[Request]): IO[ServiceResponse[Response]] = call(request)
+  private val svc = new Service {
+    override val path: net.Path = path"/"
   }
 
-  def apply[Request, Response](summary: String,
-                               description: String,
-                               successDescription: String,
-                               exampleRequest: Request,
-                               exampleResponse: Response,
-                               tags: List[String] = Nil,
-                               operationId: Option[String] = None)
-                              (call: ServiceRequest[Request] => IO[ServiceResponse[Response]])
-                              (implicit requestRW: RW[Request], responseRW: RW[Response]): ServiceCall = {
-    TypedServiceCall[Request, Response](
-      call = call,
-      summary = summary,
-      description = description,
-      successDescription = successDescription,
-      tags = tags,
-      operationId = operationId,
-      requestRW = requestRW,
-      responseRW = responseRW,
-      exampleRequest = exampleRequest,
-      exampleResponse = exampleResponse
-    )
-  }
-
-  lazy val NotSupported: ServiceCall = apply[Unit, Unit](
+  val NotSupported: ServiceCall = svc.serviceCall[Unit, Unit](
     summary = "",
     description = "",
     successDescription = "",
@@ -116,4 +106,21 @@ object ServiceCall {
       ServiceResponse[Unit](exchange)
     }
   }
+}
+
+case class TypedServiceCall[Req, Res](call: ServiceRequest[Req] => IO[ServiceResponse[Res]],
+                                      summary: String,
+                                      description: String,
+                                      successDescription: String,
+                                      service: Service,
+                                      override val tags: List[String],
+                                      override val operationId: Option[String],
+                                      requestRW: RW[Req],
+                                      responseRW: RW[Res],
+                                      exampleRequest: Req,
+                                      exampleResponse: Res) extends ServiceCall {
+  override type Request = Req
+  override type Response = Res
+
+  override def apply(request: ServiceRequest[Request]): IO[ServiceResponse[Response]] = call(request)
 }

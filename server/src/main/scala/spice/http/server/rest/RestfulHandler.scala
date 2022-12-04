@@ -98,7 +98,7 @@ object RestfulHandler {
 
   def jsonFromURL(url: URL): Json = {
     val entries = url.parameters.map.toList.map {
-      case (key, param) => {
+      case (key, param) =>
         val values = param.values
         val valuesJson = if (values.length > 1) {
           arr(values.map(str): _*)
@@ -106,7 +106,6 @@ object RestfulHandler {
           str(values.head)
         }
         key -> valuesJson
-      }
     }
     obj(entries: _*)
   }

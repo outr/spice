@@ -21,7 +21,6 @@ class OpenAPISpec extends AnyWordSpec with Matchers {
     }
     "create a simple OpenAPI document manually" in {
       val api = OpenAPI(
-        openapi = "3.0.0",
         info = OpenAPIInfo(
           title = "Sample API",
           description = Some("Optional multiline or single-line description in [CommonMark](http://commonmark.org/help/) or HTML."),
@@ -55,8 +54,7 @@ class OpenAPISpec extends AnyWordSpec with Matchers {
           )
         )
       )
-      val expected = loadYaml("openapi-simple.yml")
-      println(api.asYaml)
+      val expected = loadString("openapi-simple.yml")
       api.asYaml should be(expected)
     }
     "create a tic tac toe example manually" in {

@@ -40,7 +40,7 @@ class OpenAPIServerSpec extends AsyncWordSpec with AsyncIOSpec with Matchers {
 
     object usersService extends Service {
       override val path: Path = path"/users"
-      override val get: ServiceCall = ServiceCall[Unit, List[String]](
+      override val get: ServiceCall = serviceCall[Unit, List[String]](
         summary = "Returns a list of users.",
         description = "Optional extended description in CommonMark or HTML.",
         successDescription = "A JSON array of user names",
