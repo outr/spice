@@ -30,10 +30,10 @@ class UndertowServerImplementation(server: HttpServer) extends HttpServerImpleme
     }
 
     server.config.listeners.foreach {
-      case HttpServerListener(host, port, enabled) => if (enabled) {
+      case HttpServerListener(host, port, enabled, _, _) => if (enabled) {
         builder.addHttpListener(port, host)
       }
-      case HttpsServerListener(host, port, keyStore, enabled) => if (enabled) {
+      case HttpsServerListener(host, port, keyStore, enabled, _, _) => if (enabled) {
         try {
           val sslContext = SSLUtil.createSSLContext(keyStore.location, keyStore.password)
           builder.addHttpsListener(port, host, sslContext)
