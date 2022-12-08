@@ -1,5 +1,7 @@
 package spice.net
 
+import fabric.define.DefType
+
 import scala.util.matching.Regex
 import fabric.rw._
 
@@ -133,7 +135,7 @@ case class URL(protocol: Protocol = Protocol.Http,
 }
 
 object URL {
-  implicit val rw: RW[URL] = RW.from(_.toString.json, v => parse(v.asStr.value))
+  implicit val rw: RW[URL] = RW.from(_.toString.json, v => parse(v.asStr.value), DefType.Str)
 
   def build(protocol: String,
             host: String,

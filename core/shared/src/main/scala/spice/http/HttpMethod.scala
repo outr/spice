@@ -1,5 +1,6 @@
 package spice.http
 
+import fabric.define.DefType
 import fabric.rw._
 
 sealed abstract class HttpMethod private(val value: String) {
@@ -17,7 +18,11 @@ sealed abstract class HttpMethod private(val value: String) {
 object HttpMethod {
   private var map = Map.empty[String, HttpMethod]
 
-  implicit val rw: RW[HttpMethod] = RW.from(_.json, v => apply(v.asString))
+  implicit val rw: RW[HttpMethod] = RW.from(
+    r = m => m.value,
+    w = v => apply(v.asString),
+    d = DefType.Str
+  )
 
   val Get: HttpMethod = new HttpMethod("GET") {}
   val Put: HttpMethod = new HttpMethod("PUT") {}

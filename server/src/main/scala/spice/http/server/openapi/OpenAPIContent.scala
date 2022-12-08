@@ -1,6 +1,7 @@
 package spice.http.server.openapi
 
 import fabric._
+import fabric.define.DefType
 import fabric.rw._
 import spice.net.ContentType
 
@@ -13,7 +14,8 @@ object OpenAPIContent {
     }: _*),
     w = j => OpenAPIContent(j.asMap.map {
       case (ct, oct) => ContentType.parse(ct) -> oct.as[OpenAPIContentType]
-    }.toList)
+    }.toList),
+    d = DefType.Null
   )
 
   def apply(content: (ContentType, OpenAPIContentType)*): OpenAPIContent = OpenAPIContent(content.toList)

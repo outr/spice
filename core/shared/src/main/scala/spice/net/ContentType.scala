@@ -1,6 +1,7 @@
 package spice.net
 
 import fabric._
+import fabric.define.DefType
 import fabric.rw._
 
 import scala.collection.mutable
@@ -1842,5 +1843,5 @@ object ContentType {
     extension2MimeType.get(extension.toLowerCase).map(new ContentType(_))
   }
 
-  implicit val rw: RW[ContentType] = RW.from(_.outputString, v => parse(v.asStr.value))
+  implicit val rw: RW[ContentType] = RW.from(_.outputString, v => parse(v.asStr.value), DefType.Str)
 }
