@@ -7,7 +7,7 @@ import fabric.rw._
 import spice.http.HttpStatus
 import spice.net._
 
-case class OpenAPI(openapi: String = "3.1.0",
+case class OpenAPI(openapi: String = "3.0.3",
                    info: OpenAPIInfo,
                    tags: List[OpenAPITag] = Nil,
                    servers: List[OpenAPIServer] = Nil,

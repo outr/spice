@@ -6,7 +6,7 @@ import spice.http.server.HttpServer
 import spice.http.server.openapi._
 
 trait OpenAPIServer extends HttpServer {
-  def openAPIVersion: String = "3.1.0"
+  def openAPIVersion: String = "3.0.3"
 
   def title: String
   def version: String
