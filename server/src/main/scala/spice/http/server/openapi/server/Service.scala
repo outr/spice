@@ -22,8 +22,6 @@ trait Service {
   def serviceCall[Request, Response](summary: String,
                                      description: String,
                                      successDescription: String,
-                                     exampleRequest: Request,
-                                     exampleResponse: Response,
                                      tags: List[String] = Nil,
                                      operationId: Option[String] = None)
                                     (call: ServiceRequest[Request] => IO[ServiceResponse[Response]])
@@ -37,9 +35,7 @@ trait Service {
       tags = tags,
       operationId = operationId,
       requestRW = requestRW,
-      responseRW = responseRW,
-      exampleRequest = exampleRequest,
-      exampleResponse = exampleResponse
+      responseRW = responseRW
     )
   }
 }

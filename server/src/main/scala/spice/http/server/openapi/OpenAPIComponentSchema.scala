@@ -14,7 +14,7 @@ case class OpenAPIComponentSchema(`type`: String,
                                   maxItems: Option[Int] = None,
                                   minItems: Option[Int] = None,
                                   items: Option[Either[OpenAPIComponentSchema, OpenAPISchema]] = None,
-                                  properties: Map[String, OpenAPISchema] = Map.empty)
+                                  properties: Map[String, Either[OpenAPIComponentSchema, OpenAPISchema]] = Map.empty)
 
 object OpenAPIComponentSchema {
   implicit val itemRW: RW[Either[OpenAPIComponentSchema, OpenAPISchema]] = new RW[Either[OpenAPIComponentSchema, OpenAPISchema]] {

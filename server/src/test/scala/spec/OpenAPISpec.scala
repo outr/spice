@@ -220,8 +220,8 @@ class OpenAPISpec extends AnyWordSpec with Matchers {
             "status" -> OpenAPIComponentSchema(
               `type` = "object",
               properties = Map(
-                "winner" -> OpenAPISchema("#/components/schemas/winner"),
-                "board" -> OpenAPISchema("#/components/schemas/board")
+                "winner" -> Right(OpenAPISchema("#/components/schemas/winner")),
+                "board" -> Right(OpenAPISchema("#/components/schemas/board"))
               )
             )
           )

@@ -2,6 +2,7 @@ package spice.http.server.openapi.server
 
 import cats.effect.IO
 import fabric._
+import fabric.define.DefType
 import fabric.io.JsonParser
 import fabric.rw._
 import spice.http.{HttpExchange, HttpStatus}
@@ -26,9 +27,6 @@ trait ServiceCall extends HttpHandler {
   def successDescription: String
 
   def service: Service
-
-  def exampleRequest: Request
-  def exampleResponse: Response
 
   implicit def requestRW: RW[Request]
   implicit def responseRW: RW[Response]
@@ -65,7 +63,7 @@ trait ServiceCall extends HttpHandler {
           description = successDescription,
           content = OpenAPIContent(
             ContentType.`application/json` -> OpenAPIContentType(
-              schema = Left(schemaFrom(exampleResponse.json))
+              schema = Left(schemaFrom(responseRW.definition))
             )
           )
         )
@@ -74,15 +72,21 @@ trait ServiceCall extends HttpHandler {
     ))
   }
 
-  private def schemaFrom(json: Json): OpenAPIComponentSchema = json.`type` match {
-    case t if t.is(JsonType.Arr) => OpenAPIComponentSchema(
-      `type` = "array",
-      items = Some(Left(schemaFrom(json.asVector.head)))
+  private def schemaFrom(dt: DefType): OpenAPIComponentSchema = dt match {
+    case DefType.Obj(map) => OpenAPIComponentSchema(
+      `type` = "object",
+      properties = map.map {
+        case (key, t) => key -> Left(schemaFrom(t))
+      }
     )
-    case t if t.is(JsonType.Str) => OpenAPIComponentSchema(
+    case DefType.Arr(t) => OpenAPIComponentSchema(
+      `type` = "array",
+      items = Some(Left(schemaFrom(t)))
+    )
+    case DefType.Str => OpenAPIComponentSchema(
       `type` = "string"
     )
-    case t => throw new UnsupportedOperationException(s"JSON type $t is not supported!")
+    case _ => throw new UnsupportedOperationException(s"DefType not supported: $dt")
   }
 }
 
@@ -94,9 +98,7 @@ object ServiceCall {
   val NotSupported: ServiceCall = svc.serviceCall[Unit, Unit](
     summary = "",
     description = "",
-    successDescription = "",
-    exampleRequest = (),
-    exampleResponse = ()
+    successDescription = ""
   ) { request =>
     request.exchange.modify { response =>
       IO(response.withContent(Content.json(obj(
@@ -106,21 +108,4 @@ object ServiceCall {
       ServiceResponse[Unit](exchange)
     }
   }
-}
-
-case class TypedServiceCall[Req, Res](call: ServiceRequest[Req] => IO[ServiceResponse[Res]],
-                                      summary: String,
-                                      description: String,
-                                      successDescription: String,
-                                      service: Service,
-                                      override val tags: List[String],
-                                      override val operationId: Option[String],
-                                      requestRW: RW[Req],
-                                      responseRW: RW[Res],
-                                      exampleRequest: Req,
-                                      exampleResponse: Res) extends ServiceCall {
-  override type Request = Req
-  override type Response = Res
-
-  override def apply(request: ServiceRequest[Request]): IO[ServiceResponse[Response]] = call(request)
 }

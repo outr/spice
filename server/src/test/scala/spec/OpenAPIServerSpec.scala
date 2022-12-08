@@ -43,9 +43,7 @@ class OpenAPIServerSpec extends AsyncWordSpec with AsyncIOSpec with Matchers {
       override val get: ServiceCall = serviceCall[Unit, List[String]](
         summary = "Returns a list of users.",
         description = "Optional extended description in CommonMark or HTML.",
-        successDescription = "A JSON array of user names",
-        exampleRequest = (),
-        exampleResponse = List("username1", "username2", "username3")
+        successDescription = "A JSON array of user names"
       ) { request =>
         request.response(List("root", "john.doe"))
       }
