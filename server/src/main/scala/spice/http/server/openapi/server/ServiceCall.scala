@@ -11,9 +11,8 @@ import spice.http.server.handler.HttpHandler
 import spice.http.server.openapi._
 import spice.http.server.rest.RestfulHandler.jsonFromContent
 import spice.net
-import spice.net.{ContentType, interpolation}
+import spice.net._
 
-import scala.collection.immutable.ListMap
 import scala.util.Try
 
 trait ServiceCall extends HttpHandler {

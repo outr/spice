@@ -5,10 +5,7 @@ import fabric.rw._
 import profig._
 import reactify._
 import spice.http.cookie.SameSite
-import spice.http.server.{HttpServer, ServerUtil}
-import spice.net.{Path, interpolation}
-
-import java.io.File
+import spice.http.server.HttpServer
 import java.util.concurrent.TimeUnit
 
 class ServerConfig(server: HttpServer) {

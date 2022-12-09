@@ -5,7 +5,7 @@ import org.scalatest.matchers.should.Matchers
 import org.scalatest.wordspec.AnyWordSpec
 import spec.TestUtils._
 import spice.http.server.openapi._
-import spice.net.{ContentType, interpolation}
+import spice.net._
 
 class OpenAPISpec extends AnyWordSpec with Matchers {
   "OpenAPI Generation" should {

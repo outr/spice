@@ -3,7 +3,7 @@ package spec
 import cats.effect.unsafe.implicits.global
 import fabric.Json
 import fabric.io.{JsonParser, YamlParser}
-import spice.streamer.Streamer
+import spice.streamer._
 
 import scala.collection.mutable
 

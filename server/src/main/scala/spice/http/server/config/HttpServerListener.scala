@@ -2,7 +2,7 @@ package spice.http.server.config
 
 import fabric.rw.RW
 import spice.http.server.ServerUtil
-import spice.net.{Path, URL, interpolation}
+import spice.net._
 
 case class HttpServerListener(host: String = "127.0.0.1",
                               port: Int = 8080,
