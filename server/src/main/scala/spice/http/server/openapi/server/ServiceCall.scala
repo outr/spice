@@ -7,6 +7,7 @@ import fabric.io.JsonParser
 import fabric.rw._
 import spice.http.{HttpExchange, HttpStatus}
 import spice.http.content.Content
+import spice.http.server.BasePath
 import spice.http.server.handler.HttpHandler
 import spice.http.server.openapi._
 import spice.http.server.rest.RestfulHandler.jsonFromContent
@@ -33,7 +34,12 @@ trait ServiceCall extends HttpHandler {
   def apply(request: ServiceRequest[Request]): IO[ServiceResponse[Response]]
 
   override def handle(exchange: HttpExchange): IO[HttpExchange] = {
-    val args = exchange.request.url.path.extractArguments(service.path).toList.map {
+    // Merge the base path of the listener (if defined) to the service path
+    val actualPath = BasePath.get(exchange) match {
+      case Some(basePath) => basePath.merge(service.path)
+      case None => service.path
+    }
+    val args = exchange.request.url.path.extractArguments(actualPath).toList.map {
       case (key, value) => key -> Try(JsonParser(value)).getOrElse(Str(value))
     }
     val argsJson = obj(args: _*)

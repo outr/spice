@@ -98,7 +98,7 @@ lazy val delta = project
 	)
 
 lazy val server = project
-	.dependsOn(coreJVM, delta)
+	.dependsOn(coreJVM, delta, clientImplementationOkHttp % "test->test")
 	.in(file("server"))
 	.settings(
 		name := "spice-server",

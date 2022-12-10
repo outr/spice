@@ -1,8 +1,11 @@
 package spec
 
 import cats.effect.testing.scalatest.AsyncIOSpec
+import fabric.arr
 import org.scalatest.matchers.should.Matchers
 import org.scalatest.wordspec.AsyncWordSpec
+import spice.http.content.{Content, JsonContent}
+import spice.http.{HttpExchange, HttpRequest}
 import spice.http.server.config.HttpServerListener
 import spice.http.server.openapi.server.{Service, ServiceCall}
 import spice.http.server.openapi.{server, _}
@@ -14,6 +17,22 @@ class OpenAPIServerSpec extends AsyncWordSpec with AsyncIOSpec with Matchers {
       val expected = TestUtils.loadYaml("openapi-simple.yml")
       val json = SimpleOpenAPIServer.api.asJson
       json should be(expected)
+    }
+    "call the /users endpoint on api.example.com" in {
+      val request = HttpRequest(url = url"http://api.example.com/v1/users")
+      SimpleOpenAPIServer.handle(HttpExchange(request)).map { exchange =>
+        exchange.response.content.map(_.asInstanceOf[JsonContent].json) should be(Some(arr(
+          "root", "john.doe"
+        )))
+      }
+    }
+    "call the /users endpoint on staging-api.example.com" in {
+      val request = HttpRequest(url = url"http://staging-api.example.com/users")
+      SimpleOpenAPIServer.handle(HttpExchange(request)).map { exchange =>
+        exchange.response.content.map(_.asInstanceOf[JsonContent].json) should be(Some(arr(
+          "root", "john.doe"
+        )))
+      }
     }
   }
 

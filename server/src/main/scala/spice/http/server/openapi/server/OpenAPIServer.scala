@@ -39,7 +39,7 @@ trait OpenAPIServer extends HttpServer {
 
   def services: List[Service]
 
-  override def handle(exchange: HttpExchange): IO[HttpExchange] = services
+  override def apply(exchange: HttpExchange): IO[HttpExchange] = services
     .to(LazyList)
     .flatMap(_(exchange))
     .headOption match {

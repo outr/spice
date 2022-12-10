@@ -4,8 +4,10 @@ import cats.effect.IO
 import cats.effect.unsafe.{IORuntime, IORuntimeConfig, Scheduler}
 import scribe.cats.{io => logger}
 import spice.http.HttpExchange
-import spice.http.server.config.ServerConfig
-import spice.http.server.handler.HttpHandler
+import spice.http.server.config.{ServerConfig, ServerSocketListener}
+import spice.http.server.handler.{HttpHandler, LifecycleHandler}
+import spice.net.Path
+import spice.store.Store
 import spice.{ErrorSupport, ImplementationManager, Initializable}
 
 import java.util.concurrent.atomic.{AtomicInteger, AtomicLong}
@@ -13,7 +15,7 @@ import java.util.concurrent.{Executors, ThreadFactory}
 import scala.concurrent.ExecutionContext
 import scala.concurrent.duration.{DurationInt, FiniteDuration}
 
-trait HttpServer extends HttpHandler with Initializable with ErrorSupport {
+trait HttpServer extends LifecycleHandler with Initializable with ErrorSupport {
   val config = new ServerConfig(this)
 
   protected val defaultExecutionContext: ExecutionContext = ExecutionContext.fromExecutor(Executors.newCachedThreadPool(new ThreadFactory {
@@ -62,6 +64,18 @@ trait HttpServer extends HttpHandler with Initializable with ErrorSupport {
     stop()
     start()
   }
+
+  override protected def preHandle(exchange: HttpExchange): IO[HttpExchange] = {
+    val listener = config.listeners().find(l => l.matches(exchange.request.url))
+    listener.foreach { l =>
+      ServerSocketListener.set(exchange, l)
+      BasePath.set(exchange, l.basePath)
+      BaseURL.set(exchange, l.baseUrlFor(exchange.request.url).get)
+    }
+    IO.pure(exchange)
+  }
+
+  override protected def postHandle(exchange: HttpExchange): IO[HttpExchange] = IO.pure(exchange)
 
   def whileRunning(delay: FiniteDuration = 1.second): IO[Unit] = if (isRunning) {
     IO.sleep(delay).flatMap(_ => whileRunning(delay))
