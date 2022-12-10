@@ -1,15 +1,15 @@
 package spec
 
 import cats.effect.testing.scalatest.AsyncIOSpec
-import fabric.arr
+import fabric._
 import org.scalatest.matchers.should.Matchers
 import org.scalatest.wordspec.AsyncWordSpec
-import spice.http.content.{Content, JsonContent}
+import spice.http.content.JsonContent
 import spice.http.{HttpExchange, HttpRequest}
 import spice.http.server.config.HttpServerListener
 import spice.http.server.openapi.server.{Service, ServiceCall}
-import spice.http.server.openapi.{server, _}
-import spice.net._
+import spice.http.server.openapi._
+import spice.net.{Path, _}
 
 class OpenAPIServerSpec extends AsyncWordSpec with AsyncIOSpec with Matchers {
   "OpenAPIServer" should {
