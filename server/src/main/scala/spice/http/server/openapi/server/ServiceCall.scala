@@ -31,6 +31,9 @@ trait ServiceCall extends HttpHandler {
   implicit def requestRW: RW[Request]
   implicit def responseRW: RW[Response]
 
+  def requestSchema: Option[Schema]
+  def responseSchema: Option[Schema]
+
   def apply(request: ServiceRequest[Request]): IO[ServiceResponse[Response]]
 
   override def handle(exchange: HttpExchange): IO[HttpExchange] = {
@@ -68,7 +71,7 @@ trait ServiceCall extends HttpHandler {
           description = successDescription,
           content = OpenAPIContent(
             ContentType.`application/json` -> OpenAPIContentType(
-              schema = Left(schemaFrom(responseRW.definition))
+              schema = Left(schemaFrom(responseRW.definition, responseSchema.getOrElse(Schema())))
             )
           )
         )
@@ -77,22 +80,34 @@ trait ServiceCall extends HttpHandler {
     ))
   }
 
-  private def schemaFrom(dt: DefType): OpenAPIComponentSchema = dt match {
+  private def schemaFrom(dt: DefType, schema: Schema): OpenAPIComponentSchema = (dt match {
     case DefType.Obj(map) => OpenAPIComponentSchema(
       `type` = "object",
       properties = map.map {
-        case (key, t) => key -> Left(schemaFrom(t))
+        case (key, t) => key -> Left(schemaFrom(t, schema.properties.getOrElse(key, Schema())))
       }
     )
     case DefType.Arr(t) => OpenAPIComponentSchema(
       `type` = "array",
-      items = Some(Left(schemaFrom(t)))
+      items = Some(Left(schemaFrom(t, schema.items.getOrElse(Schema()))))
     )
     case DefType.Str => OpenAPIComponentSchema(
       `type` = "string"
     )
+    case DefType.Enum(values) => OpenAPIComponentSchema(
+      `type` = "string",
+      `enum` = values
+    )
     case _ => throw new UnsupportedOperationException(s"DefType not supported: $dt")
-  }
+  }).copy(
+    description = schema.description,
+    maxLength = schema.maxLength,
+    minimum = schema.minimum,
+    maximum = schema.maximum,
+    example = schema.example,
+    maxItems = schema.maxItems,
+    minItems = schema.minItems
+  )
 }
 
 object ServiceCall {

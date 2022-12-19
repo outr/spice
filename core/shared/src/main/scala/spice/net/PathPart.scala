@@ -19,7 +19,7 @@ object PathPart {
   case class Literal(value: String) extends AnyVal with PathPart
 
   case class Argument(name: String) extends AnyVal with PathPart {
-    override def value: String = s":$name"
+    override def value: String = s"{$name}"
   }
 
   def apply(value: String): Option[PathPart] = value match {

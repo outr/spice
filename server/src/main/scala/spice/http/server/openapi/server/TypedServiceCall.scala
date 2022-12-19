@@ -11,7 +11,9 @@ case class TypedServiceCall[Req, Res](call: ServiceRequest[Req] => IO[ServiceRes
                                       override val tags: List[String],
                                       override val operationId: Option[String],
                                       requestRW: RW[Req],
-                                      responseRW: RW[Res]) extends ServiceCall {
+                                      responseRW: RW[Res],
+                                      requestSchema: Option[Schema],
+                                      responseSchema: Option[Schema]) extends ServiceCall {
   override type Request = Req
   override type Response = Res
 

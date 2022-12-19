@@ -23,7 +23,9 @@ trait Service {
                                      description: String,
                                      successDescription: String,
                                      tags: List[String] = Nil,
-                                     operationId: Option[String] = None)
+                                     operationId: Option[String] = None,
+                                     requestSchema: Option[Schema] = None,
+                                     responseSchema: Option[Schema] = None)
                                     (call: ServiceRequest[Request] => IO[ServiceResponse[Response]])
                                     (implicit requestRW: RW[Request], responseRW: RW[Response]): ServiceCall = {
     TypedServiceCall[Request, Response](
@@ -35,7 +37,9 @@ trait Service {
       tags = tags,
       operationId = operationId,
       requestRW = requestRW,
-      responseRW = responseRW
+      responseRW = responseRW,
+      requestSchema = requestSchema,
+      responseSchema = responseSchema
     )
   }
 }
