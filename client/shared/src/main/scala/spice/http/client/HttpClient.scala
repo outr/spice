@@ -107,12 +107,11 @@ case class HttpClient(request: HttpRequest,
    */
   final def send(retries: Int = this.retries): IO[Try[HttpResponse]] = {
     val updatedHeaders = sessionManager match {
-      case Some(sm) => {
+      case Some(sm) =>
         val cookieHeaders = sm.session.cookies.map { cookie =>
           Cookie.Request(name = cookie.name, value = cookie.value).http
         } ::: Headers.Request.`Cookie`.value(request.headers).map(_.http).distinct
         request.headers.withHeaders(Headers.Request.`Cookie`.key, cookieHeaders)
-      }
       case None => request.headers
     }
     val io = for {

@@ -12,7 +12,7 @@ case class RateLimiter(perRequestDelay: FiniteDuration) extends InterceptorAdapt
   override def before(request: HttpRequest): IO[HttpRequest] = IO.unit.flatMap { _ =>
     self.synchronized {
       val now = System.currentTimeMillis()
-      val delay = lastTime + maxDelay
+      val delay = (lastTime + maxDelay) - now
       if (delay > 0L) {
         lastTime = now
         IO.sleep(delay.millis).map(_ => request)
