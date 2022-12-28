@@ -199,6 +199,8 @@ case class HttpClient(request: HttpRequest,
       case Failure(exception) => throw exception
     }
   }
+
+  def dispose(): IO[Unit] = implementation.dispose()
 }
 
 object HttpClient extends HttpClient(

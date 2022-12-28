@@ -14,4 +14,6 @@ abstract class HttpClientImplementation(val config: HttpClientConfig) {
   def send(request: HttpRequest): IO[Try[HttpResponse]]
 
   def content2String(content: Content): String
+
+  def dispose(): IO[Unit]
 }

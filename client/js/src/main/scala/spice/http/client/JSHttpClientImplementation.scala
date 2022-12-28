@@ -54,4 +54,6 @@ class JSHttpClientImplementation(config: HttpClientConfig) extends HttpClientImp
     case c: StringContent => c.value
     case _ => throw new RuntimeException(s"$content not supported")
   }
+
+  override def dispose(): IO[Unit] = IO.unit
 }

@@ -241,6 +241,14 @@ class OkHttpClientImplementation(config: HttpClientConfig) extends HttpClientImp
     val g = OkHttpClientImplementation
     scribe.info(s"HttpClient stats - Pool[active: ${config.connectionPool.active}, idle: ${config.connectionPool.idle}, total: ${config.connectionPool.total}], Global[active: ${g.active}, successful: ${g.successful}, failure: ${g.failure}, total: ${g.total}]")
   }
+
+  override def dispose(): IO[Unit] = for {
+    _ <- IO(Try(client.dispatcher().executorService().shutdown()))
+    _ <- IO(Try(client.connectionPool().evictAll()))
+    _ <- IO(Try(client.cache().close()))
+  } yield {
+    ()
+  }
 }
 
 object OkHttpClientImplementation extends Moduload {
