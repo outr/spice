@@ -76,7 +76,10 @@ class UndertowServerImplementation(server: HttpServer) extends HttpServerImpleme
               .redeemWith(server.errorRecovery(exchange, _), IO.pure)
           }.flatMap { exchange =>
             UndertowResponseSender(undertow, server, exchange)
-          }
+          }.redeemWith({ throwable =>
+            scribe.error("Unrecoverable error parsing request!", throwable)
+            throw throwable
+          }, IO.pure)
           io.unsafeRunAndForget()(server.ioRuntime)
         }
       })
