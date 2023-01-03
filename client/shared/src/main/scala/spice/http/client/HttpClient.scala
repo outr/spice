@@ -8,20 +8,29 @@ import spice.http._
 import spice.http.client.intercept.Interceptor
 import spice.http.content.{Content, StringContent}
 import spice.http.cookie.Cookie
-import spice.net.{ContentType, Path, URL}
+import spice.net.{ContentType, DNS, Path, URL}
 
-import scala.concurrent.duration.FiniteDuration
+import scala.concurrent.duration.{DurationInt, FiniteDuration}
 import scala.util.{Failure, Success, Try}
 
 case class HttpClient(request: HttpRequest,
                       implementation: HttpClientImplementation,
                       retries: Int,
                       retryDelay: FiniteDuration,
-                      sessionManager: Option[SessionManager],
                       interceptor: Interceptor,
+                      saveDirectory: String,
+                      timeout: FiniteDuration,
+                      pingInterval: Option[FiniteDuration],
+                      dns: DNS,
                       dropNullValuesInJson: Boolean,
+                      sessionManager: Option[SessionManager],
                       failOnHttpStatus: Boolean,
-                      validateSSLCertificates: Boolean) {
+                      validateSSLCertificates: Boolean,
+                      proxy: Option[Proxy] = None) {
+  private lazy val instance: HttpClientInstance = implementation.instance(this)
+
+  def connectionPool: ConnectionPool = ConnectionPool(this)
+
   def modify(f: HttpRequest => HttpRequest): HttpClient = copy(request = f(request))
 
   def url: URL = request.url
@@ -62,13 +71,20 @@ case class HttpClient(request: HttpRequest,
   }
 
   def retries(retries: Int): HttpClient = copy(retries = retries)
+  def retryDelay(retryDelay: FiniteDuration): HttpClient = copy(retryDelay = retryDelay)
+  def interceptor(interceptor: Interceptor): HttpClient = copy(interceptor = interceptor)
+  def saveDirectory(saveDirectory: String): HttpClient = copy(saveDirectory = saveDirectory)
+  def timeout(timeout: FiniteDuration): HttpClient = copy(timeout = timeout)
+  def pingInterval(pingInterval: Option[FiniteDuration]): HttpClient = copy(pingInterval = pingInterval)
+  def dns(dns: DNS): HttpClient = copy(dns = dns)
   def sessionManager(sessionManager: SessionManager): HttpClient = copy(sessionManager = Some(sessionManager))
   def clearSessionManager(): HttpClient = copy(sessionManager = None)
-  def interceptor(interceptor: Interceptor): HttpClient = copy(interceptor = interceptor)
+  def session(session: Session): HttpClient = copy(sessionManager = Some(new SessionManager(session)))
   def dropNullValuesInJson(dropNullValuesInJson: Boolean): HttpClient = copy(dropNullValuesInJson = dropNullValuesInJson)
   def failOnHttpStatus(failOnHttpStatus: Boolean): HttpClient = copy(failOnHttpStatus = failOnHttpStatus)
   def noFailOnHttpStatus: HttpClient = failOnHttpStatus(failOnHttpStatus = false)
   def ignoreSSLCertificates: HttpClient = copy(validateSSLCertificates = false)
+  def proxy(`type`: ProxyType, host: String, port: Int): HttpClient = copy(proxy = Some(Proxy(`type`, host, port)))
 
   /**
    * Sets the content to be sent. If this request is set to GET, it will automatically be changed to POST.
@@ -116,7 +132,7 @@ case class HttpClient(request: HttpRequest,
     }
     val io = for {
       updatedRequest <- interceptor.before(request.copy(headers = updatedHeaders))
-      responseTry <- implementation.send(updatedRequest)
+      responseTry <- instance.send(updatedRequest)
       updatedResponse <- interceptor.after(updatedRequest, responseTry)
     } yield {
       updatedResponse
@@ -205,12 +221,17 @@ case class HttpClient(request: HttpRequest,
 
 object HttpClient extends HttpClient(
   request = HttpRequest(),
-  implementation = HttpClientImplementationManager(HttpClientConfig.default()),
-  retries = HttpClientConfig.default().retries,
-  retryDelay = HttpClientConfig.default().retryDelay,
-  sessionManager = HttpClientConfig.default().sessionManager,
-  interceptor = HttpClientConfig.default().interceptor,
-  dropNullValuesInJson = HttpClientConfig.default().dropNullValuesInJson,
-  failOnHttpStatus = HttpClientConfig.default().failOnHttpStatus,
-  validateSSLCertificates = HttpClientConfig.default().validateSSLCertificates
+  implementation = HttpClientImplementationManager(()),
+  retries = 0,
+  retryDelay = 5.seconds,
+  interceptor = Interceptor.empty,
+  saveDirectory = ClientPlatform.defaultSaveDirectory,
+  timeout = 15.seconds,
+  pingInterval = None,
+  dns = DNS.default,
+  dropNullValuesInJson = false,
+  sessionManager = None,
+  failOnHttpStatus = true,
+  validateSSLCertificates = true,
+  proxy = None
 )

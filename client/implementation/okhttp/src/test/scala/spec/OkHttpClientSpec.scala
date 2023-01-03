@@ -19,7 +19,7 @@ class OkHttpClientSpec extends AnyWordSpec with Matchers {
       Moduload.load()
     }
     "be the default implementation" in {
-      HttpClient.implementation.getClass should be(classOf[OkHttpClientImplementation])
+      HttpClient.implementation should be(OkHttpClientImplementation)
     }
     "GET the user-agent" in {
       HttpClient.url(url"https://httpbin.org/user-agent").get.send().map(_.get).map { response =>
