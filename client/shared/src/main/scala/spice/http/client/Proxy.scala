@@ -1,3 +1,3 @@
 package spice.http.client
 
-case class Proxy(`type`: ProxyType, host: String, port: Int)
+case class Proxy(`type`: ProxyType, host: String, port: Int, credentials: Option[Credentials])

@@ -52,7 +52,7 @@ class OkHttpClientSpec extends AnyWordSpec with Matchers {
       }
     }
     "call a URL and get a case class back" in {
-      HttpClient.url(url"https://jsonplaceholder.typicode.com/todos/1").get.call[Placeholder].map(_.get).map { p =>
+      HttpClient.url(url"https://jsonplaceholder.typicode.com/todos/1").get.callTry[Placeholder].map(_.get).map { p =>
         p.userId should be(1)
         p.id should be(1)
         p.title should be("delectus aut autem")

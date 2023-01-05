@@ -84,7 +84,7 @@ case class HttpClient(request: HttpRequest,
   def failOnHttpStatus(failOnHttpStatus: Boolean): HttpClient = copy(failOnHttpStatus = failOnHttpStatus)
   def noFailOnHttpStatus: HttpClient = failOnHttpStatus(failOnHttpStatus = false)
   def ignoreSSLCertificates: HttpClient = copy(validateSSLCertificates = false)
-  def proxy(`type`: ProxyType, host: String, port: Int): HttpClient = copy(proxy = Some(Proxy(`type`, host, port)))
+  def proxy(proxy: Proxy): HttpClient = copy(proxy = Some(proxy))
 
   /**
    * Sets the content to be sent. If this request is set to GET, it will automatically be changed to POST.
@@ -159,9 +159,9 @@ case class HttpClient(request: HttpRequest,
    * response.
    *
    * @tparam Response the response type
-   * @return Future[Response]
+   * @return Try[Response]
    */
-  def call[Response: Writer]: IO[Try[Response]] = send().flatMap { responseTry =>
+  def callTry[Response: Writer]: IO[Try[Response]] = send().flatMap { responseTry =>
     IO {
       responseTry match {
         case Success(response) =>
@@ -178,6 +178,18 @@ case class HttpClient(request: HttpRequest,
   }
 
   /**
+   * Builds on the send method by supporting basic restful calls that calls a URL and returns a case class as the
+   * response.
+   *
+   * @tparam Response the response type
+   * @return Response
+   */
+  def call[Response: Writer]: IO[Response] = callTry[Response].map {
+    case Success(response) => response
+    case Failure(throwable) => throw throwable
+  }
+
+  /**
    * Builds on the send method by supporting basic restful calls that take a case class as the request and returns a
    * case class as the response.
    *
@@ -188,7 +200,7 @@ case class HttpClient(request: HttpRequest,
    */
   def restful[Request: Reader, Response: Writer](request: Request): IO[Try[Response]] = {
     val requestJson = request.json
-    method(if (method == HttpMethod.Get) HttpMethod.Post else method).json(requestJson).call[Response]
+    method(if (method == HttpMethod.Get) HttpMethod.Post else method).json(requestJson).callTry[Response]
   }
 
   /**

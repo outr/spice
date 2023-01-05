@@ -2,6 +2,7 @@ package spice.http.client
 
 import cats.effect.unsafe.implicits.global
 import cats.effect.{Deferred, IO}
+import okhttp3.{Authenticator, Request, Response, Route}
 import spice.http.content.FormDataEntry.{FileEntry, StringEntry}
 import spice.http.content._
 import spice.http._
@@ -97,7 +98,7 @@ class OkHttpClientInstance(client: HttpClient) extends HttpClientInstance {
     })
     client.pingInterval.foreach(d => b.pingInterval(d.toMillis, TimeUnit.MILLISECONDS))
     client.proxy.foreach {
-      case Proxy(t, h, p) =>
+      case Proxy(t, h, p, c) =>
         val `type` = t match {
           case ProxyType.Direct => java.net.Proxy.Type.DIRECT
           case ProxyType.Http => java.net.Proxy.Type.HTTP
@@ -105,6 +106,14 @@ class OkHttpClientInstance(client: HttpClient) extends HttpClientInstance {
         }
         val sa = new InetSocketAddress(h, p)
         b.proxy(new java.net.Proxy(`type`, sa))
+        c.foreach { creds =>
+          b.proxyAuthenticator(new Authenticator {
+            override def authenticate(route: Route, response: Response): Request = {
+              val credential = okhttp3.Credentials.basic(creds.username, creds.password)
+              response.request().newBuilder().header("Proxy-Authorization", credential).build()
+            }
+          })
+        }
     }
     b.build()
   }

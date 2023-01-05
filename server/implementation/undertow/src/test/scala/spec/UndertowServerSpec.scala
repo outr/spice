@@ -74,7 +74,7 @@ class UndertowServerSpec extends AsyncWordSpec with AsyncIOSpec with Matchers {
       client
         .path(path"/test/reverse")
         .params("value" -> "testing")
-        .call[ReverseResponse]
+        .callTry[ReverseResponse]
         .map { attempt =>
           val response = attempt.getOrElse(fail("Response failure!"))
           response.errors should be(Nil)
@@ -84,7 +84,7 @@ class UndertowServerSpec extends AsyncWordSpec with AsyncIOSpec with Matchers {
     "reverse a String with the Restful endpoint via GET with path-based arg" in {
       client
         .path(path"/test/reverse/testing")
-        .call[ReverseResponse]
+        .callTry[ReverseResponse]
         .map { attempt =>
           val response = attempt.getOrElse(fail("Response failure!"))
           response.errors should be(Nil)
@@ -95,7 +95,7 @@ class UndertowServerSpec extends AsyncWordSpec with AsyncIOSpec with Matchers {
       val begin = System.currentTimeMillis()
       client
         .path(path"/test/time")
-        .call[Long]
+        .callTry[Long]
         .map(_.getOrElse(throw new RuntimeException("Failure!")))
         .map { time =>
           time should be >= begin
