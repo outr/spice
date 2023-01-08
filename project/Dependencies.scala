@@ -10,7 +10,7 @@ object Dependencies {
     val fs2: String = "3.4.0"
     val literally: String = "1.1.0"
     val okHttp: String = "4.10.0"
-    val undertow: String = "2.2.22.Final"
+    val undertow: String = "2.3.3.Final"
     val moduload: String = "1.1.6"
 
     val scalaJSDOM: String = "2.3.0"
