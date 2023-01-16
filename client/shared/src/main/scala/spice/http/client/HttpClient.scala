@@ -121,7 +121,7 @@ case class HttpClient(request: HttpRequest,
    *
    * @return Future[HttpResponse]
    */
-  final def send(retries: Int = this.retries): IO[Try[HttpResponse]] = {
+  final def sendTry(retries: Int = this.retries): IO[Try[HttpResponse]] = {
     val updatedHeaders = sessionManager match {
       case Some(sm) =>
         val cookieHeaders = sm.session.cookies.map { cookie =>
@@ -148,10 +148,15 @@ case class HttpClient(request: HttpRequest,
       case Failure(t) if retries > 0 =>
         scribe.warn(s"Request to ${request.url} failed (${t.getMessage}). Retrying after $retryDelay...")
         IO.sleep(retryDelay).flatMap { _ =>
-          send(retries - 1)
+          sendTry(retries - 1)
         }
       case Failure(t) => IO(throw t)
     }
+  }
+
+  final def send(retries: Int = this.retries): IO[HttpResponse] = sendTry(retries).map {
+    case Success(response) => response
+    case Failure(exception) => throw exception
   }
 
   /**
@@ -161,7 +166,7 @@ case class HttpClient(request: HttpRequest,
    * @tparam Response the response type
    * @return Try[Response]
    */
-  def callTry[Response: Writer]: IO[Try[Response]] = send().flatMap { responseTry =>
+  def callTry[Response: Writer]: IO[Try[Response]] = sendTry().flatMap { responseTry =>
     IO {
       responseTry match {
         case Success(response) =>
@@ -214,8 +219,8 @@ case class HttpClient(request: HttpRequest,
    */
   def restfulEither[Request: Reader, Success: Writer, Failure: Writer](request: Request): IO[Either[Failure, Success]] = {
     val requestJson = request.json
-    method(if (method == HttpMethod.Get) HttpMethod.Post else method).json(requestJson).send().flatMap {
-      case Success(response) => IO {
+    method(if (method == HttpMethod.Get) HttpMethod.Post else method).json(requestJson).send().flatMap { response =>
+      IO {
         val responseJson = response.content.map(implementation.content2String).getOrElse("")
         if (responseJson.isEmpty) throw new ClientException(s"No content received in response for ${this.request.url}.", this.request, response, None)
         if (response.status.isSuccess) {
@@ -224,7 +229,6 @@ case class HttpClient(request: HttpRequest,
           Left(JsonParser(responseJson, Format.Json).as[Failure])
         }
       }
-      case Failure(exception) => throw exception
     }
   }
 

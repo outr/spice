@@ -4,6 +4,7 @@ import cats.effect.IO
 
 import java.util.concurrent.ConcurrentLinkedQueue
 import java.util.concurrent.atomic.AtomicInteger
+import scala.concurrent.duration.{DurationInt, FiniteDuration}
 
 trait ObjectPool[T] {
   private val _created = new AtomicInteger(0)
@@ -21,6 +22,8 @@ trait ObjectPool[T] {
   protected def prepareForUse(value: T): IO[T] = IO.pure(value)
 
   protected def resetForPool(value: T): IO[Option[T]] = IO.pure(Some(value))
+
+  protected def dispose(value: T): IO[Unit] = IO.unit
 
   private def get(): IO[T] = IO {
     Option(queue.poll())
@@ -45,7 +48,7 @@ trait ObjectPool[T] {
       _active.decrementAndGet()
   }
 
-  def use[Return](f: T => IO[T]): IO[T] = get().flatMap { value =>
+  def use[Return](f: T => IO[Return]): IO[Return] = get().flatMap { value =>
     f(value).guarantee(restore(value))
   }
 
@@ -59,5 +62,22 @@ trait ObjectPool[T] {
     }
   } else {
     IO.unit
+  }
+
+  def waitForNoActive(delay: FiniteDuration = 100.millis): IO[Unit] = if (active == 0) {
+    IO.unit
+  } else {
+    IO.sleep(delay).flatMap(_ => waitForNoActive(delay))
+  }
+
+  def dispose(): IO[Unit] = waitForNoActive().flatMap { _ =>
+    Option(queue.poll()) match {
+      case Some(value) => dispose(value).flatMap(_ => dispose())
+      case None =>
+        _created.set(0)
+        _active.set(0)
+        _queued.set(0)
+        IO.unit
+    }
   }
 }
