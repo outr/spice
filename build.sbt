@@ -28,6 +28,7 @@ ThisBuild / developers := List(
 
 ThisBuild / versionScheme := Some("semver-spec")
 ThisBuild / outputStrategy := Some(StdoutOutput)
+ThisBuild / Test / testOptions += Tests.Argument("-oDF")
 
 def dep: Dependencies.type = Dependencies
 

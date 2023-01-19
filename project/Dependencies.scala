@@ -2,7 +2,7 @@ import sbt._
 
 object Dependencies {
   object version {
-    val profig: String = "3.4.7"
+    val profig: String = "3.4.8"
     
     val scribe: String = "3.10.6"
 
