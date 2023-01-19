@@ -3,19 +3,29 @@ import sbt._
 object Dependencies {
   object version {
     val profig: String = "3.4.7"
+    
     val scribe: String = "3.10.6"
+    
     val fabric: String = "1.8.12"
+    
     val reactify: String = "4.0.8"
-    val cats: String = "3.4.4"
+    
+    val cats: String = "3.4.5"
+    
     val fs2: String = "3.5.0"
+    
     val literally: String = "1.1.0"
+    
     val okHttp: String = "4.10.0"
+    
     val undertow: String = "2.2.22.Final"
+    
     val moduload: String = "1.1.6"
 
     val scalaJSDOM: String = "2.3.0"
 
     val scalaTest: String = "3.2.15"
+    
     val catsEffectTesting: String = "1.5.0"
   }
 
