@@ -3,7 +3,7 @@ package spice.http.server.undertow
 import cats.effect.IO
 import cats.effect.unsafe.implicits.global
 import io.undertow.server.HttpServerExchange
-import io.undertow.server.handlers.form.FormDataParser
+import io.undertow.server.handlers.form.{FormDataParser, FormParserFactory}
 import io.undertow.util.HeaderMap
 import org.xnio.streams.ChannelInputStream
 import spice.http.content.{Content, FormData, FormDataContent, FormDataEntry, StringContent}
@@ -16,6 +16,8 @@ import scala.collection.mutable
 import scala.jdk.CollectionConverters.IterableHasAsScala
 
 object UndertowRequestParser {
+  private val formParserBuilder = FormParserFactory.builder()
+
   def apply(exchange: HttpServerExchange, url: URL): IO[HttpRequest] = IO {
     val source = IP
       .fromString(exchange.getSourceAddress.getAddress.getHostAddress)
@@ -28,6 +30,9 @@ object UndertowRequestParser {
     val content: Option[Content] = if (exchange.getRequestContentLength > 0L) {
       Headers.`Content-Type`.value(headers).getOrElse(ContentType.`text/plain`) match {
         case ContentType.`multipart/form-data` =>
+          exchange.startBlocking()
+          val formDataParser = formParserBuilder.build().createParser(exchange)
+          formDataParser.parseBlocking()
           val formData = exchange.getAttachment(FormDataParser.FORM_DATA)
           val data = formData.asScala.toList.map { key =>
             val entries: List[FormDataEntry] = formData.get(key).asScala.map { entry =>

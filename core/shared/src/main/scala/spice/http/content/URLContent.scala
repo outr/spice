@@ -3,10 +3,10 @@ package spice.http.content
 import cats.effect.unsafe.implicits.global
 import spice.net.ContentType
 import spice.streamer._
-import sun.net.www.protocol.file.FileURLConnection
 
-import java.net.{HttpURLConnection, JarURLConnection, URL}
+import java.net.URL
 import scala.collection.mutable
+import scala.util.Try
 
 case class URLContent(url: URL, contentType: ContentType, lastModifiedOverride: Option[Long] = None) extends Content {
   assert(url != null, "URL must not be null.")
@@ -15,21 +15,11 @@ case class URLContent(url: URL, contentType: ContentType, lastModifiedOverride: 
   override def withLastModified(lastModified: Long): Content = copy(lastModifiedOverride = Some(lastModified))
 
   private lazy val (contentLength, contentModified) = {
-    val exchange = url.openConnection()
-    exchange match {
-      case c: HttpURLConnection => try {
-        c.setRequestMethod("HEAD")
-        c.getInputStream
-        c.getContentLengthLong -> c.getLastModified
-      } finally {
-        c.disconnect()
-      }
-      case c: FileURLConnection => {
-        c.getContentLengthLong -> c.getLastModified
-      }
-      case c: JarURLConnection => {
-        c.getContentLengthLong -> c.getLastModified
-      }
+    val connection = url.openConnection()
+    try {
+      connection.getContentLengthLong -> connection.getLastModified
+    } finally {
+      Try(connection.getInputStream.close())
     }
   }
 

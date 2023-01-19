@@ -6,8 +6,9 @@ import fabric.io.{JsonFormatter, JsonParser}
 import fabric.rw._
 import scribe.Priority
 import spice.http.content.{Content, StringContent}
-import spice.http.{HttpExchange, HttpMethod, HttpRequest, ZipFileEntry}
-import spice.http.server.{HttpServer, MutableHttpServer}
+import spice.http.server.dsl.ClassLoaderPath
+import spice.http.{HttpExchange, HttpMethod, HttpRequest}
+import spice.http.server.MutableHttpServer
 import spice.http.server.validation.{ValidationResult, Validator}
 import spice.net
 import spice.net.{ContentType, URL, URLMatcher}
@@ -55,28 +56,8 @@ case class HttpHandlerBuilder(server: MutableHttpServer,
     }
   }
 
-  def classLoader(directory: String = "", pathTransform: String => String = (s: String) => s): HttpHandler = {
-    val dir = if (directory.endsWith("/")) {
-      directory.substring(directory.length - 1)
-    } else {
-      directory
-    }
-    handle { exchange =>
-      val path = pathTransform(exchange.request.url.path.decoded)
-      val resourcePath = s"$dir$path" match {
-        case s if s.startsWith("/") => s.substring(1)
-        case s => s
-      }
-      Option(getClass.getClassLoader.getResource(resourcePath)).map { url =>
-        val file = new File(url.getFile)
-        if (!file.isDirectory) {
-          SenderHandler(Content.classPath(url), caching = cachingManager).handle(exchange)
-        } else {
-          IO.pure(exchange)
-        }
-      }.getOrElse(IO.pure(exchange))
-    }
-  }
+  def classLoader(directory: String = "", pathTransform: String => String = (s: String) => s): HttpHandler =
+    ClassLoaderPath(directory, pathTransform)
 
   /*def stream(baseDirectory: File, basePath: String, deltas: HttpExchange => List[Delta] = _ => Nil): HttpHandler = handle { exchange =>
     val url = exchange.request.url

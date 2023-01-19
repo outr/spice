@@ -74,11 +74,10 @@ package object dsl {
         case s => s
       }
       Option(getClass.getClassLoader.getResource(resourcePath))
-        .map(url => new File(url.getFile))
-        .filter(_.isFile)
-        .map { file =>
-          SenderHandler(Content.file(file)).handle(exchange)
-        }.map(_.map(FilterResponse.Continue.apply)).getOrElse(IO.pure(FilterResponse.Stop(exchange)))
+        .map(url => Content.url(url))
+        .map(content => SenderHandler(content).handle(exchange))
+        .map(_.map(FilterResponse.Continue.apply))
+        .getOrElse(IO.pure(FilterResponse.Stop(exchange)))
     }
   }
 

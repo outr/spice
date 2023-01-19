@@ -19,10 +19,10 @@ class OkHttpClientSpec extends AnyWordSpec with Matchers {
       Moduload.load()
     }
     "be the default implementation" in {
-      HttpClient.implementation.getClass should be(classOf[OkHttpClientImplementation])
+      HttpClient.implementation should be(OkHttpClientImplementation)
     }
     "GET the user-agent" in {
-      HttpClient.url(url"https://httpbin.org/user-agent").get.send().map(_.get).map { response =>
+      HttpClient.url(url"https://httpbin.org/user-agent").get.send().map { response =>
         response.status should be(HttpStatus.OK)
         val content = response.content.get.asInstanceOf[StringContent]
         content.value.contains("user-agent") should be(true)
@@ -33,7 +33,7 @@ class OkHttpClientSpec extends AnyWordSpec with Matchers {
       val limiter = Interceptor.rateLimited(1.seconds)
 
       def callMultiple(counter: Int): IO[Unit] = {
-        HttpClient.interceptor(limiter).url(url"https://httpbin.org/user-agent").get.send().map(_.get).flatMap { response =>
+        HttpClient.interceptor(limiter).url(url"https://httpbin.org/user-agent").get.send().flatMap { response =>
           response.status should be(HttpStatus.OK)
           calls += 1
           if (counter > 0) {
@@ -52,7 +52,7 @@ class OkHttpClientSpec extends AnyWordSpec with Matchers {
       }
     }
     "call a URL and get a case class back" in {
-      HttpClient.url(url"https://jsonplaceholder.typicode.com/todos/1").get.call[Placeholder].map(_.get).map { p =>
+      HttpClient.url(url"https://jsonplaceholder.typicode.com/todos/1").get.callTry[Placeholder].map(_.get).map { p =>
         p.userId should be(1)
         p.id should be(1)
         p.title should be("delectus aut autem")
@@ -71,7 +71,7 @@ class OkHttpClientSpec extends AnyWordSpec with Matchers {
     }
     "call a URL and get an image back" in {
       val url = url"https://s.yimg.com/ny/api/res/1.2/8Qe5c2B.moDrzo4jn7T5VQ--~A/YXBwaWQ9aGlnaGxhbmRlcjt3PTU2MzI7aD0zNzU1O3NtPTE7aWw9cGxhbmU-/https://media-mbst-pub-ue1.s3.amazonaws.com/creatr-images/2020-04/81f62d40-7ff9-11ea-bfdd-25ac22907561.cf.jpg"
-      HttpClient.url(url).send().map(_.get).map { response =>
+      HttpClient.url(url).send().map { response =>
         response.status should be(HttpStatus.OK)
         response.content.map(_.contentType) should be(Some(ContentType.`image/jpeg`))
       }
