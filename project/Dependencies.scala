@@ -4,7 +4,7 @@ object Dependencies {
   object version {
     val profig: String = "3.4.6"
     val scribe: String = "3.10.6"
-    val fabric: String = "1.8.4"
+    val fabric: String = "1.8.12"
     val reactify: String = "4.0.8"
     val cats: String = "3.4.2"
     val fs2: String = "3.4.0"
@@ -15,7 +15,7 @@ object Dependencies {
 
     val scalaJSDOM: String = "2.3.0"
 
-    val scalaTest: String = "3.2.14"
+    val scalaTest: String = "3.2.15"
     val catsEffectTesting: String = "1.5.0"
   }
 

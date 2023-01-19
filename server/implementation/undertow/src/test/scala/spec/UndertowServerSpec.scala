@@ -44,8 +44,7 @@ class UndertowServerSpec extends AsyncWordSpec with AsyncIOSpec with Matchers {
       client
         .path(path"/test.txt")
         .send(retries = 0)
-        .map { attempt =>
-          val response = attempt.getOrElse(fail("Response failure!"))
+        .map { response =>
           response.status should be(HttpStatus.OK)
           val content = response.content.get.asString
           content should be("test!")
@@ -55,8 +54,7 @@ class UndertowServerSpec extends AsyncWordSpec with AsyncIOSpec with Matchers {
       client
         .path(path"/test.html")
         .send()
-        .map { attempt =>
-          val response = attempt.getOrElse(fail("Response failure!"))
+        .map { response =>
           response.status should be(HttpStatus.NotFound)
         }
     }
