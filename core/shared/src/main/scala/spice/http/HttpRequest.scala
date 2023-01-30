@@ -7,7 +7,7 @@ import spice.net.{IP, URL}
 case class HttpRequest(method: HttpMethod = HttpMethod.Get,
                        source: IP = IP.v4.LocalHost,
                        url: URL = URL(),
-                       headers: Headers = Headers.empty,
+                       headers: Headers = Headers.default,
                        content: Option[Content] = None,
                        timestamp: Long = System.currentTimeMillis()) {
   lazy val cookies: List[Cookie.Request] = Headers.Request.`Cookie`.value(headers)

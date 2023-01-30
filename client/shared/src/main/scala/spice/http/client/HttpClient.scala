@@ -69,6 +69,7 @@ case class HttpClient(request: HttpRequest,
   } else {
     modify(_.copy(headers = request.headers.merge(headers)))
   }
+  def removeHeader(key: String): HttpClient = modify(r => r.copy(headers = r.headers.removeHeader(HeaderKey(key))))
 
   def retries(retries: Int): HttpClient = copy(retries = retries)
   def retryDelay(retryDelay: FiniteDuration): HttpClient = copy(retryDelay = retryDelay)
@@ -203,10 +204,16 @@ case class HttpClient(request: HttpRequest,
    * @tparam Response the response type
    * @return Future[Response]
    */
-  def restful[Request: Reader, Response: Writer](request: Request): IO[Try[Response]] = {
+  def restfulTry[Request: Reader, Response: Writer](request: Request): IO[Try[Response]] = {
     val requestJson = request.json
     method(if (method == HttpMethod.Get) HttpMethod.Post else method).json(requestJson).callTry[Response]
   }
+
+  def restful[Request: Reader, Response: Writer](request: Request): IO[Response] =
+    restfulTry[Request, Response](request).map {
+      case Success(response) => response
+      case Failure(throwable) => throw throwable
+    }
 
   /**
    * Similar to the restful call, but provides a different return-type if the response is an error.

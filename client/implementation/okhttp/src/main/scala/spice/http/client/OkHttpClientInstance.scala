@@ -194,8 +194,10 @@ class OkHttpClientInstance(client: HttpClient) extends HttpClientInstance {
     }
 
     // Method
-    r.method(request.method.value, body).header("Content-Length", Option(body).map(_.contentLength().toString).getOrElse("0"))
-    r.build()
+    r
+      .method(request.method.value, body)
+      .header("Content-Length", Option(body).map(_.contentLength().toString).getOrElse("0"))
+      .build()
   }
 
   private def responseFromOk(r: okhttp3.Response): HttpResponse = {
