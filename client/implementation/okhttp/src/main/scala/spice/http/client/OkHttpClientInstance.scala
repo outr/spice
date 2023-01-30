@@ -2,6 +2,7 @@ package spice.http.client
 
 import cats.effect.unsafe.implicits.global
 import cats.effect.{Deferred, IO}
+import fabric.io.JsonFormatter
 import okhttp3.{Authenticator, Request, Response, Route}
 import spice.http.content.FormDataEntry.{FileEntry, StringEntry}
 import spice.http.content._
@@ -165,6 +166,9 @@ class OkHttpClientInstance(client: HttpClient) extends HttpClientInstance {
       case StringContent(value, contentType, _) => okhttp3.RequestBody.create(value, ct(contentType))
       case FileContent(file, contentType, _) => okhttp3.RequestBody.create(file, ct(contentType))
       case BytesContent(array, contentType, _) => okhttp3.RequestBody.create(array, ct(contentType))
+      case JsonContent(json, compact, contentType, _) =>
+        val jsonString = if (compact) JsonFormatter.Compact(json) else JsonFormatter.Default(json)
+        okhttp3.RequestBody.create(jsonString, ct(contentType))
       case FormDataContent(data) => {
         val form = new okhttp3.MultipartBody.Builder()
         form.setType(ct(ContentType.`multipart/form-data`))
@@ -190,8 +194,10 @@ class OkHttpClientInstance(client: HttpClient) extends HttpClientInstance {
     }
 
     // Method
-    r.method(request.method.value, body).header("Content-Length", Option(body).map(_.contentLength().toString).getOrElse("0"))
-    r.build()
+    r
+      .method(request.method.value, body)
+      .header("Content-Length", Option(body).map(_.contentLength().toString).getOrElse("0"))
+      .build()
   }
 
   private def responseFromOk(r: okhttp3.Response): HttpResponse = {

@@ -19,12 +19,20 @@ case class Headers(map: TreeMap[String, List[String]] = TreeMap.empty(Ordering.b
   }
   def withHeader(key: String, value: String): Headers = withHeader(Header(new StringHeaderKey(key), value))
   def withHeaders(key: String, values: List[String]): Headers = copy(map + (key -> values))
+  def withHeaders(headers: Header*): Headers = copy(map ++ TreeMap(headers.map(h => h.key.key -> List(h.value)): _*))
 
   def merge(headers: Headers): Headers = copy(map ++ headers.map)
 }
 
 object Headers {
+  var DefaultUserAgent: Option[String] = Some("Spice-HttpClient")
+
   val empty: Headers = Headers()
+  def default: Headers = empty
+    .withHeaders(List(
+      Some(Headers.Request.`Accept`("*/*")),
+      DefaultUserAgent.map(Headers.Request.`User-Agent`.apply)
+    ).flatten: _*)
 
   def apply(map: Map[String, List[String]]): Headers = apply(TreeMap[String, List[String]](map.toList: _*)(Ordering.by(_.toLowerCase)))
 
@@ -42,6 +50,7 @@ object Headers {
   case object `Upgrade` extends StringHeaderKey("Upgrade")
 
   object Request {
+    case object `Accept` extends StringHeaderKey("Accept")
     case object `Accept-Encoding` extends StringHeaderKey("Accept-Encoding")
     case object `Accept-Language` extends StringHeaderKey("Accept-Language")
     case object `Authorization` extends StringHeaderKey("Authorization")

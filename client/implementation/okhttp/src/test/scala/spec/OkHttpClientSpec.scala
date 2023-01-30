@@ -62,7 +62,7 @@ class OkHttpClientSpec extends AnyWordSpec with Matchers {
     "restful call to a URL" in {
       HttpClient
         .url(url"https://jsonplaceholder.typicode.com/posts")
-        .restful[Placeholder, Placeholder](Placeholder(123, 456, "Test YouI", completed = false)).map(_.get).map { p =>
+        .restfulTry[Placeholder, Placeholder](Placeholder(123, 456, "Test YouI", completed = false)).map(_.get).map { p =>
         p.userId should be(123)
         p.id should be(101)
         p.title should be("Test YouI")

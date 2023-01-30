@@ -61,7 +61,7 @@ class UndertowServerSpec extends AsyncWordSpec with AsyncIOSpec with Matchers {
     "reverse a String with the Restful endpoint via POST" in {
       client
         .path(path"/test/reverse")
-        .restful[ReverseRequest, ReverseResponse](ReverseRequest("testing"))
+        .restfulTry[ReverseRequest, ReverseResponse](ReverseRequest("testing"))
         .map { attempt =>
           val response = attempt.getOrElse(fail("Response failure!"))
           response.errors should be(Nil)
@@ -102,7 +102,7 @@ class UndertowServerSpec extends AsyncWordSpec with AsyncIOSpec with Matchers {
     "call a Restful endpoint that takes a String as the request" in {
       client
         .path(path"/test/letters")
-        .restful[String, String]("test1test2test3")
+        .restfulTry[String, String]("test1test2test3")
         .map(_.getOrElse(throw new RuntimeException("Failure!")))
         .map { result =>
           result should be("testtesttest")
