@@ -176,7 +176,7 @@ case class HttpClient(request: HttpRequest,
             if (responseJson.isEmpty) throw new ClientException(s"No content received in response for ${request.url}.", request, response, None)
             Success(JsonParser(responseJson, Format.Json).as[Response])
           } else {
-            throw new ClientException("HttpStatus was not successful", request, response, None)
+            throw new ClientException(s"HttpStatus was not successful for ${request.url}: ${response.status} - ${response.content.map(_.asString)}", request, response, None)
           }
         case Failure(exception) => throw exception
       }

@@ -127,6 +127,7 @@ object ContentType {
   lazy val `application/postscript`: ContentType = ContentType("application", "postscript")
   lazy val `application/prs.cww`: ContentType = ContentType("application", "prs.cww")
   lazy val `application/pskc+xml`: ContentType = ContentType("application", "pskc+xml")
+  lazy val `application/graphql`: ContentType = ContentType("application", "graphql")
   lazy val `application/rdf+xml`: ContentType = ContentType("application", "rdf+xml")
   lazy val `application/reginfo+xml`: ContentType = ContentType("application", "reginfo+xml")
   lazy val `application/relax-ng-compact-syntax`: ContentType = ContentType("application", "relax-ng-compact-syntax")
