@@ -6,7 +6,7 @@ import org.scalatest.wordspec.AsyncWordSpec
 import spice.http.server.{DefaultErrorHandler, HttpServer, MutableHttpServer, StaticHttpServer}
 import spice.http.{HttpExchange, HttpMethod, HttpRequest, HttpStatus}
 import spice.http.server.dsl._
-import spice.http.server.handler.HttpHandler
+import spice.http.server.handler.{HttpHandler, LifecycleHandler}
 import spice.net._
 
 class ServerDSLSpec extends AsyncWordSpec with AsyncIOSpec with Matchers {
@@ -85,6 +85,17 @@ class ServerDSLSpec extends AsyncWordSpec with AsyncIOSpec with Matchers {
           val response = exchange.response
           response.content should be(Some(textPost))
           response.status should be(HttpStatus.OK)
+        }
+      }
+      "match not-found" in {
+        val request = HttpRequest(
+          source = ip"127.0.0.1",
+          url = url"http://www.example.com/bad-url"
+        )
+        server.handle(HttpExchange(request)).map { exchange =>
+          val response = exchange.response
+          response.content should be(Some(LifecycleHandler.DefaultNotFound))
+          response.status should be(HttpStatus.NotFound)
         }
       }
     }

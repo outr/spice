@@ -15,6 +15,8 @@ import spice.net.{MalformedURLException, URL}
 
 import java.util.logging.LogManager
 
+import cats.effect.unsafe.implicits.global
+
 class UndertowServerImplementation(server: HttpServer) extends HttpServerImplementation with UndertowHttpHandler {
   private val instance: Var[Option[Undertow]] = Var(None)
 
@@ -61,7 +63,7 @@ class UndertowServerImplementation(server: HttpServer) extends HttpServerImpleme
     }
   }
 
-  override def handleRequest(undertow: HttpServerExchange): Unit = server.errorSupport {
+  override def handleRequest(undertow: HttpServerExchange): Unit = {
     try {
       val url = URL.parse(s"${undertow.getRequestURL}?${undertow.getQueryString}")
       if (!server.config.persistentConnections()) {
@@ -85,6 +87,7 @@ class UndertowServerImplementation(server: HttpServer) extends HttpServerImpleme
       })
     } catch {
       case exc: MalformedURLException => scribe.warn(exc.message)
+      case throwable: Throwable => server.errorLogger(throwable, None, None).unsafeRunAndForget()
     }
   }
 }

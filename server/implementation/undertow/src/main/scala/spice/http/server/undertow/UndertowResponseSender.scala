@@ -13,6 +13,7 @@ import java.io.IOException
 import java.nio.ByteBuffer
 import scala.jdk.CollectionConverters.SeqHasAsJava
 import scribe.cats.{io => logger}
+import cats.effect.unsafe.implicits.global
 
 object UndertowResponseSender {
   def apply(undertow: HttpServerExchange,
@@ -41,7 +42,7 @@ object UndertowResponseSender {
                     if (exception.getMessage == "Stream closed") {
                       scribe.warn(s"Stream closed for $url")
                     } else {
-                      server.error(exception)
+                      server.errorLogger(exception, None, None).unsafeRunAndForget()
                     }
                   }
                 })
@@ -57,7 +58,7 @@ object UndertowResponseSender {
                     if (exception.getMessage == "Stream closed") {
                       scribe.warn("Stream closed for BytesContent")
                     } else {
-                      server.error(exception)
+                      server.errorLogger(exception, None, None).unsafeRunAndForget()
                     }
                   }
                 })
@@ -96,7 +97,7 @@ object UndertowResponseSender {
                     if (exception.getMessage == "Stream closed") {
                       scribe.warn(s"Stream closed for $contentString")
                     } else {
-                      server.error(exception)
+                      server.errorLogger(exception, None, None).unsafeRunAndForget()
                     }
                   }
                 })
@@ -108,7 +109,7 @@ object UndertowResponseSender {
 
               override def onException(exchange: HttpServerExchange, sender: Sender, exception: IOException): Unit = {
                 sender.close()
-                server.error(exception)
+                server.errorLogger(exception, None, None).unsafeRunAndForget()
               }
             })
           }

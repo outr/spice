@@ -8,7 +8,7 @@ import org.scalatest.matchers.should.Matchers
 import org.scalatest.wordspec.AsyncWordSpec
 import spice.http.server.openapi._
 import spice.http.server.openapi.server.{Schema, Service, ServiceCall}
-import spice.net.{Path, _}
+import spice.net.{URLPath, _}
 
 class OpenAPIServerAdvancedSpec extends AsyncWordSpec with AsyncIOSpec with Matchers {
   "OpenAPIServer Advanced" should {
@@ -29,7 +29,7 @@ class OpenAPIServerAdvancedSpec extends AsyncWordSpec with AsyncIOSpec with Matc
     override def tags: List[String] = List("gameplay")
 
     object board extends Service {
-      override val path: Path = path"/board"
+      override val path: URLPath = path"/board"
       override val get: ServiceCall = serviceCall[Unit, Status](
         summary = "Get the whole board",
         description = "Retrieves the current state of the board and the winner.",
@@ -65,7 +65,7 @@ class OpenAPIServerAdvancedSpec extends AsyncWordSpec with AsyncIOSpec with Matc
     }
 
     object boardSquare extends Service {
-      override val path: Path = path"/board/{row}/{column}"
+      override val path: URLPath = path"/board/{row}/{column}"
       override val get: ServiceCall = serviceCall[Square, Mark](
         summary = "Get a single board square",
         description = "Retrieves the requested square.",

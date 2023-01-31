@@ -8,14 +8,14 @@ import spice.http.server.config.{ServerConfig, ServerSocketListener}
 import spice.http.server.handler.{HttpHandler, LifecycleHandler}
 import spice.net.URLPath
 import spice.store.Store
-import spice.{ErrorSupport, ImplementationManager, Initializable}
+import spice.{ImplementationManager, Initializable}
 
 import java.util.concurrent.atomic.{AtomicInteger, AtomicLong}
 import java.util.concurrent.{Executors, ThreadFactory}
 import scala.concurrent.ExecutionContext
 import scala.concurrent.duration.{DurationInt, FiniteDuration}
 
-trait HttpServer extends LifecycleHandler with Initializable with ErrorSupport {
+trait HttpServer extends LifecycleHandler with Initializable {
   val config = new ServerConfig(this)
 
   protected val defaultExecutionContext: ExecutionContext = ExecutionContext.fromExecutor(Executors.newCachedThreadPool(new ThreadFactory {

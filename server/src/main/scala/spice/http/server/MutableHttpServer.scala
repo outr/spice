@@ -20,10 +20,7 @@ class MutableHttpServer extends HttpServer {
 
   object handlers extends ItemContainer[HttpHandler]
 
-  override final def apply(exchange: HttpExchange): IO[HttpExchange] = handleInternal(exchange).handleErrorWith { throwable =>
-    error(throwable)
-    errorHandler.get.handle(exchange, Some(throwable))
-  }
+  override final def apply(exchange: HttpExchange): IO[HttpExchange] = handleInternal(exchange)
 
   protected def handleInternal(exchange: HttpExchange): IO[HttpExchange] = {
     handleRecursive(exchange, handlers()).flatMap { updated =>
