@@ -91,7 +91,7 @@ case class HttpHandlerBuilder(server: MutableHttpServer,
 
   def validation(validators: Validator*): HttpHandler = wrap(new ValidatorHttpHandler(validators.toList))
 
-  def redirect(path: net.Path): HttpHandler = handle { exchange =>
+  def redirect(path: net.URLPath): HttpHandler = handle { exchange =>
     HttpHandler.redirect(exchange, path.encoded)
   }
 

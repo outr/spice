@@ -22,7 +22,7 @@ package object http {
 
   object paths {
     def exact(path: String): URLMatcher = (url: URL) => url.path.decoded == path
-    def exact(path: Path): URLMatcher = (url: URL) => url.path == path
+    def exact(path: URLPath): URLMatcher = (url: URL) => url.path == path
     def matches(regex: String): URLMatcher = (url: URL) => url.path.decoded.matches(regex)
     def startsWith(prefix: String): URLMatcher = (url: URL) => url.path.decoded.startsWith(prefix)
     def endsWith(prefix: String): URLMatcher = (url: URL) => url.path.decoded.endsWith(prefix)

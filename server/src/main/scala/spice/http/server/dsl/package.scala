@@ -8,7 +8,7 @@ import spice.http.{HttpExchange, HttpMethod, HttpStatus}
 import spice.http.server.handler.{CachingManager, ContentHandler, HttpHandler, SenderHandler, ValidatorHttpHandler}
 import spice.http.server.rest.Restful
 import spice.http.server.validation.{ValidationResult, Validator}
-import spice.net.{ContentType, IP, Path, URLMatcher}
+import spice.net.{ContentType, IP, URLPath, URLMatcher}
 
 import java.io.File
 import scala.language.implicitConversions
@@ -88,13 +88,13 @@ package object dsl {
     handler2Filter(Restful(restful)(writer, reader))
   }
 
-  implicit def path2AllowFilter(path: Path): ConnectionFilter = PathFilter(path)
+  implicit def path2AllowFilter(path: URLPath): ConnectionFilter = PathFilter(path)
 
   def filters(filters: ConnectionFilter*): ConnectionFilter = ListConnectionFilter(filters.toList)
 
   def allow(ips: IP*): ConnectionFilter = IPAddressFilter(allow = ips.toList)
 
-  def allow(path: Path): ConnectionFilter = PathFilter(path)
+  def allow(path: URLPath): ConnectionFilter = PathFilter(path)
 
   def last(filters: ConnectionFilter*): ConnectionFilter = LastConnectionFilter(filters: _*)
 
@@ -102,7 +102,7 @@ package object dsl {
     ContentHandler(content, status)
   }
 
-  def redirect(path: Path): ConnectionFilter = new ConnectionFilter {
+  def redirect(path: URLPath): ConnectionFilter = new ConnectionFilter {
     override def apply(exchange: HttpExchange): IO[FilterResponse] = {
       HttpHandler.redirect(exchange, path.encoded).map { redirected =>
         FilterResponse.Continue(redirected)

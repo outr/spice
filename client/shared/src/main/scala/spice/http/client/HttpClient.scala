@@ -8,7 +8,7 @@ import spice.http._
 import spice.http.client.intercept.Interceptor
 import spice.http.content.{Content, StringContent}
 import spice.http.cookie.Cookie
-import spice.net.{ContentType, DNS, Path, URL}
+import spice.net.{ContentType, DNS, URLPath, URL}
 
 import scala.concurrent.duration.{DurationInt, FiniteDuration}
 import scala.util.{Failure, Success, Try}
@@ -35,8 +35,8 @@ case class HttpClient(request: HttpRequest,
 
   def url: URL = request.url
   def url(url: URL): HttpClient = modify(_.copy(url = url))
-  def path: Path = url.path
-  def path(path: Path, append: Boolean = false): HttpClient = if (append) {
+  def path: URLPath = url.path
+  def path(path: URLPath, append: Boolean = false): HttpClient = if (append) {
     modify(_.copy(url = request.url.withPath(request.url.path.merge(path))))
   } else {
     modify(_.copy(url = request.url.withPath(path)))

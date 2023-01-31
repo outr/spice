@@ -6,7 +6,7 @@ import scribe.cats.{io => logger}
 import spice.http.HttpExchange
 import spice.http.server.config.{ServerConfig, ServerSocketListener}
 import spice.http.server.handler.{HttpHandler, LifecycleHandler}
-import spice.net.Path
+import spice.net.URLPath
 import spice.store.Store
 import spice.{ErrorSupport, ImplementationManager, Initializable}
 

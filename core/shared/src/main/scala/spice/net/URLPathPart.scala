@@ -1,28 +1,28 @@
 package spice.net
 
-sealed trait PathPart extends Any {
+sealed trait URLPathPart extends Any {
   def value: String
 }
 
-object PathPart {
+object URLPathPart {
   private val ArgumentPartRegex1 = """:(.+)""".r
   private val ArgumentPartRegex2 = """[{](.+)[}]""".r
 
-  object UpLevel extends PathPart {
+  object UpLevel extends URLPathPart {
     override def value: String = ".."
   }
 
-  object SameLevel extends PathPart {
+  object SameLevel extends URLPathPart {
     override def value: String = "."
   }
 
-  case class Literal(value: String) extends AnyVal with PathPart
+  case class Literal(value: String) extends AnyVal with URLPathPart
 
-  case class Argument(name: String) extends AnyVal with PathPart {
+  case class Argument(name: String) extends AnyVal with URLPathPart {
     override def value: String = s"{$name}"
   }
 
-  def apply(value: String): Option[PathPart] = value match {
+  def apply(value: String): Option[URLPathPart] = value match {
     case null | "" => None
     case ".." => Some(UpLevel)
     case "." => Some(SameLevel)
@@ -31,7 +31,7 @@ object PathPart {
     case s => Some(Literal(s))
   }
 
-  def equals(p1: PathPart, p2: PathPart): Boolean = if (p1 == p2) {
+  def equals(p1: URLPathPart, p2: URLPathPart): Boolean = if (p1 == p2) {
     true
   } else {
     p1 match {

@@ -9,7 +9,7 @@ import spice.http.{HttpExchange, HttpRequest}
 import spice.http.server.config.HttpServerListener
 import spice.http.server.openapi.server.{Service, ServiceCall}
 import spice.http.server.openapi._
-import spice.net.{Path, _}
+import spice.net._
 
 class OpenAPIServerSpec extends AsyncWordSpec with AsyncIOSpec with Matchers {
   "OpenAPIServer" should {
@@ -58,7 +58,7 @@ class OpenAPIServerSpec extends AsyncWordSpec with AsyncIOSpec with Matchers {
     override val description: Option[String] = Some("Optional multiline or single-line description in [CommonMark](http://commonmark.org/help/) or HTML.")
 
     object usersService extends Service {
-      override val path: Path = path"/users"
+      override val path: URLPath = path"/users"
       override val get: ServiceCall = serviceCall[Unit, List[String]](
         summary = "Returns a list of users.",
         description = "Optional extended description in CommonMark or HTML.",

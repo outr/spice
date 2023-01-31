@@ -112,7 +112,7 @@ trait ServiceCall extends HttpHandler {
 
 object ServiceCall {
   private val svc = new Service {
-    override val path: net.Path = path"/"
+    override val path: net.URLPath = path"/"
   }
 
   val NotSupported: ServiceCall = svc.serviceCall[Unit, Unit](

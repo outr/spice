@@ -5,14 +5,14 @@ import org.scalatest.wordspec.AnyWordSpec
 
 import spice.net._
 
-class PathSpec extends AnyWordSpec with Matchers {
+class URLPathSpec extends AnyWordSpec with Matchers {
   "Path" should {
     "interpolate a simple path" in {
       val path = path"/one/two/three"
       path.parts should be(List(
-        PathPart.Literal("one"),
-        PathPart.Literal("two"),
-        PathPart.Literal("three")
+        URLPathPart.Literal("one"),
+        URLPathPart.Literal("two"),
+        URLPathPart.Literal("three")
       ))
       path.toString should be("/one/two/three")
     }

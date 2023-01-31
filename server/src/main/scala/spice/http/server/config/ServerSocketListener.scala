@@ -1,13 +1,13 @@
 package spice.http.server.config
 
 import spice.http.HttpExchange
-import spice.net.{Path, URL}
+import spice.net.{URLPath, URL}
 
 trait ServerSocketListener {
   def host: String
   def port: Int
   def enabled: Boolean
-  def basePath: Path
+  def basePath: URLPath
   def urls: List[URL]
   def description: Option[String]
 

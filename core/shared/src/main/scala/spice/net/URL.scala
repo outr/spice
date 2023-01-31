@@ -10,7 +10,7 @@ import scala.collection.mutable
 case class URL(protocol: Protocol = Protocol.Http,
                host: String = "localhost",
                port: Int = 80,
-               path: Path = Path.empty,
+               path: URLPath = URLPath.empty,
                parameters: Parameters = Parameters.empty,
                fragment: Option[String] = None) {
   lazy val hostParts: Vector[String] = host.split('.').toVector
@@ -54,7 +54,7 @@ case class URL(protocol: Protocol = Protocol.Http,
     copy(path = updated)
   }
 
-  def withPath(path: Path): URL = copy(path = path)
+  def withPath(path: URLPath): URL = copy(path = path)
 
   def withFragment(fragment: String): URL = copy(fragment = Option(fragment))
   def withoutFragment(): URL = copy(fragment = None)
@@ -144,7 +144,7 @@ object URL {
             parameters: List[(String, List[String])],
             fragment: Option[String]): URL = {
     val params = Parameters(parameters.map(t => t._1 -> Param(t._2)))
-    URL(Protocol(protocol), host, port, Path.parse(path), params, fragment)
+    URL(Protocol(protocol), host, port, URLPath.parse(path), params, fragment)
   }
 
   def parse(url: String,

@@ -9,8 +9,8 @@ package object net {
       ${PortLiteral('ctx, 'args)}
     inline def ip(inline args: Any*): IP =
       ${IPLiteral('ctx, 'args)}
-    inline def path(inline args: Any*): Path =
-      ${PathLiteral('ctx, 'args)}
+    inline def path(inline args: Any*): URLPath =
+      ${URLPathLiteral('ctx, 'args)}
     inline def url(inline args: Any*): URL =
       ${URLLiteral('ctx, 'args)}
 
@@ -26,9 +26,9 @@ package object net {
         case None => Left(s"Invalid IP address: $s")
         case Some(_) => Right('{IP.fromString(${Expr(s)}).get})
 
-  object PathLiteral extends Literally[Path]:
-    def validate(s: String)(using Quotes): Either[String, Expr[Path]] =
-      Right('{Path.parse(${Expr(s)})})
+  object URLPathLiteral extends Literally[URLPath]:
+    def validate(s: String)(using Quotes): Either[String, Expr[URLPath]] =
+      Right('{URLPath.parse(${Expr(s)})})
 
   object URLLiteral extends Literally[URL]:
     def validate(s: String)(using Quotes): Either[String, Expr[URL]] =

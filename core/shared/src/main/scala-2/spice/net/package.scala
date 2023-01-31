@@ -9,7 +9,7 @@ package object net {
   implicit class interpolation(val sc: StringContext) extends AnyVal {
     def port(args: Any*): Port = macro PortLiteral.make
     def ip(args: Any*): IP = macro IPLiteral.make
-    def path(args: Any*): Path = macro PathLiteral.make
+    def path(args: Any*): URLPath = macro PathLiteral.make
     def url(args: Any*): URL = macro URLLiteral.make
   }
 
@@ -37,13 +37,13 @@ package object net {
     def make(c: Context)(args: c.Expr[Any]*): c.Expr[IP] = apply(c)(args: _*)
   }
 
-  object PathLiteral extends Literally[Path] {
-    def validate(c: Context)(s: String): Either[String, c.Expr[Path]] = {
+  object PathLiteral extends Literally[URLPath] {
+    def validate(c: Context)(s: String): Either[String, c.Expr[URLPath]] = {
       import c.universe._
-      Right(c.Expr(q"_root_.spice.net.Path.parse($s)"))
+      Right(c.Expr(q"_root_.spice.net.URLPath.parse($s)"))
     }
 
-    def make(c: Context)(args: c.Expr[Any]*): c.Expr[Path] = apply(c)(args: _*)
+    def make(c: Context)(args: c.Expr[Any]*): c.Expr[URLPath] = apply(c)(args: _*)
   }
 
   object URLLiteral extends Literally[URL] {

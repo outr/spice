@@ -13,7 +13,7 @@ object URLParser {
       val (host, port) = separateHostAndPort(hostSection)
       val (stage2, fragment) = extractFragment(pathSection)
       val (stage3, parameters) = extractParameters(stage2)
-      val path = Path.parse(stage3)
+      val path = URLPath.parse(stage3)
 
       if (host.contains("..")) {
         Left(URLParseFailure(s"$s has an invalid host", URLParseFailure.InvalidHost))

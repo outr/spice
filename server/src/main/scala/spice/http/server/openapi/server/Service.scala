@@ -3,10 +3,10 @@ package spice.http.server.openapi.server
 import cats.effect.IO
 import fabric.rw.RW
 import spice.http.{HttpExchange, HttpMethod}
-import spice.net.Path
+import spice.net.URLPath
 
 trait Service {
-  val path: Path
+  val path: URLPath
 
   val get: ServiceCall = ServiceCall.NotSupported
   val post: ServiceCall = ServiceCall.NotSupported
