@@ -90,6 +90,9 @@ package object dsl {
 
   implicit def path2AllowFilter(path: URLPath): ConnectionFilter = PathFilter(path)
 
+  implicit def connectionFilters2ConnectionFilter(list: List[ConnectionFilter]): ConnectionFilter =
+    ListConnectionFilter(list)
+
   def filters(filters: ConnectionFilter*): ConnectionFilter = ListConnectionFilter(filters.toList)
 
   def allow(ips: IP*): ConnectionFilter = IPAddressFilter(allow = ips.toList)

@@ -26,7 +26,7 @@ class UndertowServerSpec extends AsyncWordSpec with AsyncIOSpec with Matchers {
         IO(response.withContent(Content.string("test!", ContentType.`text/plain`)))
       })
       server.handler(
-        filters(
+        List(
           path"/test/reverse" / ReverseService,
           path"/test/reverse/:value" / ReverseService,
           path"/test/time" / ServerTimeService,
