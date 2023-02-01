@@ -2,15 +2,13 @@ package spice.http.server
 
 import cats.effect.IO
 import fabric.rw._
-import spice.delta.types.Delta
 import spice.http.content.Content
-import spice.http.{HttpExchange, HttpMethod, HttpStatus}
-import spice.http.server.handler.{CachingManager, ContentHandler, HttpHandler, SenderHandler, ValidatorHttpHandler}
+import spice.http.server.handler._
 import spice.http.server.rest.Restful
 import spice.http.server.validation.{ValidationResult, Validator}
-import spice.net.{ContentType, IP, URLPath, URLMatcher}
+import spice.http.{HttpExchange, HttpMethod, HttpStatus}
+import spice.net.{ContentType, IP, URLMatcher, URLPath}
 
-import java.io.File
 import scala.language.implicitConversions
 
 package object dsl {
@@ -59,27 +57,6 @@ package object dsl {
   }
 
   implicit class URLMatcherFilter(val matcher: URLMatcher) extends ConditionalFilter(c => matcher.matches(c.request.url))
-
-  case class ClassLoaderPath(directory: String = "", pathTransform: String => String = (s: String) => s) extends ConnectionFilter {
-    private val dir = if (directory.endsWith("/")) {
-      directory.substring(directory.length - 1)
-    } else {
-      directory
-    }
-
-    override def apply(exchange: HttpExchange): IO[FilterResponse] = {
-      val path = pathTransform(exchange.request.url.path.decoded)
-      val resourcePath = s"$dir$path" match {
-        case s if s.startsWith("/") => s.substring(1)
-        case s => s
-      }
-      Option(getClass.getClassLoader.getResource(resourcePath))
-        .map(url => Content.url(url))
-        .map(content => SenderHandler(content).handle(exchange))
-        .map(_.map(FilterResponse.Continue.apply))
-        .getOrElse(IO.pure(FilterResponse.Stop(exchange)))
-    }
-  }
 
   implicit def content2Filter(content: Content): ConnectionFilter = handler2Filter(ContentHandler(content, HttpStatus.OK))
 
