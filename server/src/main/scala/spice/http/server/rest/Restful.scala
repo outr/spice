@@ -5,11 +5,14 @@ import fabric.rw._
 import spice.ValidationError
 import spice.http.server.handler.HttpHandler
 import spice.http.{HttpExchange, HttpStatus}
+import spice.net.URLPath
 
 import scala.concurrent.duration.Duration
 import scala.language.experimental.macros
 
 trait Restful[Request, Response] {
+  def pathOption: Option[URLPath] = None
+
   def apply(exchange: HttpExchange, request: Request): IO[RestfulResponse[Response]]
 
   def validations: List[RestfulValidation[Request]] = Nil

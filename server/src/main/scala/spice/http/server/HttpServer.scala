@@ -83,5 +83,5 @@ trait HttpServer extends LifecycleHandler with Initializable {
     IO.unit
   }
 
-  def dispose(): Unit = stop()
+  def dispose(): IO[Unit] = stop()
 }

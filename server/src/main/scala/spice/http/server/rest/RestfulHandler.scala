@@ -15,7 +15,14 @@ import scala.collection.mutable.ListBuffer
 
 class RestfulHandler[Request, Response](restful: Restful[Request, Response])
                                        (implicit writer: Writer[Request], reader: Reader[Response]) extends HttpHandler {
-  override def handle(exchange: HttpExchange): IO[HttpExchange] = {
+  private def accept(exchange: HttpExchange): Boolean = restful.pathOption match {
+    case Some(p) =>
+      scribe.info(s"Accept? $p == ${exchange.request.url.path} = ${p == exchange.request.url.path} for ${getClass.getName}")
+      p == exchange.request.url.path
+    case None => true
+  }
+
+  override def handle(exchange: HttpExchange): IO[HttpExchange] = if (accept(exchange)) {
     // Build JSON
     val io: IO[RestfulResponse[Response]] = {
       val json = RestfulHandler.jsonFromExchange(exchange)
@@ -29,6 +36,7 @@ class RestfulHandler[Request, Response](restful: Restful[Request, Response])
         }
         case Right(request) => try {
           restful(exchange, request)
+            .timeout(restful.timeout)
         } catch {
           case t: Throwable => {
             val err = ValidationError(s"Error while calling restful: ${t.getMessage}", ValidationError.Internal)
@@ -51,20 +59,22 @@ class RestfulHandler[Request, Response](restful: Restful[Request, Response])
         }
       }
     }
+  } else {
+    IO.pure(exchange)
   }
 }
 
 object RestfulHandler {
   private val key: String = "restful"
 
-//  def store(exchange: HttpExchange, json: Json): Unit = {
-//    val merged = Json.merge(exchange.store.getOrElse[Json](key, obj()), json)
-//    exchange.store.update[Json](key, merged)
-//  }
+  def store(exchange: HttpExchange, json: Json): Unit = {
+    val merged = Json.merge(exchange.store.getOrElse[Json](key, obj()), json)
+    exchange.store.update[Json](key, merged)
+  }
 
   def validate[Request](request: Request,
                         validations: List[RestfulValidation[Request]]): Either[List[ValidationError], Request] = {
-    var errors = ListBuffer.empty[ValidationError]
+    val errors = ListBuffer.empty[ValidationError]
     var r: Request = request
     validations.foreach { v =>
       v.validate(r) match {
