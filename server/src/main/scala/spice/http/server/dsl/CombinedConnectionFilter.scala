@@ -7,7 +7,7 @@ case class CombinedConnectionFilter(first: ConnectionFilter, second: ConnectionF
   override def apply(exchange: HttpExchange): IO[FilterResponse] = {
     first.apply(exchange).flatMap {
       case FilterResponse.Continue(c) => second.apply(c)
-      case FilterResponse.Stop(c) => IO.pure(FilterResponse.Stop(c))
+      case stop: FilterResponse.Stop => IO.pure(stop)
     }
   }
 }

@@ -1,12 +1,16 @@
 package spec
 
+import cats.effect.IO
 import cats.effect.testing.scalatest.AsyncIOSpec
 import org.scalatest.matchers.should.Matchers
 import org.scalatest.wordspec.AsyncWordSpec
+import spice.ValidationError
+import spice.http.content.Content
 import spice.http.server.{DefaultErrorHandler, HttpServer, MutableHttpServer, StaticHttpServer}
 import spice.http.{HttpExchange, HttpMethod, HttpRequest, HttpStatus}
 import spice.http.server.dsl._
 import spice.http.server.handler.{HttpHandler, LifecycleHandler}
+import spice.http.server.rest.{Restful, RestfulResponse}
 import spice.net._
 
 class ServerDSLSpec extends AsyncWordSpec with AsyncIOSpec with Matchers {
@@ -97,6 +101,43 @@ class ServerDSLSpec extends AsyncWordSpec with AsyncIOSpec with Matchers {
           response.content should be(Some(LifecycleHandler.DefaultNotFound))
           response.status should be(HttpStatus.NotFound)
         }
+      }
+    }
+    "specific testing with filters" should {
+      var triggered = List.empty[String]
+
+      val r1 = Restful[String, String]({ request =>
+        triggered = triggered ::: List("r1")
+        IO(request.reverse)
+      }, Some(path"/r1"))
+      val r2 = Restful[String, String]({ request =>
+        triggered = triggered ::: List("r2")
+        IO(request.capitalize)
+      }, Some(path"/r2"))
+      val f: ConnectionFilter = filters(
+        r1,
+        r2
+      )
+
+      "properly process the first path" in {
+        f
+          .handle(HttpExchange(HttpRequest(
+            url = url"http://localhost:8080/r1",
+            content = Some(Content.string("testing", ContentType.`text/plain`))
+          )))
+          .map { exchange =>
+            exchange.response.content.map(_.asString) should be(Some("\"gnitset\""))
+          }
+      }
+      "properly fall through to the second path" in {
+        f
+          .handle(HttpExchange(HttpRequest(
+            url = url"http://localhost:8080/r2",
+            content = Some(Content.string("testing", ContentType.`text/plain`))
+          )))
+          .map { exchange =>
+            exchange.response.content.map(_.asString) should be(Some("\"Testing\""))
+          }
       }
     }
   }

@@ -7,18 +7,24 @@ import fabric.rw._
 import spice.ValidationError
 import spice.http.HttpExchange
 import spice.http.content.Content
-import spice.http.server.dsl.PathFilter
+import spice.http.server.dsl.{ConnectionFilter, FilterResponse, PathFilter}
 import spice.http.server.handler.HttpHandler
 import spice.net.{ContentType, URL}
 
 import scala.collection.mutable.ListBuffer
 
 class RestfulHandler[Request, Response](restful: Restful[Request, Response])
-                                       (implicit writer: Writer[Request], reader: Reader[Response]) extends HttpHandler {
+                                       (implicit writer: Writer[Request], reader: Reader[Response]) extends ConnectionFilter {
+  override def apply(exchange: HttpExchange): IO[FilterResponse] = if (accept(exchange)) {
+    handle(exchange).map { e =>
+      FilterResponse.Continue(e)
+    }
+  } else {
+    IO.pure(FilterResponse.Stop(exchange))
+  }
+
   private def accept(exchange: HttpExchange): Boolean = restful.pathOption match {
-    case Some(p) =>
-      scribe.info(s"Accept? $p == ${exchange.request.url.path} = ${p == exchange.request.url.path} for ${getClass.getName}")
-      p == exchange.request.url.path
+    case Some(p) => p == exchange.request.url.path
     case None => true
   }
 
@@ -104,7 +110,16 @@ object RestfulHandler {
     })
   }
 
-  def jsonFromContent(content: Content): Either[ValidationError, Json] = Right(JsonParser(content.asString))
+  def jsonFromContent(content: Content): Either[ValidationError, Json] = {
+    val contentString = content.asString
+    val firstChar = contentString.charAt(0)
+    val json = if (Set('"', '{', '[').contains(firstChar)) {
+      JsonParser(contentString)
+    } else {
+      Str(contentString)
+    }
+    Right(json)
+  }
 
   def jsonFromURL(url: URL): Json = {
     val entries = url.parameters.map.toList.map {

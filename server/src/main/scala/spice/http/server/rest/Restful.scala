@@ -29,8 +29,21 @@ trait Restful[Request, Response] {
 }
 
 object Restful {
-  def apply[Request, Response](restful: Restful[Request, Response])
-                              (implicit writer: Writer[Request], reader: Reader[Response]): HttpHandler = {
+  def apply[Request, Response](handler: Request => IO[Response],
+                               path: Option[URLPath] = None): Restful[Request, Response] = new Restful[Request, Response] {
+    override def pathOption: Option[URLPath] = path
+
+    override def apply(exchange: HttpExchange, request: Request): IO[RestfulResponse[Response]] = handler(request)
+      .map { response =>
+        ok(response)
+      }
+
+    override def error(errors: List[ValidationError], status: HttpStatus): RestfulResponse[Response] =
+      throw new RuntimeException(s"Error occurred: ${errors.map(_.message).mkString(", ")}")
+  }
+
+  def handler[Request, Response](restful: Restful[Request, Response])
+                              (implicit writer: Writer[Request], reader: Reader[Response]): RestfulHandler[Request, Response] = {
     new RestfulHandler[Request, Response](restful)(writer, reader)
   }
 }
