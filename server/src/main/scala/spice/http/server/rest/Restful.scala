@@ -17,6 +17,9 @@ trait Restful[Request, Response] {
 
   def validations: List[RestfulValidation[Request]] = Nil
 
+  def error(message: String): RestfulResponse[Response] =
+    error(List(ValidationError(message)), HttpStatus.InternalServerError)
+
   def error(errors: List[ValidationError], status: HttpStatus): RestfulResponse[Response]
 
   def timeout: Duration = Duration.Inf

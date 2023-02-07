@@ -43,6 +43,10 @@ class RestfulHandler[Request, Response](restful: Restful[Request, Response])
         case Right(request) => try {
           restful(exchange, request)
             .timeout(restful.timeout)
+            .handleError { throwable =>
+              scribe.error(s"Error occurred in ${restful.getClass.getName}", throwable)
+              restful.error("An internal error occurred.")
+            }
         } catch {
           case t: Throwable => {
             val err = ValidationError(s"Error while calling restful: ${t.getMessage}", ValidationError.Internal)
