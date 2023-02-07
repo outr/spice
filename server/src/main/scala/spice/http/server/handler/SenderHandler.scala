@@ -1,20 +1,18 @@
 package spice.http.server.handler
 
 import cats.effect.IO
-import spice.http.{Headers, HttpExchange}
 import spice.http.content.Content
+import spice.http.{Headers, HttpExchange}
 
-class SenderHandler private(content: Content, length: Option[Long], caching: CachingManager) extends HttpHandler {
-  override def handle(exchange: HttpExchange): IO[HttpExchange] = {
-    SenderHandler.handle(exchange, content, length, caching)
-  }
+case class SenderHandler(content: Content,
+                         length: Option[Long] = None,
+                         caching: CachingManager = CachingManager.Default,
+                         replace: Boolean = false) extends HttpHandler {
+  override def handle(exchange: HttpExchange): IO[HttpExchange] =
+    SenderHandler.handle(exchange, content, length, caching, replace)
 }
 
 object SenderHandler {
-  def apply(content: Content, length: Option[Long] = None, caching: CachingManager = CachingManager.Default): SenderHandler = {
-    new SenderHandler(content, length, caching)
-  }
-
   def handle(exchange: HttpExchange,
              content: Content,
              length: Option[Long] = None,

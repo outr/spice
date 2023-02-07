@@ -12,7 +12,7 @@ case class ListConnectionFilter(filters: List[ConnectionFilter]) extends Connect
   } else {
     val filter = filters.head
     filter.apply(exchange).flatMap {
-      case r: FilterResponse.Continue => IO.pure(r)
+      case r: FilterResponse.Continue => firstPath(r.exchange, filters.tail)
       case r: FilterResponse.Stop => firstPath(r.exchange, filters.tail)
     }
   }
