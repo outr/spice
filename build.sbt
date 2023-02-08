@@ -1,6 +1,6 @@
 name := "spice"
 ThisBuild / organization := "com.outr"
-ThisBuild / version := "0.0.14"
+ThisBuild / version := "0.0.15"
 
 val scala213: String = "2.13.10"
 val scala3: String = "3.2.2"
