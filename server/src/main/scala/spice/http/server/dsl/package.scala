@@ -60,11 +60,6 @@ package object dsl {
 
   implicit def content2Filter(content: Content): ConnectionFilter = handler2Filter(ContentHandler(content, HttpStatus.OK))
 
-  implicit def restful[Request, Response](restful: Restful[Request, Response])
-                                         (implicit writer: Writer[Request], reader: Reader[Response]): ConnectionFilter = {
-    Restful.handler(restful)(writer, reader)
-  }
-
   implicit def path2AllowFilter(path: URLPath): ConnectionFilter = PathFilter(path)
 
   implicit def connectionFilters2ConnectionFilter(list: List[ConnectionFilter]): ConnectionFilter =

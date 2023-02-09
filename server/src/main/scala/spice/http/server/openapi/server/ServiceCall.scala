@@ -10,7 +10,7 @@ import spice.http.content.Content
 import spice.http.server.BasePath
 import spice.http.server.handler.HttpHandler
 import spice.http.server.openapi._
-import spice.http.server.rest.RestfulHandler.jsonFromContent
+import spice.http.server.rest.Restful
 import spice.net
 import spice.net._
 
@@ -47,7 +47,7 @@ trait ServiceCall extends HttpHandler {
     }
     val argsJson = obj(args: _*)
     // TODO: Support GET params
-    val contentJson = exchange.request.content.map(jsonFromContent).flatMap(_.toOption).getOrElse(obj())
+    val contentJson = exchange.request.content.map(Restful.jsonFromContent).flatMap(_.toOption).getOrElse(obj())
     val requestJson = if (argsJson.isEmpty) {
       contentJson
     } else {
