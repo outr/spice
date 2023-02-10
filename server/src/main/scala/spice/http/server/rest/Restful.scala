@@ -1,13 +1,12 @@
 package spice.http.server.rest
 
 import cats.effect.IO
-import fabric.{Json, Str, arr, obj, str}
 import fabric.io.{JsonFormatter, JsonParser}
 import fabric.rw._
+import fabric.{Json, Str, arr, obj, str}
 import spice.ValidationError
 import spice.http.content.Content
 import spice.http.server.dsl.{ConnectionFilter, FilterResponse, PathFilter}
-import spice.http.server.handler.HttpHandler
 import spice.http.{HttpExchange, HttpStatus}
 import spice.net.{ContentType, URL, URLPath}
 
@@ -15,7 +14,8 @@ import scala.collection.mutable.ListBuffer
 import scala.concurrent.duration.Duration
 import scala.language.experimental.macros
 
-abstract class Restful[Request, Response](implicit writer: Writer[Request], reader: Reader[Response]) extends ConnectionFilter {
+abstract class Restful[Request, Response](implicit val requestRW: RW[Request],
+                                          val responseRW: RW[Response]) extends ConnectionFilter {
   def pathOption: Option[URLPath] = None
 
   def apply(exchange: HttpExchange, request: Request): IO[RestfulResponse[Response]]
@@ -102,7 +102,7 @@ object Restful {
     exchange.store.update[Json](key, merged)
   }
 
-  def apply[Request: Writer, Response: Reader](handler: Request => IO[Response],
+  def apply[Request: RW, Response: RW](handler: Request => IO[Response],
                                                path: Option[URLPath] = None): Restful[Request, Response] =
     new Restful[Request, Response] {
       override def pathOption: Option[URLPath] = path
