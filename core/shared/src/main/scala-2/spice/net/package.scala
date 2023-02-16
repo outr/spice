@@ -63,7 +63,7 @@ package object net {
     def validate(c: Context)(s: String): Either[String, c.Expr[EmailAddress]] = {
       import c.universe._
       EmailAddress.parse(s) match {
-        case Some(e) => Right(c.Expr(q"_root_.spice.net.EmailAddress(${e.local}, ${e.domain})"))
+        case Some(e) => Right(c.Expr(q"_root_.spice.net.EmailAddress.unsafe(${e.value})"))
         case None => Left(s"$s is not a valid email address")
       }
     }

@@ -41,6 +41,6 @@ package object net {
   object EmailAddressLiteral extends Literally[EmailAddress]:
     def validate(s: String)(using Quotes): Either[String, Expr[EmailAddress]] =
       EmailAddress.parse(s) match
-        case Some(e) => Right('{EmailAddress(${Expr(e.local)}, ${Expr(e.domain)})})
+        case Some(e) => Right('{EmailAddress.unsafe(${Expr(e.value)})})
         case None => Left(s"$s is not a valid email address")
 }
