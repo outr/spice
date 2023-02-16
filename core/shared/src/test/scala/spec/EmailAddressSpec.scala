@@ -2,7 +2,7 @@ package spec
 
 import org.scalatest.matchers.should.Matchers
 import org.scalatest.wordspec.AnyWordSpec
-import spice.net.EmailAddress
+import spice.net._
 
 class EmailAddressSpec extends AnyWordSpec with Matchers {
   "EmailAddress" when {
@@ -33,6 +33,14 @@ class EmailAddressSpec extends AnyWordSpec with Matchers {
         val canonicalized = email.canonical(excludePlus = true)
         canonicalized.local should be("simple")
         canonicalized.domain should be("example.com")
+      }
+      "parse an email address via interpolation" in {
+        val email = email"test@example.com"
+        email.local should be("test")
+        email.domain should be("example.com")
+      }
+      "fail to compile with invalid email address interpolation" in {
+        assertDoesNotCompile("""email"test"""")
       }
     }
   }

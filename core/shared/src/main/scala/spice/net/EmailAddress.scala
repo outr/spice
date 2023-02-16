@@ -33,4 +33,7 @@ object EmailAddress {
       scribe.warn(s"Unrecognized email address: [$email]")
       None
   }
+
+  def apply(email: String): EmailAddress = parse(email)
+    .getOrElse(throw new RuntimeException(s"Invalid email address: $email"))
 }

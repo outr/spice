@@ -11,6 +11,7 @@ package object net {
     def ip(args: Any*): IP = macro IPLiteral.make
     def path(args: Any*): URLPath = macro PathLiteral.make
     def url(args: Any*): URL = macro URLLiteral.make
+    def email(args: Any*): EmailAddress = macro EmailAddressLiteral.make
   }
 
   object PortLiteral extends Literally[Port] {
@@ -56,5 +57,17 @@ package object net {
     }
 
     def make(c: Context)(args: c.Expr[Any]*): c.Expr[URL] = apply(c)(args: _*)
+  }
+
+  object EmailAddressLiteral extends Literally[EmailAddress] {
+    def validate(c: Context)(s: String): Either[String, c.Expr[EmailAddress]] = {
+      import c.universe._
+      EmailAddress.parse(s) match {
+        case Some(e) => Right(c.Expr(q"_root_.spice.net.EmailAddress(${e.local}, ${e.domain})"))
+        case None => Left(s"$s is not a valid email address")
+      }
+    }
+
+    def make(c: Context)(args: c.Expr[Any]*): c.Expr[EmailAddress] = apply(c)(args: _*)
   }
 }

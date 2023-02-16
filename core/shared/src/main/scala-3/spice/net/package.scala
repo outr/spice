@@ -13,6 +13,8 @@ package object net {
       ${URLPathLiteral('ctx, 'args)}
     inline def url(inline args: Any*): URL =
       ${URLLiteral('ctx, 'args)}
+    inline def email(inline args: Any*): EmailAddress =
+      ${EmailAddressLiteral('ctx, 'args)}
 
   object PortLiteral extends Literally[Port]:
     def validate(s: String)(using Quotes): Either[String, Expr[Port]] =
@@ -35,4 +37,10 @@ package object net {
       URL.get(s) match
         case Left(f) => Left(f.message)
         case Right(_) => Right('{URL.parse(${Expr(s)})})
+
+  object EmailAddressLiteral extends Literally[EmailAddress]:
+    def validate(s: String)(using Quotes): Either[String, Expr[EmailAddress]] =
+      EmailAddress.parse(s) match
+        case Some(e) => Right('{EmailAddress(${Expr(e.local)}, ${Expr(e.domain)})})
+        case None => Left(s"$s is not a valid email address")
 }
