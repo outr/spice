@@ -1,5 +1,7 @@
 package spice.net
 
+import fabric.rw.RW
+
 case class EmailAddress(local: String, domain: String) {
   def normalize(): EmailAddress = EmailAddress(local.toLowerCase, domain.toLowerCase)
   def canonical(excludePlus: Boolean = false): EmailAddress = {
@@ -20,6 +22,8 @@ case class EmailAddress(local: String, domain: String) {
 }
 
 object EmailAddress {
+  implicit val rw: RW[EmailAddress] = RW.gen
+
   private val EmailRegex = """(.+)@(.+)[.](.+)""".r
 
   def parse(email: String): Option[EmailAddress] = email.trim match {

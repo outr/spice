@@ -10,11 +10,10 @@ import reactify._
 import scribe.Logger
 import spice.http.server.config.{HttpServerListener, HttpsServerListener}
 import spice.http.{HttpExchange, HttpResponse}
-import spice.http.server.{HttpServer, HttpServerImplementation, HttpServerImplementationManager, SSLUtil}
+import spice.http.server.{HttpServer, HttpServerImplementation, HttpServerImplementationManager, SSLUtil, ServerStartException}
 import spice.net.{MalformedURLException, URL}
 
 import java.util.logging.LogManager
-
 import cats.effect.unsafe.implicits.global
 
 class UndertowServerImplementation(server: HttpServer) extends HttpServerImplementation with UndertowHttpHandler {
@@ -48,7 +47,11 @@ class UndertowServerImplementation(server: HttpServer) extends HttpServerImpleme
       case listener => throw new UnsupportedOperationException(s"Unsupported listener: $listener")
     }
     val u = builder.build()
-    u.start()
+    try {
+      u.start()
+    } catch {
+      case t: Throwable => throw ServerStartException(t.getMessage, server.config.listeners(), t)
+    }
     instance @= Some(u)
   }
 

@@ -15,6 +15,7 @@ object ServerUtil {
   } else {
     val io = IO {
       val port = ports.head
+      scribe.info(s"Attempting port: $port")
       val ss = new ServerSocket(port, 50, InetAddress.getByName(host))
       try {
         Some(ss.getLocalPort)
@@ -34,9 +35,5 @@ object ServerUtil {
     val localhost = InetAddress.getLocalHost.getCanonicalHostName
     val addresses = InetAddress.getAllByName(localhost)
     addresses.toList.flatMap(a => IP.fromString(a.getHostAddress))
-  }
-
-  def main(args: Array[String]): Unit = {
-    println(s"Available? ${isPortAvailable(80)}")
   }
 }
