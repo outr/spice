@@ -1,7 +1,6 @@
 package spice
 
 import org.typelevel.literally.Literally
-import spice.net.PortLiteral
 
 package object net {
   extension (inline ctx: StringContext)
