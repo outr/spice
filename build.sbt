@@ -1,12 +1,13 @@
 name := "spice"
 ThisBuild / organization := "com.outr"
-ThisBuild / version := "0.0.20"
+ThisBuild / version := "0.0.21-SNAPSHOT"
 
 val scala213: String = "2.13.10"
 val scala3: String = "3.2.2"
 
 ThisBuild / scalaVersion := scala213
 ThisBuild / scalacOptions ++= Seq("-deprecation")
+ThisBuild / javacOptions ++= Seq("-source", "1.8", "-target", "1.8")
 ThisBuild / crossScalaVersions := Seq(scala213, scala3)
 
 ThisBuild / sonatypeCredentialHost := "s01.oss.sonatype.org"

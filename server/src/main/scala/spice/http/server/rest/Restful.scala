@@ -7,7 +7,7 @@ import fabric.{Json, Str, arr, obj, str}
 import spice.ValidationError
 import spice.http.content.Content
 import spice.http.server.dsl.{ConnectionFilter, FilterResponse, PathFilter}
-import spice.http.{HttpExchange, HttpStatus}
+import spice.http.{HttpExchange, HttpMethod, HttpStatus}
 import spice.net.{ContentType, URL, URLPath}
 
 import scala.collection.mutable.ListBuffer
@@ -49,43 +49,54 @@ abstract class Restful[Request, Response](implicit val requestRW: RW[Request],
   }
 
   override def handle(exchange: HttpExchange): IO[HttpExchange] = if (accept(exchange)) {
-    // Build JSON
-    val io: IO[RestfulResponse[Response]] = {
-      val json = Restful.jsonFromExchange(exchange)
-      // Decode request
-      val req = json.as[Request]
-      // Validations
-      Restful.validate(req, validations) match {
-        case Left(errors) => {
-          val status = errors.map(_.status).max
-          IO.pure(error(errors, status))
+    if (exchange.request.method == HttpMethod.Options) {
+      exchange.modify { response =>
+        IO {
+          response
+            .withStatus(HttpStatus.OK)
+            .withHeader("Allow", "OPTIONS, GET, POST")
+            .withContent(Content.string("", ContentType.`text/plain`))
         }
-        case Right(request) => try {
-          apply(exchange, request)
-            .timeout(timeout)
-            .handleError { throwable =>
-              scribe.error(s"Error occurred in ${getClass.getName}", throwable)
-              error("An internal error occurred.")
+      }
+    } else {
+      // Build JSON
+      val io: IO[RestfulResponse[Response]] = {
+        val json = Restful.jsonFromExchange(exchange)
+        // Decode request
+        val req = json.as[Request]
+        // Validations
+        Restful.validate(req, validations) match {
+          case Left(errors) => {
+            val status = errors.map(_.status).max
+            IO.pure(error(errors, status))
+          }
+          case Right(request) => try {
+            apply(exchange, request)
+              .timeout(timeout)
+              .handleError { throwable =>
+                scribe.error(s"Error occurred in ${getClass.getName}", throwable)
+                error("An internal error occurred.")
+              }
+          } catch {
+            case t: Throwable => {
+              val err = ValidationError(s"Error while calling restful: ${t.getMessage}", ValidationError.Internal)
+              IO.pure(error(List(err), err.status))
             }
-        } catch {
-          case t: Throwable => {
-            val err = ValidationError(s"Error while calling restful: ${t.getMessage}", ValidationError.Internal)
-            IO.pure(error(List(err), err.status))
           }
         }
       }
-    }
 
-    io.flatMap { result =>
-      // Encode response
-      val responseJsonString = JsonFormatter.Default(result.response.json)
+      io.flatMap { result =>
+        // Encode response
+        val responseJsonString = JsonFormatter.Default(result.response.json)
 
-      // Attach content
-      exchange.modify { httpResponse =>
-        IO {
-          httpResponse
-            .withContent(Content.string(responseJsonString, ContentType.`application/json`))
-            .withStatus(result.status)
+        // Attach content
+        exchange.modify { httpResponse =>
+          IO {
+            httpResponse
+              .withContent(Content.string(responseJsonString, ContentType.`application/json`))
+              .withStatus(result.status)
+          }
         }
       }
     }
