@@ -5,7 +5,7 @@ import io.undertow.io.{IoCallback, Sender}
 import io.undertow.server.HttpServerExchange
 import io.undertow.server.handlers.resource.URLResource
 import io.undertow.util.HttpString
-import spice.http.content.{BytesContent, FileContent, StringContent, URLContent}
+import spice.http.content.{BytesContent, Content, FileContent, URLContent}
 import spice.http.server.HttpServer
 import spice.http.{Headers, HttpExchange, HttpResponse, IOStreamContent, StreamContent}
 
@@ -28,7 +28,7 @@ object UndertowResponseSender {
 
         if (undertow.getRequestMethod.toString != "HEAD") {
           response.content match {
-            case Some(content) => content match {
+            case Some(content) if content != Content.none => content match {
               case fc: FileContent => ResourceServer.serve(undertow, fc)
               case URLContent(url, _, _) =>
                 val resource = new URLResource(url, "")
@@ -66,7 +66,7 @@ object UndertowResponseSender {
                 undertow.startBlocking()
                 val out = undertow.getOutputStream
                 c.stream(out)
-              case StreamContent(stream, contentType, lastModified, length) =>
+              case StreamContent(stream, _, _, _) =>
                 undertow.startBlocking()
                 val out = undertow.getOutputStream
                 stream
@@ -102,16 +102,17 @@ object UndertowResponseSender {
                   }
                 })
             }
-            case None => undertow.getResponseSender.send("", new IoCallback {
-              override def onComplete(exchange: HttpServerExchange, sender: Sender): Unit = {
-                sender.close()
-              }
+            case _ =>
+              undertow.getResponseSender.send("", new IoCallback {
+                override def onComplete(exchange: HttpServerExchange, sender: Sender): Unit = {
+                  sender.close()
+                }
 
-              override def onException(exchange: HttpServerExchange, sender: Sender, exception: IOException): Unit = {
-                sender.close()
-                server.errorLogger(exception, None, None).unsafeRunAndForget()
-              }
-            })
+                override def onException(exchange: HttpServerExchange, sender: Sender, exception: IOException): Unit = {
+                  sender.close()
+                  server.errorLogger(exception, None, None).unsafeRunAndForget()
+                }
+              })
           }
         }
       }.handleErrorWith { throwable =>
@@ -128,18 +129,6 @@ object UndertowResponseSender {
       response = response.withHeader(Headers.Response.`Server`(server.config.name()))
     }
 
-    exchange.response.content.map { content =>
-      // Add Content-Type from Content if not already set on the response
-      if (Headers.`Content-Type`.value(response.headers).isEmpty) {
-        response = response.withHeader(Headers.`Content-Type`(content.contentType))
-      }
-
-      // Set the Content-Length from Content if not already set on the response
-      if (Headers.`Content-Length`.value(response.headers).isEmpty && content.length != -1L) {
-        response = response.withHeader(Headers.`Content-Length`(content.length))
-      }
-
-      response
-    }.getOrElse(exchange.response)
+    exchange.response
   }
 }

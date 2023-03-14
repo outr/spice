@@ -14,10 +14,17 @@ case class HttpResponse(status: HttpStatus = HttpStatus.OK,
   def withHeader(key: String, value: String): HttpResponse = copy(headers = headers.withHeader(key, value))
   def setHeader(header: Header): HttpResponse = copy(headers = headers.setHeader(header))
   def removeHeader(header: HeaderKey): HttpResponse = copy(headers = headers.removeHeader(header))
-  def withContent(content: Content): HttpResponse =
-    copy(content = Some(content))
-      .setHeader(Headers.`Content-Type`(content.contentType))
-      .setHeader(Headers.`Content-Length`(content.length))
+  def withContent(content: Content, updateHeaders: Boolean = true): HttpResponse = {
+    val modified = copy(content = Some(content))
+    if (updateHeaders && content != Content.none) {
+      modified
+        .setHeader(Headers.`Content-Type`(content.contentType))
+        .setHeader(Headers.`Content-Length`(content.length))
+    } else {
+      modified
+    }
+  }
+
   def removeContent(): HttpResponse =
     copy(content = None)
       .removeHeader(Headers.`Content-Type`)
