@@ -55,7 +55,7 @@ abstract class Restful[Request, Response](implicit val requestRW: RW[Request],
           response
             .withStatus(HttpStatus.OK)
             .withHeader("Allow", "OPTIONS, GET, POST")
-            .withContent(Content.string("", ContentType.`text/plain`))
+            .withContent(Content.none)
         }
       }
     } else {
