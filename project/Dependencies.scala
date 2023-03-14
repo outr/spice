@@ -18,7 +18,7 @@ object Dependencies {
     
     val okHttp: String = "4.10.0"
     
-    val undertow: String = "2.2.22.Final"
+    val undertow: String = "2.2.23.Final"
     
     val moduload: String = "1.1.6"
 
