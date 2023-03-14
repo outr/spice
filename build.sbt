@@ -7,7 +7,7 @@ val scala3: String = "3.2.2"
 
 ThisBuild / scalaVersion := scala213
 ThisBuild / scalacOptions ++= Seq("-deprecation")
-ThisBuild / javacOptions ++= Seq("-source", "1.8", "-target", "1.8")
+ThisBuild / javacOptions ++= Seq("-source", "11", "-target", "11")
 ThisBuild / crossScalaVersions := Seq(scala213, scala3)
 
 ThisBuild / sonatypeCredentialHost := "s01.oss.sonatype.org"
