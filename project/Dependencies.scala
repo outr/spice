@@ -22,7 +22,7 @@ object Dependencies {
     
     val moduload: String = "1.1.6"
 
-    val scalaJSDOM: String = "2.3.0"
+    val scalaJSDOM: String = "2.4.0"
 
     val scalaTest: String = "3.2.15"
     
