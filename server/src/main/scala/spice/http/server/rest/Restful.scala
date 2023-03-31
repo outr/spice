@@ -16,6 +16,8 @@ import scala.language.experimental.macros
 
 abstract class Restful[Request, Response](implicit val requestRW: RW[Request],
                                           val responseRW: RW[Response]) extends ConnectionFilter {
+  protected def allowGet: Boolean = true
+
   def pathOption: Option[URLPath] = None
 
   def apply(exchange: HttpExchange, request: Request): IO[RestfulResponse[Response]]
@@ -43,9 +45,17 @@ abstract class Restful[Request, Response](implicit val requestRW: RW[Request],
     IO.pure(FilterResponse.Stop(exchange))
   }
 
-  private def accept(exchange: HttpExchange): Boolean = pathOption match {
-    case Some(p) => p == exchange.request.url.path
-    case None => true
+  private lazy val acceptedMethods = List("OPTIONS", "POST") ::: (if (allowGet) List("GET") else Nil)
+
+  private def accept(exchange: HttpExchange): Boolean = {
+    if (acceptedMethods.contains(exchange.request.method)) {
+      pathOption match {
+        case Some(p) => p == exchange.request.url.path
+        case None => true
+      }
+    } else {
+      false
+    }
   }
 
   override def handle(exchange: HttpExchange): IO[HttpExchange] = if (accept(exchange)) {
@@ -54,7 +64,7 @@ abstract class Restful[Request, Response](implicit val requestRW: RW[Request],
         IO {
           response
             .withStatus(HttpStatus.OK)
-            .withHeader("Allow", "OPTIONS, GET, POST")
+            .withHeader("Allow", acceptedMethods.mkString(", "))
             .withContent(Content.none)
         }
       }
