@@ -45,7 +45,8 @@ abstract class Restful[Request, Response](implicit val requestRW: RW[Request],
     IO.pure(FilterResponse.Stop(exchange))
   }
 
-  private lazy val acceptedMethods = List("OPTIONS", "POST") ::: (if (allowGet) List("GET") else Nil)
+  protected lazy val acceptedMethods: List[HttpMethod] =
+    List(HttpMethod.Options, HttpMethod.Post) ::: (if (allowGet) List(HttpMethod.Get) else Nil)
 
   private def accept(exchange: HttpExchange): Boolean = {
     if (acceptedMethods.contains(exchange.request.method)) {
