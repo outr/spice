@@ -239,6 +239,8 @@ case class HttpClient(request: HttpRequest,
     }
   }
 
+  def webSocket(url: URL): WebSocket = instance.webSocket(url)
+
   def dispose(): IO[Unit] = implementation.dispose()
 }
 
