@@ -4,8 +4,8 @@ import cats.effect.IO
 import moduload.Moduload
 import spice.ajax.{AjaxAction, AjaxRequest}
 import spice.http.content.{Content, StringContent}
-import spice.http.{Headers, HttpRequest, HttpResponse, HttpStatus}
-import spice.net.ContentType
+import spice.http.{Headers, HttpRequest, HttpResponse, HttpStatus, WebSocket}
+import spice.net.{ContentType, URL}
 
 import scala.concurrent.duration.FiniteDuration
 import scala.util.{Failure, Success, Try}
@@ -37,10 +37,9 @@ class JSHttpClientInstance(client: HttpClient) extends HttpClientInstance {
         }
         val content = xmlHttpRequest.responseType match {
           case null => None
-          case _ => {
+          case _ =>
             val `type` = if (xmlHttpRequest.responseType == "") ContentType.`text/plain` else ContentType.parse(xmlHttpRequest.responseType)
             Some(Content.string(xmlHttpRequest.responseText, `type`))
-          }
         }
         Success(HttpResponse(
           status = HttpStatus(xmlHttpRequest.status, xmlHttpRequest.statusText),
@@ -49,6 +48,8 @@ class JSHttpClientInstance(client: HttpClient) extends HttpClientInstance {
         ))
     }
   }
+
+  override def webSocket(url: URL): WebSocket = new JSWebSocketClient(url)
 
   override def dispose(): IO[Unit] = IO.unit
 }

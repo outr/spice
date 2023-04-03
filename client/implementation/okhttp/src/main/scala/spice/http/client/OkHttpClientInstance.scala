@@ -7,7 +7,7 @@ import okhttp3.{Authenticator, Request, Response, Route}
 import spice.http.content.FormDataEntry.{FileEntry, StringEntry}
 import spice.http.content._
 import spice.http._
-import spice.net.ContentType
+import spice.net.{ContentType, URL}
 import spice.streamer._
 
 import java.io.{File, IOException}
@@ -240,6 +240,8 @@ class OkHttpClientInstance(client: HttpClient) extends HttpClientInstance {
   private def contentToBytes(contentType: ContentType, contentLength: Option[Long]): Boolean = {
     contentLength.exists(l => l > 0L && l < 512000L)
   }
+
+  override def webSocket(url: URL): WebSocket = new OkHttpWebSocket(url, instance)
 
   override def dispose(): IO[Unit] = for {
     _ <- IO(Try(instance.dispatcher().executorService().shutdown()))
