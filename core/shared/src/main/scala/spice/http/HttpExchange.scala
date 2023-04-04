@@ -16,5 +16,21 @@ case class HttpExchange(request: HttpRequest,
     IO.pure(response.withContent(content))
   }
 
+  def isWebSocketUpgradeRequest: Boolean = Headers.`Connection`.all(request.headers).contains("Upgrade")
+
+  def webSocketListener: Option[WebSocketListener] = store.get[WebSocketListener](WebSocketListener.key)
+
+  def withWebSocketListener(): IO[(HttpExchange, WebSocketListener)] = {
+    if (isWebSocketUpgradeRequest) {
+      val listener = new WebSocketListener
+      store.update(WebSocketListener.key, listener)
+      modify { response =>
+        IO(response.withStatus(HttpStatus.SwitchingProtocols))
+      }.map(exchange => (exchange, listener))
+    } else {
+      throw new RuntimeException(s"Not a WebSocket upgrade request! Expected 'Connection' set to 'Upgrade'. Headers: ${request.headers}")
+    }
+  }
+
   def finish(): HttpExchange = copy(finished = true)
 }

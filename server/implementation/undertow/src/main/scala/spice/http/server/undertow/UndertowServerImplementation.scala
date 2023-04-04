@@ -39,9 +39,8 @@ class UndertowServerImplementation(server: HttpServer) extends HttpServerImpleme
           val sslContext = SSLUtil.createSSLContext(keyStore.location, keyStore.password)
           builder.addHttpsListener(port, host, sslContext)
         } catch {
-          case t: Throwable => {
+          case t: Throwable =>
             throw new RuntimeException(s"Error loading HTTPS, host: $host, port: $port, keyStore: ${keyStore.path}", t)
-          }
         }
       }
       case listener => throw new UnsupportedOperationException(s"Unsupported listener: $listener")
@@ -80,7 +79,10 @@ class UndertowServerImplementation(server: HttpServer) extends HttpServerImpleme
             server.handle(exchange)
               .redeemWith(server.errorRecovery(exchange, _), IO.pure)
           }.flatMap { exchange =>
-            UndertowResponseSender(undertow, server, exchange)
+            exchange.webSocketListener match {
+              case Some(webSocketListener) => UndertowWebSocketHandler(undertow, server, exchange, webSocketListener)
+              case None => UndertowResponseSender(undertow, server, exchange)
+            }
           }.redeemWith({ throwable =>
             scribe.error("Unrecoverable error parsing request!", throwable)
             throw throwable
