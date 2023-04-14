@@ -5,7 +5,7 @@ import spice.net.{URLPath, URL}
 
 trait ServerSocketListener {
   def host: String
-  def port: Int
+  def port: Option[Int]
   def enabled: Boolean
   def basePath: URLPath
   def urls: List[URL]

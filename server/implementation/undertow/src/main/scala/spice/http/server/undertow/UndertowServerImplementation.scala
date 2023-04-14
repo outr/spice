@@ -16,6 +16,8 @@ import spice.net.{MalformedURLException, URL}
 import java.util.logging.LogManager
 import cats.effect.unsafe.implicits.global
 
+import scala.jdk.CollectionConverters.ListHasAsScala
+
 class UndertowServerImplementation(server: HttpServer) extends HttpServerImplementation with UndertowHttpHandler {
   private val instance: Var[Option[Undertow]] = Var(None)
 
@@ -32,12 +34,12 @@ class UndertowServerImplementation(server: HttpServer) extends HttpServerImpleme
 
     server.config.listeners.foreach {
       case HttpServerListener(host, port, enabled, _, _) => if (enabled) {
-        builder.addHttpListener(port, host)
+        builder.addHttpListener(port.getOrElse(0), host)
       }
       case HttpsServerListener(host, port, keyStore, enabled, _, _) => if (enabled) {
         try {
           val sslContext = SSLUtil.createSSLContext(keyStore.location, keyStore.password)
-          builder.addHttpsListener(port, host, sslContext)
+          builder.addHttpsListener(port.getOrElse(0), host, sslContext)
         } catch {
           case t: Throwable =>
             throw new RuntimeException(s"Error loading HTTPS, host: $host, port: $port, keyStore: ${keyStore.path}", t)
@@ -48,6 +50,27 @@ class UndertowServerImplementation(server: HttpServer) extends HttpServerImpleme
     val u = builder.build()
     try {
       u.start()
+      val urls = u.getListenerInfo.asScala.map { info =>
+        val address = s"${info.getProtcol}:/${info.getAddress}"
+        URL.parse(address)
+      }
+      server.config.listeners @= server.config.listeners().zip(urls).map {
+        case (listener, url) =>
+          val host = if (listener.host == "0.0.0.0") {
+            url.host
+          } else {
+            listener.host
+          }
+          val port = if (listener.port.isEmpty) {
+            Some(url.port)
+          } else {
+            listener.port
+          }
+          listener match {
+            case l: HttpServerListener => l.copy(host = host, port = port)
+            case l: HttpsServerListener => l.copy(host = host, port = port)
+          }
+      }
     } catch {
       case t: Throwable => throw ServerStartException(t.getMessage, server.config.listeners(), t)
     }

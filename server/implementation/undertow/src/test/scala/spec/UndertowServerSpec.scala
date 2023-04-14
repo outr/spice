@@ -11,6 +11,7 @@ import spice.http.client.HttpClient
 import spice.http._
 import spice.http.content.Content
 import spice.http.server.MutableHttpServer
+import spice.http.server.config.HttpServerListener
 import spice.http.server.dsl._
 import spice.http.server.rest.{Restful, RestfulResponse}
 import spice.net._
@@ -107,6 +108,19 @@ class UndertowServerSpec extends AsyncWordSpec with AsyncIOSpec with Matchers {
         .map { result =>
           result should be("testtesttest")
         }
+    }
+    "start an adhoc server on any available port and make sure it propagates back" in {
+      val testServer = new MutableHttpServer
+      testServer.config
+        .clearListeners()
+        .addListeners(HttpServerListener(port = None))
+        .addListeners(HttpServerListener(port = Some(8181)))
+      testServer.start().flatMap { _ =>
+        testServer.config.listeners().head.port should not be None
+        testServer.config.listeners().head.port should not be Some(8181)
+        testServer.config.listeners().last.port should be(Some(8181))
+        testServer.stop()
+      }
     }
     "stop the server" in {
       server.stop().map { _ =>
