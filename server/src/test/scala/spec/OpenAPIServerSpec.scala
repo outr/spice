@@ -42,13 +42,13 @@ class OpenAPIServerSpec extends AsyncWordSpec with AsyncIOSpec with Matchers {
       .addListeners(
         HttpServerListener(
           host = "api.example.com",
-          port = 80,
+          port = Some(80),
           basePath = path"/v1",
           description = Some("Optional server description, e.g. Main (production) server")
         ),
         HttpServerListener(
           host = "staging-api.example.com",
-          port = 80,
+          port = Some(80),
           description = Some("Optional server description, e.g. Internal staging server for testing")
         )
       )
