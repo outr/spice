@@ -31,7 +31,6 @@ object OkHttpClientImplementation extends Moduload with HttpClientImplementation
   override protected def createInstance(client: HttpClient): HttpClientInstance = new OkHttpClientInstance(client)
 
   override def load(): Unit = {
-    scribe.info(s"Registering OkHttpClientImplementation...")
     HttpClientImplementationManager.register(_ => this)
   }
 

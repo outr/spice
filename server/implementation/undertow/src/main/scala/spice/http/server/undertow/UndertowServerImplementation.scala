@@ -125,7 +125,6 @@ object UndertowServerImplementation extends Moduload {
     LogManager.getLogManager.reset()
     Logger.system.installJUL()
 
-    scribe.info(s"Registering UndertowServerImplementation...")
     HttpServerImplementationManager.register(new UndertowServerImplementation(_))
   }
 
