@@ -10,7 +10,7 @@ object Dependencies {
     
     val reactify: String = "4.0.8"
     
-    val cats: String = "3.4.8"
+    val cats: String = "3.4.9"
     
     val fs2: String = "3.6.1"
     
