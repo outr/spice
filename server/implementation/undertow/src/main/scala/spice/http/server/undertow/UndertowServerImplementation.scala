@@ -52,24 +52,33 @@ class UndertowServerImplementation(server: HttpServer) extends HttpServerImpleme
       u.start()
       val urls = u.getListenerInfo.asScala.map { info =>
         val address = s"${info.getProtcol}:/${info.getAddress}"
-        URL.parse(address)
+        try {
+          Some(URL.parse(address))
+        } catch {
+          case t: Throwable =>
+            scribe.error(s"Failed to parse $address", t)
+            None
+        }
       }
       server.config.listeners @= server.config.listeners().zip(urls).map {
-        case (listener, url) =>
-          val host = if (listener.host == "0.0.0.0") {
-            url.host
-          } else {
-            listener.host
-          }
-          val port = if (listener.port.isEmpty) {
-            Some(url.port)
-          } else {
-            listener.port
-          }
-          listener match {
-            case l: HttpServerListener => l.copy(host = host, port = port)
-            case l: HttpsServerListener => l.copy(host = host, port = port)
-          }
+        case (listener, urlOption) => urlOption match {
+          case Some(url) =>
+            val host = if (listener.host == "0.0.0.0") {
+              url.host
+            } else {
+              listener.host
+            }
+            val port = if (listener.port.isEmpty) {
+              Some(url.port)
+            } else {
+              listener.port
+            }
+            listener match {
+              case l: HttpServerListener => l.copy(host = host, port = port)
+              case l: HttpsServerListener => l.copy(host = host, port = port)
+            }
+          case None => listener
+        }
       }
     } catch {
       case t: Throwable => throw ServerStartException(t.getMessage, server.config.listeners(), t)
