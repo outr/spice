@@ -1,7 +1,7 @@
 package spice
 
 import java.io.{ByteArrayInputStream, File, FileInputStream, FileOutputStream, IOException, InputStream, OutputStream}
-import java.net.{HttpURLConnection, URL}
+import java.net.{HttpURLConnection, URL, URLConnection}
 import java.nio.file.Path
 import scala.annotation.tailrec
 import scala.collection.mutable
@@ -43,23 +43,29 @@ package object streamer {
 
   @tailrec
   private def urlInputStream(url: URL, redirects: Set[String]): InputStreamReader = {
-    val exchange: HttpURLConnection = url.openConnection().asInstanceOf[HttpURLConnection]
-    exchange.getResponseCode match {
-      case code if !Set(HttpURLConnection.HTTP_MOVED_TEMP, HttpURLConnection.HTTP_MOVED_PERM, HttpURLConnection.HTTP_SEE_OTHER).contains(code) =>
-        val len = exchange.getContentLengthLong
-        new InputStreamReader(exchange.getInputStream) {
-          override def length: Option[Long] = len match {
-            case _ if len < 0 => None
-            case _ => Some(len)
-          }
+    val exchange: URLConnection = url.openConnection()
+    val redirect = exchange match {
+      case c: HttpURLConnection => c.getResponseCode match {
+        case code if Set(HttpURLConnection.HTTP_MOVED_TEMP, HttpURLConnection.HTTP_MOVED_PERM, HttpURLConnection.HTTP_SEE_OTHER).contains(code) => true
+        case _ => false
+      }
+      case _ => false
+    }
+    if (!redirect) {
+      val len = exchange.getContentLengthLong
+      new InputStreamReader(exchange.getInputStream) {
+        override def length: Option[Long] = len match {
+          case _ if len < 0 => None
+          case _ => Some(len)
         }
-      case _ =>
-        val redirectURL = exchange.getHeaderField("Location")
-        if (redirects.contains(redirectURL)) {
-          throw new IOException(s"Redirect loop detected: ${redirects.mkString(", ")}")
-        }
-        scribe.warn(s"Download URL redirecting from $url to $redirectURL")
-        urlInputStream(new URL(redirectURL), redirects + url.toString)
+      }
+    } else {
+      val redirectURL = exchange.getHeaderField("Location")
+      if (redirects.contains(redirectURL)) {
+        throw new IOException(s"Redirect loop detected: ${redirects.mkString(", ")}")
+      }
+      scribe.warn(s"Download URL redirecting from $url to $redirectURL")
+      urlInputStream(new URL(redirectURL), redirects + url.toString)
     }
   }
 
