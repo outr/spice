@@ -1,6 +1,8 @@
 package spice.http.content
 
+import cats.effect.IO
 import cats.effect.unsafe.implicits.global
+import fs2.io.file.{Files, Path}
 import spice.net.ContentType
 import spice.streamer._
 
@@ -20,4 +22,6 @@ case class FileContent(file: File, contentType: ContentType, lastModifiedOverrid
   override def toString: String = s"FileContent(file: ${file.getAbsolutePath}, contentType: $contentType)"
 
   override def asString: String = Streamer(file, new mutable.StringBuilder).unsafeRunSync().toString
+
+  override def asStream: fs2.Stream[IO, Byte] = Files[IO].readAll(Path.fromNioPath(file.toPath))
 }

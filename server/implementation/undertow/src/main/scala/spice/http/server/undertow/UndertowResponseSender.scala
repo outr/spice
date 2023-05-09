@@ -5,9 +5,9 @@ import io.undertow.io.{IoCallback, Sender}
 import io.undertow.server.HttpServerExchange
 import io.undertow.server.handlers.resource.URLResource
 import io.undertow.util.HttpString
-import spice.http.content.{BytesContent, Content, FileContent, URLContent}
+import spice.http.content.{BytesContent, Content, FileContent, IOStreamContent, StreamContent, URLContent}
 import spice.http.server.HttpServer
-import spice.http.{Headers, HttpExchange, HttpResponse, IOStreamContent, StreamContent}
+import spice.http.{Headers, HttpExchange, HttpResponse}
 
 import java.io.IOException
 import java.nio.ByteBuffer

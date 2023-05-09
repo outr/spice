@@ -1,5 +1,6 @@
 package spice.http.content
 
+import cats.effect.IO
 import fabric.Json
 import fabric.io.JsonFormatter
 import fabric.rw._
@@ -17,6 +18,9 @@ case class JsonContent(json: Json,
   override def withLastModified(lastModified: Long): Content = copy(lastModified = lastModified)
 
   override def asString: String = value
+
+  override def asStream: fs2.Stream[IO, Byte] =
+    fs2.Stream.fromIterator[IO](asString.getBytes("UTF-8").iterator, 1024)
 }
 
 object JsonContent {

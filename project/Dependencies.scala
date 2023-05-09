@@ -37,6 +37,7 @@ object Dependencies {
 	val reactify: ModuleID = "com.outr" %% "reactify" % version.reactify
 	val catsEffect: ModuleID = "org.typelevel" %% "cats-effect" % version.cats
 	val fs2: ModuleID = "co.fs2" %% "fs2-core" % version.fs2
+  val fs2IO: ModuleID = "co.fs2" %% "fs2-io" % version.fs2
 	val literally: ModuleID = "org.typelevel" %% "literally" % version.literally
 	val okHttp: ModuleID = "com.squareup.okhttp3" % "okhttp" % version.okHttp
 	val undertow: ModuleID = "io.undertow" % "undertow-core" % version.undertow

@@ -1,7 +1,7 @@
-package spice.http
+package spice.http.content
 
 import cats.effect.IO
-import spice.http.content.Content
+import cats.effect.unsafe.implicits.global
 import spice.net.ContentType
 
 case class StreamContent(stream: fs2.Stream[IO, Byte],
@@ -11,5 +11,12 @@ case class StreamContent(stream: fs2.Stream[IO, Byte],
   override def withContentType(contentType: ContentType): Content = copy(contentType = contentType)
   override def withLastModified(lastModified: Long): Content = copy(lastModified = lastModified)
 
-  override def asString: String = throw new RuntimeException("StreamContent cannot be converted to String")
+  override def asString: String = stream
+    .compile
+    .toList
+    .map(_.toArray)
+    .map(array => new String(array, "UTF-8"))
+    .unsafeRunSync()
+
+  override def asStream: fs2.Stream[IO, Byte] = stream
 }

@@ -1,5 +1,6 @@
 package spice.http.content
 
+import cats.effect.IO
 import cats.effect.unsafe.implicits.global
 import spice.net.ContentType
 import spice.streamer._
@@ -30,4 +31,6 @@ case class URLContent(url: URL, contentType: ContentType, lastModifiedOverride: 
   override def toString: String = s"URLContent(url: $url, contentType: $contentType)"
 
   override def asString: String = Streamer(url, new mutable.StringBuilder).unsafeRunSync().toString
+
+  override def asStream: fs2.Stream[IO, Byte] = fs2.io.readInputStream[IO](IO(url.openStream()), 1024)
 }

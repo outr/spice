@@ -1,12 +1,11 @@
-package spice.http
+package spice.http.content
 
 import cats.effect.unsafe.implicits.global
+import spice.net.ContentType
+import spice.streamer._
 
 import java.io.OutputStream
 import java.util.zip.{ZipEntry, ZipOutputStream}
-import spice.http.content.Content
-import spice.net.ContentType
-import spice.streamer._
 
 class IOStreamZipContent(entries: List[ZipFileEntry],
                          lastModified: Long = System.currentTimeMillis(),

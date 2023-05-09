@@ -1,5 +1,6 @@
 package spice.http.content
 
+import cats.effect.IO
 import spice.net.ContentType
 
 trait Content {
@@ -10,6 +11,7 @@ trait Content {
   def withContentType(contentType: ContentType): Content
   def withLastModified(lastModified: Long): Content
   def asString: String
+  def asStream: fs2.Stream[IO, Byte]
 }
 
 object Content extends SharedContentHelpers with ContentHelpers {
@@ -20,6 +22,7 @@ object Content extends SharedContentHelpers with ContentHelpers {
     override def withContentType(contentType: ContentType): Content = this
     override def withLastModified(lastModified: Long): Content = this
     override def asString: String = "none"
+    override def asStream: fs2.Stream[IO, Byte] = fs2.Stream.empty
   }
 }
 

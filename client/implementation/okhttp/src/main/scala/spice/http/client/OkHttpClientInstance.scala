@@ -169,21 +169,29 @@ class OkHttpClientInstance(client: HttpClient) extends HttpClientInstance {
       case JsonContent(json, compact, contentType, _) =>
         val jsonString = if (compact) JsonFormatter.Compact(json) else JsonFormatter.Default(json)
         okhttp3.RequestBody.create(jsonString, ct(contentType))
-      case FormDataContent(data) => {
+      case FormDataContent(data) =>
         val form = new okhttp3.MultipartBody.Builder()
         form.setType(ct(ContentType.`multipart/form-data`))
         data.foreach {
           case FormData(key, entries) => entries.foreach {
             case StringEntry(value, _) => form.addFormDataPart(key, value)
-            case FileEntry(fileName, file, headers) => {
+            case FileEntry(fileName, file, headers) =>
               val partType = Headers.`Content-Type`.value(headers).getOrElse(ContentType.`application/octet-stream`)
               val part = okhttp3.RequestBody.create(file, ct(partType))
               form.addFormDataPart(key, fileName, part)
-            }
           }
         }
         form.build()
-      }
+      case URLContent(url, contentType, _) =>
+        val conn = url.openConnection()
+        val length = conn.getContentLength
+        val input = conn.getInputStream
+        try {
+          val bytes = input.readNBytes(length)
+          okhttp3.RequestBody.create(bytes, ct(contentType))
+        } finally {
+          Try(input.close())
+        }
       case c => throw new RuntimeException(s"Unsupported request content: $c")
     }.getOrElse {
       if (request.method != HttpMethod.Get) {

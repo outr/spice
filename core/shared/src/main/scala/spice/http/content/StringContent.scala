@@ -1,5 +1,6 @@
 package spice.http.content
 
+import cats.effect.IO
 import spice.net.ContentType
 
 case class StringContent(value: String, contentType: ContentType, lastModified: Long = System.currentTimeMillis()) extends Content {
@@ -11,4 +12,6 @@ case class StringContent(value: String, contentType: ContentType, lastModified: 
   override def toString: String = s"StringContent(${value.take(100)}, contentType: $contentType)"
 
   override def asString: String = value
+
+  override def asStream: fs2.Stream[IO, Byte] = fs2.Stream.fromIterator[IO](asString.getBytes("UTF-8").iterator, 1024)
 }

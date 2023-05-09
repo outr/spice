@@ -1,4 +1,4 @@
-package spice.http
+package spice.http.content
 
 import java.io.File
 

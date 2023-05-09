@@ -1,18 +1,14 @@
 package spice.http.server.undertow
 
 import cats.effect.IO
-import cats.effect.unsafe.implicits.global
 import io.undertow.server.HttpServerExchange
 import io.undertow.server.handlers.form.{FormDataParser, FormParserFactory}
 import io.undertow.util.HeaderMap
 import org.xnio.streams.ChannelInputStream
-import spice.http.content.{Content, FormData, FormDataContent, FormDataEntry, StringContent}
+import spice.http.content.{Content, FormData, FormDataContent, FormDataEntry, StreamContent, StringContent}
 import spice.http.content.FormDataEntry.{FileEntry, StringEntry}
 import spice.http.{Headers, HttpMethod, HttpRequest}
 import spice.net.{ContentType, IP, URL}
-import spice.streamer._
-
-import scala.collection.mutable
 import scala.jdk.CollectionConverters.IterableHasAsScala
 
 object UndertowRequestParser {
@@ -48,9 +44,11 @@ object UndertowRequestParser {
           }
           Some(FormDataContent(data))
         case ct =>
-          val cis = new ChannelInputStream(exchange.getRequestChannel)
-          val data = Streamer(cis, new mutable.StringBuilder).unsafeRunSync().toString
-          Some(StringContent(data, ct))
+          val stream = fs2.io.readInputStream[IO](
+            fis = IO(new ChannelInputStream(exchange.getRequestChannel)),
+            chunkSize = 1024
+          )
+          Some(StreamContent(stream, ct))
       }
     } else {
       None
