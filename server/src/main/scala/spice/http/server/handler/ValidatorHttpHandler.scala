@@ -1,13 +1,14 @@
 package spice.http.server.handler
 
 import cats.effect.IO
+import scribe.data.MDC
 import spice.http.content.Content
 import spice.http.{HttpExchange, HttpStatus}
 import spice.http.server.validation.ValidationResult.{Continue, Redirect}
 import spice.http.server.validation.{ValidationResult, Validator}
 
 class ValidatorHttpHandler(validators: List[Validator]) extends HttpHandler {
-  override def handle(exchange: HttpExchange): IO[HttpExchange] = {
+  override def handle(exchange: HttpExchange)(implicit mdc: MDC): IO[HttpExchange] = {
     ValidatorHttpHandler.validate(exchange, validators).map(_.exchange)
   }
 }

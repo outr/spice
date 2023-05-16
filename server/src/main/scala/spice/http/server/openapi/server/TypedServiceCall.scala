@@ -2,6 +2,7 @@ package spice.http.server.openapi.server
 
 import cats.effect.IO
 import fabric.rw.RW
+import scribe.data.MDC
 
 case class TypedServiceCall[Req, Res](call: ServiceRequest[Req] => IO[ServiceResponse[Res]],
                                       summary: String,
@@ -17,5 +18,6 @@ case class TypedServiceCall[Req, Res](call: ServiceRequest[Req] => IO[ServiceRes
   override type Request = Req
   override type Response = Res
 
-  override def apply(request: ServiceRequest[Request]): IO[ServiceResponse[Response]] = call(request)
+  override def apply(request: ServiceRequest[Request])
+                    (implicit mdc: MDC): IO[ServiceResponse[Response]] = call(request)
 }

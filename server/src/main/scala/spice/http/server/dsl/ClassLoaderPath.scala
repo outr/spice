@@ -1,6 +1,7 @@
 package spice.http.server.dsl
 
 import cats.effect.IO
+import scribe.data.MDC
 import spice.http.HttpExchange
 import spice.http.content.Content
 import spice.http.server.handler.SenderHandler
@@ -14,7 +15,8 @@ case class ClassLoaderPath(classPathRoot: String = "",
     classPathRoot
   }
 
-  override def apply(exchange: HttpExchange): IO[FilterResponse] = if (exchange.response.content.isEmpty || replaceExistingContent) {
+  override def apply(exchange: HttpExchange)
+                    (implicit mdc: MDC): IO[FilterResponse] = if (exchange.response.content.isEmpty || replaceExistingContent) {
     val path = pathTransform(exchange.request.url.path.decoded)
     val resourcePath = s"$dir$path" match {
       case s if s.startsWith("/") => s.substring(1)

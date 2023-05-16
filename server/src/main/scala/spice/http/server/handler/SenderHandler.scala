@@ -1,6 +1,7 @@
 package spice.http.server.handler
 
 import cats.effect.IO
+import scribe.data.MDC
 import spice.http.content.Content
 import spice.http.{Headers, HttpExchange}
 
@@ -8,7 +9,7 @@ case class SenderHandler(content: Content,
                          length: Option[Long] = None,
                          caching: CachingManager = CachingManager.Default,
                          replace: Boolean = false) extends HttpHandler {
-  override def handle(exchange: HttpExchange): IO[HttpExchange] =
+  override def handle(exchange: HttpExchange)(implicit mdc: MDC): IO[HttpExchange] =
     SenderHandler.handle(exchange, content, length, caching, replace)
 }
 

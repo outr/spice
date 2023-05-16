@@ -2,6 +2,7 @@ package spice.http.server
 
 import cats.effect.IO
 import fabric.rw._
+import scribe.data.MDC
 import spice.http.content.Content
 import spice.http.server.handler._
 import spice.http.server.rest.Restful
@@ -17,7 +18,7 @@ package object dsl {
   implicit class ValidatorFilter(val validator: Validator) extends ConnectionFilter {
     private lazy val list = List(validator)
 
-    override def apply(exchange: HttpExchange): IO[FilterResponse] = {
+    override def apply(exchange: HttpExchange)(implicit mdc: MDC): IO[FilterResponse] = {
       ValidatorHttpHandler.validate(exchange, list).map {
         case ValidationResult.Continue(c) => FilterResponse.Continue(c)
         case vr => FilterResponse.Stop(vr.exchange)
@@ -48,7 +49,7 @@ package object dsl {
 //  })
 
   implicit class StringFilter(val s: String) extends ConnectionFilter {
-    override def apply(exchange: HttpExchange): IO[FilterResponse] = IO {
+    override def apply(exchange: HttpExchange)(implicit mdc: MDC): IO[FilterResponse] = IO {
       PathPart.take(exchange, s) match {
         case Some(c) => FilterResponse.Continue(c)
         case None => FilterResponse.Stop(exchange)
@@ -78,7 +79,7 @@ package object dsl {
   }
 
   def redirect(path: URLPath): ConnectionFilter = new ConnectionFilter {
-    override def apply(exchange: HttpExchange): IO[FilterResponse] = {
+    override def apply(exchange: HttpExchange)(implicit mdc: MDC): IO[FilterResponse] = {
       HttpHandler.redirect(exchange, path.encoded).map { redirected =>
         FilterResponse.Continue(redirected)
       }

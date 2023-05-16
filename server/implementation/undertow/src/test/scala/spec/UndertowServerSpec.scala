@@ -6,6 +6,7 @@ import fabric.rw._
 import org.scalatest.matchers.should.Matchers
 import org.scalatest.wordspec.AsyncWordSpec
 import profig.Profig
+import scribe.data.MDC
 import spice.ValidationError
 import spice.http.client.HttpClient
 import spice.http._
@@ -23,9 +24,8 @@ class UndertowServerSpec extends AsyncWordSpec with AsyncIOSpec with Matchers {
 
     "configure the server" in {
       Profig.initConfiguration()
-      server.handler.matcher(paths.exact("/test.txt")).wrap(_.modify { response =>
-        IO(response.withContent(Content.string("test!", ContentType.`text/plain`)))
-      })
+      server.handler.matcher(paths.exact("/test.txt"))
+        .content(Content.string("test!", ContentType.`text/plain`))
       server.handler(
         List(
           path"/test/reverse" / ReverseService,
@@ -142,7 +142,8 @@ class UndertowServerSpec extends AsyncWordSpec with AsyncIOSpec with Matchers {
   }
 
   object ReverseService extends Restful[ReverseRequest, ReverseResponse] {
-    override def apply(exchange: HttpExchange, request: ReverseRequest): IO[RestfulResponse[ReverseResponse]] = {
+    override def apply(exchange: HttpExchange, request: ReverseRequest)
+                      (implicit mdc: MDC): IO[RestfulResponse[ReverseResponse]] = {
       IO.pure(RestfulResponse(ReverseResponse(Some(request.value.reverse), Nil), HttpStatus.OK))
     }
 
@@ -152,7 +153,8 @@ class UndertowServerSpec extends AsyncWordSpec with AsyncIOSpec with Matchers {
   }
 
   object LettersOnlyService extends Restful[String, String] {
-    override def apply(exchange: HttpExchange, text: String): IO[RestfulResponse[String]] = {
+    override def apply(exchange: HttpExchange, text: String)
+                      (implicit mdc: MDC): IO[RestfulResponse[String]] = {
       IO.pure(RestfulResponse[String](text.filter((c: Char) => c.isLetter), HttpStatus.OK))
     }
 
@@ -161,7 +163,8 @@ class UndertowServerSpec extends AsyncWordSpec with AsyncIOSpec with Matchers {
   }
 
   object ServerTimeService extends Restful[Unit, Long] {
-    override def apply(exchange: HttpExchange, request: Unit): IO[RestfulResponse[Long]] = {
+    override def apply(exchange: HttpExchange, request: Unit)
+                      (implicit mdc: MDC): IO[RestfulResponse[Long]] = {
       IO.pure(RestfulResponse(System.currentTimeMillis(), HttpStatus.OK))
     }
 

@@ -1,6 +1,7 @@
 package spice.http.server.openapi.server
 
 import cats.effect.IO
+import scribe.data.MDC
 import spice.http.HttpExchange
 import spice.http.server.HttpServer
 import spice.http.server.openapi._
@@ -39,7 +40,7 @@ trait OpenAPIServer extends HttpServer {
 
   def services: List[Service]
 
-  override def apply(exchange: HttpExchange): IO[HttpExchange] = services
+  override def apply(exchange: HttpExchange)(implicit mdc: MDC): IO[HttpExchange] = services
     .to(LazyList)
     .flatMap(_(exchange))
     .headOption match {

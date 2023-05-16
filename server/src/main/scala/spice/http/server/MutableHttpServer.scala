@@ -2,6 +2,7 @@ package spice.http.server
 
 import cats.effect.IO
 import reactify.Var
+import scribe.data.MDC
 import spice.ItemContainer
 import spice.http.{HttpExchange, HttpStatus}
 import spice.http.server.handler.{HttpHandler, HttpHandlerBuilder}
@@ -20,9 +21,9 @@ class MutableHttpServer extends HttpServer {
 
   object handlers extends ItemContainer[HttpHandler]
 
-  override final def apply(exchange: HttpExchange): IO[HttpExchange] = handleInternal(exchange)
+  override final def apply(exchange: HttpExchange)(implicit mdc: MDC): IO[HttpExchange] = handleInternal(exchange)
 
-  protected def handleInternal(exchange: HttpExchange): IO[HttpExchange] = {
+  protected def handleInternal(exchange: HttpExchange)(implicit mdc: MDC): IO[HttpExchange] = {
     handleRecursive(exchange, handlers()).flatMap { updated =>
       // NotFound handling
       if (updated.response.content.isEmpty && updated.response.status == HttpStatus.OK) {
@@ -37,7 +38,8 @@ class MutableHttpServer extends HttpServer {
     }
   }
 
-  private def handleRecursive(exchange: HttpExchange, handlers: List[HttpHandler]): IO[HttpExchange] = {
+  private def handleRecursive(exchange: HttpExchange, handlers: List[HttpHandler])
+                             (implicit mdc: MDC): IO[HttpExchange] = {
     if (exchange.finished || handlers.isEmpty) {
       IO.pure(exchange) // Finished
     } else {

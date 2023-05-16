@@ -2,6 +2,7 @@ package spice.http.server.handler
 
 import cats.effect.IO
 import scribe.cats.{io => logger}
+import scribe.data.MDC
 import spice.http.{HttpExchange, HttpStatus}
 import spice.http.content.Content
 import spice.net.ContentType
@@ -9,7 +10,7 @@ import spice.net.ContentType
 trait LifecycleHandler extends HttpHandler {
   protected def preHandle(exchange: HttpExchange): IO[HttpExchange]
 
-  protected def apply(exchange: HttpExchange): IO[HttpExchange]
+  protected def apply(exchange: HttpExchange)(implicit mdc: MDC): IO[HttpExchange]
 
   protected def postHandle(exchange: HttpExchange): IO[HttpExchange]
 
@@ -38,7 +39,7 @@ trait LifecycleHandler extends HttpHandler {
 
   protected def notFoundContent: IO[Content] = IO.pure(LifecycleHandler.DefaultNotFound)
 
-  override final def handle(exchange: HttpExchange): IO[HttpExchange] = {
+  override final def handle(exchange: HttpExchange)(implicit mdc: MDC): IO[HttpExchange] = {
     var currentExchange = exchange
     var state: LifecycleState = LifecycleState.Pre
     preHandle(exchange).flatMap { e =>

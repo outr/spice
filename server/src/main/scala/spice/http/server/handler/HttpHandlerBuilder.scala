@@ -5,6 +5,7 @@ import fabric._
 import fabric.io.{JsonFormatter, JsonParser}
 import fabric.rw._
 import scribe.Priority
+import scribe.data.MDC
 import spice.http.content.{Content, StringContent}
 import spice.http.server.dsl.ClassLoaderPath
 import spice.http.{HttpExchange, HttpMethod, HttpRequest}
@@ -82,7 +83,7 @@ case class HttpHandlerBuilder(server: MutableHttpServer,
   }*/
 
   def handle(f: HttpExchange => IO[HttpExchange]): HttpHandler = wrap(new HttpHandler {
-    override def handle(exchange: HttpExchange): IO[HttpExchange] = f(exchange)
+    override def handle(exchange: HttpExchange)(implicit mdc: MDC): IO[HttpExchange] = f(exchange)
   })
 
   def validation(validator: HttpExchange => IO[ValidationResult]): HttpHandler = validation(new Validator {
@@ -138,7 +139,7 @@ case class HttpHandlerBuilder(server: MutableHttpServer,
     val wrapper = new HttpHandler {
       override def priority: Priority = p
 
-      override def handle(exchange: HttpExchange): IO[HttpExchange] = {
+      override def handle(exchange: HttpExchange)(implicit mdc: MDC): IO[HttpExchange] = {
         if (urlMatcher.forall(_.matches(exchange.request.url)) && requestMatchers.forall(_(exchange.request))) {
           ValidatorHttpHandler.validate(exchange, validators).flatMap {
             case ValidationResult.Continue(c) => handler.handle(c)

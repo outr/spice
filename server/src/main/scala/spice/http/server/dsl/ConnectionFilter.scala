@@ -1,11 +1,12 @@
 package spice.http.server.dsl
 
 import cats.effect.IO
+import scribe.data.MDC
 import spice.http.HttpExchange
 import spice.http.server.handler.HttpHandler
 
 trait ConnectionFilter extends HttpHandler {
-  def apply(exchange: HttpExchange): IO[FilterResponse]
+  def apply(exchange: HttpExchange)(implicit mdc: MDC): IO[FilterResponse]
 
   protected def continue(exchange: HttpExchange): FilterResponse = FilterResponse.Continue(exchange)
   protected def stop(exchange: HttpExchange): FilterResponse = FilterResponse.Stop(exchange)
@@ -25,7 +26,7 @@ trait ConnectionFilter extends HttpHandler {
     exchange.store(ConnectionFilter.LastKey) = current ::: filters.toList
   }
 
-  override def handle(exchange: HttpExchange): IO[HttpExchange] = {
+  override def handle(exchange: HttpExchange)(implicit mdc: MDC): IO[HttpExchange] = {
     apply(exchange).flatMap {
       case FilterResponse.Continue(c) => {
         val last = c.store.getOrElse[List[ConnectionFilter]](ConnectionFilter.LastKey, Nil)

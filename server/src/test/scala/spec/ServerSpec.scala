@@ -6,6 +6,7 @@ import fabric.io.JsonParser
 import fabric.rw._
 import org.scalatest.matchers.should.Matchers
 import org.scalatest.wordspec.AsyncWordSpec
+import scribe.data.MDC
 import spice.ValidationError
 import spice.http.content.{Content, StringContent}
 import spice.http.server.dsl._
@@ -21,7 +22,7 @@ class ServerSpec extends AsyncWordSpec with AsyncIOSpec with Matchers {
   "TestHttpApplication" should {
     "configure the TestServer" in {
       server.handler.matcher(paths.exact("/test.html")).wrap(new HttpHandler {
-        override def handle(exchange: HttpExchange): IO[HttpExchange] = {
+        override def handle(exchange: HttpExchange)(implicit mdc: MDC): IO[HttpExchange] = {
           exchange.modify { response =>
             IO(response.withContent(Content.string("test!", ContentType.`text/plain`)))
           }
@@ -114,7 +115,8 @@ class ServerSpec extends AsyncWordSpec with AsyncIOSpec with Matchers {
   }
 
   object ReverseService extends Restful[ReverseRequest, ReverseResponse] {
-    override def apply(exchange: HttpExchange, request: ReverseRequest): IO[RestfulResponse[ReverseResponse]] = {
+    override def apply(exchange: HttpExchange, request: ReverseRequest)
+                      (implicit mdc: MDC): IO[RestfulResponse[ReverseResponse]] = {
       IO.pure(RestfulResponse(ReverseResponse(Some(request.value.reverse), Nil), HttpStatus.OK))
     }
 
@@ -124,7 +126,7 @@ class ServerSpec extends AsyncWordSpec with AsyncIOSpec with Matchers {
   }
 
   object ServerTimeService extends Restful[Unit, Long] {
-    override def apply(exchange: HttpExchange, request: Unit): IO[RestfulResponse[Long]] = {
+    override def apply(exchange: HttpExchange, request: Unit)(implicit mdc: MDC): IO[RestfulResponse[Long]] = {
       IO.pure(RestfulResponse(System.currentTimeMillis(), HttpStatus.OK))
     }
 

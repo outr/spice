@@ -1,11 +1,12 @@
 package spice.http.server.dsl
 
 import cats.effect.IO
+import scribe.data.MDC
 import spice.http.HttpExchange
 import spice.net.URLPath
 
 case class PathFilter(path: URLPath) extends ConnectionFilter {
-  override def apply(exchange: HttpExchange): IO[FilterResponse] = IO {
+  override def apply(exchange: HttpExchange)(implicit mdc: MDC): IO[FilterResponse] = IO {
     if (path == exchange.request.url.path) {
       val args = path.extractArguments(exchange.request.url.path)
       if (args.nonEmpty) {

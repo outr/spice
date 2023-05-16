@@ -15,6 +15,7 @@ import spice.net.{MalformedURLException, URL}
 
 import java.util.logging.LogManager
 import cats.effect.unsafe.implicits.global
+import scribe.data.MDC
 
 import scala.jdk.CollectionConverters.ListHasAsScala
 
@@ -106,20 +107,23 @@ class UndertowServerImplementation(server: HttpServer) extends HttpServerImpleme
 
       undertow.dispatch(new Runnable {
         override def run(): Unit = {
-          val io = UndertowRequestParser(undertow, url).flatMap { request =>
-            val exchange = HttpExchange(request, HttpResponse())
-            server.handle(exchange)
-              .redeemWith(server.errorRecovery(exchange, _), IO.pure)
-          }.flatMap { exchange =>
-            exchange.webSocketListener match {
-              case Some(webSocketListener) => UndertowWebSocketHandler(undertow, server, exchange, webSocketListener)
-              case None => UndertowResponseSender(undertow, server, exchange)
-            }
-          }.redeemWith({ throwable =>
-            scribe.error("Unrecoverable error parsing request!", throwable)
-            throw throwable
-          }, IO.pure)
-          io.unsafeRunAndForget()(server.ioRuntime)
+          MDC { implicit mdc =>
+            mdc("url") = url
+            val io = UndertowRequestParser(undertow, url).flatMap { request =>
+              val exchange = HttpExchange(request, HttpResponse())
+              server.handle(exchange)
+                .redeemWith(server.errorRecovery(exchange, _), IO.pure)
+            }.flatMap { exchange =>
+              exchange.webSocketListener match {
+                case Some(webSocketListener) => UndertowWebSocketHandler(undertow, server, exchange, webSocketListener)
+                case None => UndertowResponseSender(undertow, server, exchange)
+              }
+            }.redeemWith({ throwable =>
+              scribe.error("Unrecoverable error parsing request!", throwable)
+              throw throwable
+            }, IO.pure)
+            io.unsafeRunAndForget()(server.ioRuntime)
+          }
         }
       })
     } catch {

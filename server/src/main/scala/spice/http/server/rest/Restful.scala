@@ -4,6 +4,7 @@ import cats.effect.IO
 import fabric.io.{JsonFormatter, JsonParser}
 import fabric.rw._
 import fabric.{Json, Str, arr, obj, str}
+import scribe.data.MDC
 import spice.ValidationError
 import spice.http.content.Content
 import spice.http.server.dsl.{ConnectionFilter, FilterResponse, PathFilter}
@@ -20,7 +21,7 @@ abstract class Restful[Request, Response](implicit val requestRW: RW[Request],
 
   def pathOption: Option[URLPath] = None
 
-  def apply(exchange: HttpExchange, request: Request): IO[RestfulResponse[Response]]
+  def apply(exchange: HttpExchange, request: Request)(implicit mdc: MDC): IO[RestfulResponse[Response]]
 
   def validations: List[RestfulValidation[Request]] = Nil
 
@@ -37,7 +38,7 @@ abstract class Restful[Request, Response](implicit val requestRW: RW[Request],
     RestfulResponse(response, status)
   }
 
-  override def apply(exchange: HttpExchange): IO[FilterResponse] = if (accept(exchange)) {
+  override def apply(exchange: HttpExchange)(implicit mdc: MDC): IO[FilterResponse] = if (accept(exchange)) {
     handle(exchange).map { e =>
       FilterResponse.Continue(e)
     }
@@ -59,7 +60,7 @@ abstract class Restful[Request, Response](implicit val requestRW: RW[Request],
     }
   }
 
-  override def handle(exchange: HttpExchange): IO[HttpExchange] = if (accept(exchange)) {
+  override def handle(exchange: HttpExchange)(implicit mdc: MDC): IO[HttpExchange] = if (accept(exchange)) {
     if (exchange.request.method == HttpMethod.Options) {
       exchange.modify { response =>
         IO {
@@ -129,7 +130,8 @@ object Restful {
     new Restful[Request, Response] {
       override def pathOption: Option[URLPath] = path
 
-      override def apply(exchange: HttpExchange, request: Request): IO[RestfulResponse[Response]] = handler(request)
+      override def apply(exchange: HttpExchange, request: Request)
+                        (implicit mdc: MDC): IO[RestfulResponse[Response]] = handler(request)
         .map { response =>
           ok(response)
         }

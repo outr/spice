@@ -5,6 +5,7 @@ import fabric._
 import fabric.define.DefType
 import fabric.io.JsonParser
 import fabric.rw._
+import scribe.data.MDC
 import spice.http.{HttpExchange, HttpStatus}
 import spice.http.content.Content
 import spice.http.server.BasePath
@@ -34,9 +35,9 @@ trait ServiceCall extends HttpHandler {
   def requestSchema: Option[Schema]
   def responseSchema: Option[Schema]
 
-  def apply(request: ServiceRequest[Request]): IO[ServiceResponse[Response]]
+  def apply(request: ServiceRequest[Request])(implicit mdc: MDC): IO[ServiceResponse[Response]]
 
-  override def handle(exchange: HttpExchange): IO[HttpExchange] = {
+  override def handle(exchange: HttpExchange)(implicit mdc: MDC): IO[HttpExchange] = {
     // Merge the base path of the listener (if defined) to the service path
     val actualPath = BasePath.get(exchange) match {
       case Some(basePath) => basePath.merge(service.path)
