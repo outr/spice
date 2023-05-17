@@ -15,8 +15,7 @@ import scala.util.{Failure, Success, Try}
 
 case class HttpClient(request: HttpRequest,
                       implementation: HttpClientImplementation,
-                      retries: Int,
-                      retryDelay: FiniteDuration,
+                      retryManager: RetryManager,
                       interceptor: Interceptor,
                       saveDirectory: String,
                       timeout: FiniteDuration,
@@ -26,7 +25,8 @@ case class HttpClient(request: HttpRequest,
                       sessionManager: Option[SessionManager],
                       failOnHttpStatus: Boolean,
                       validateSSLCertificates: Boolean,
-                      proxy: Option[Proxy] = None) {
+                      proxy: Option[Proxy],
+                      failures: Int) {
   private lazy val instance: HttpClientInstance = implementation.instance(this)
 
   def connectionPool: ConnectionPool = ConnectionPool(this)
@@ -71,8 +71,7 @@ case class HttpClient(request: HttpRequest,
   }
   def removeHeader(key: String): HttpClient = modify(r => r.copy(headers = r.headers.removeHeader(HeaderKey(key))))
 
-  def retries(retries: Int): HttpClient = copy(retries = retries)
-  def retryDelay(retryDelay: FiniteDuration): HttpClient = copy(retryDelay = retryDelay)
+  def retryManager(manager: RetryManager): HttpClient = copy(retryManager = manager)
   def interceptor(interceptor: Interceptor): HttpClient = copy(interceptor = interceptor)
   def saveDirectory(saveDirectory: String): HttpClient = copy(saveDirectory = saveDirectory)
   def timeout(timeout: FiniteDuration): HttpClient = copy(timeout = timeout)
@@ -122,7 +121,7 @@ case class HttpClient(request: HttpRequest,
    *
    * @return Future[HttpResponse]
    */
-  final def sendTry(retries: Int = this.retries): IO[Try[HttpResponse]] = {
+  final def sendTry(): IO[Try[HttpResponse]] = {
     val updatedHeaders = sessionManager match {
       case Some(sm) =>
         val cookieHeaders = sm.session.cookies.map { cookie =>
@@ -146,16 +145,15 @@ case class HttpClient(request: HttpRequest,
         }
 
         IO.pure(Success(response))
-      case Failure(t) if retries > 0 =>
-        scribe.warn(s"Request to ${request.url} failed (${t.getMessage}). Retrying after $retryDelay...")
-        IO.sleep(retryDelay).flatMap { _ =>
-          sendTry(retries - 1)
-        }
-      case Failure(t) => IO(throw t)
+      case Failure(t) =>
+        val failures = this.failures + 1
+        val client = copy(failures = failures)
+        val io = client.sendTry()
+        retryManager.retry(request, io, failures, t)
     }
   }
 
-  final def send(retries: Int = this.retries): IO[HttpResponse] = sendTry(retries).map {
+  final def send(): IO[HttpResponse] = sendTry().map {
     case Success(response) => response
     case Failure(exception) => throw exception
   }
@@ -247,8 +245,10 @@ case class HttpClient(request: HttpRequest,
 object HttpClient extends HttpClient(
   request = HttpRequest(),
   implementation = HttpClientImplementationManager(()),
-  retries = 0,
-  retryDelay = 5.seconds,
+  retryManager = RetryManager.simple(
+    retries = 2,
+    delay = 1.second
+  ),
   interceptor = Interceptor.empty,
   saveDirectory = ClientPlatform.defaultSaveDirectory,
   timeout = 15.seconds,
@@ -258,5 +258,6 @@ object HttpClient extends HttpClient(
   sessionManager = None,
   failOnHttpStatus = true,
   validateSSLCertificates = true,
-  proxy = None
+  proxy = None,
+  failures = 0
 )

@@ -44,7 +44,7 @@ class UndertowServerSpec extends AsyncWordSpec with AsyncIOSpec with Matchers {
     "receive OK for test.txt" in {
       client
         .path(path"/test.txt")
-        .send(retries = 0)
+        .send()
         .map { response =>
           response.status should be(HttpStatus.OK)
           val content = response.content.get.asString
