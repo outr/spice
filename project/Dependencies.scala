@@ -1,4 +1,4 @@
-import sbt._
+import sbt.*
 
 object Dependencies {
   object version {
@@ -6,7 +6,7 @@ object Dependencies {
     
     val scribe: String = "3.11.3"
 
-    val fabric: String = "1.10.7"
+    val fabric: String = "1.10.8"
     
     val reactify: String = "4.0.8"
     

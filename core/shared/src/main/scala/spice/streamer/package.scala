@@ -1,7 +1,7 @@
 package spice
 
 import java.io.{ByteArrayInputStream, File, FileInputStream, FileOutputStream, IOException, InputStream, OutputStream}
-import java.net.{HttpURLConnection, URL, URLConnection}
+import java.net.{HttpURLConnection, URI, URL, URLConnection}
 import java.nio.file.Path
 import scala.annotation.tailrec
 import scala.collection.mutable
@@ -65,11 +65,11 @@ package object streamer {
         throw new IOException(s"Redirect loop detected: ${redirects.mkString(", ")}")
       }
       scribe.warn(s"Download URL redirecting from $url to $redirectURL")
-      urlInputStream(new URL(redirectURL), redirects + url.toString)
+      urlInputStream(new URI(redirectURL).toURL, redirects + url.toString)
     }
   }
 
-  implicit def youiURL2Reader(url: net.URL): InputStreamReader = url2Reader(new URL(url.toString))
+  implicit def youiURL2Reader(url: net.URL): InputStreamReader = url2Reader(new URI(url.toString).toURL)
 
   implicit def string2Reader(s: String): InputStreamReader = new InputStreamReader(new ByteArrayInputStream(s.getBytes)) {
     override def length: Option[Long] = Some(s.length)
