@@ -15,9 +15,9 @@ trait RetryManager {
 }
 
 object RetryManager {
-  def none: RetryManager = apply(_ => None)
+  def none: RetryManager = apply(warnRetries = true)(_ => None)
 
-  def simple(retries: Int, delay: FiniteDuration): RetryManager = apply { failures =>
+  def simple(retries: Int, delay: FiniteDuration, warnRetries: Boolean = true): RetryManager = apply(warnRetries) { failures =>
     if (failures > retries) {
       None
     } else {
@@ -25,9 +25,9 @@ object RetryManager {
     }
   }
 
-  def delays(delays: FiniteDuration*): RetryManager = {
+  def delays(warnRetries: Boolean, delays: FiniteDuration*): RetryManager = {
     val v = delays.toVector
-    apply { failures =>
+    apply(warnRetries) { failures =>
       if (failures > v.length) {
         None
       } else {
@@ -36,47 +36,19 @@ object RetryManager {
     }
   }
 
-  def apply(f: Int => Option[FiniteDuration]): RetryManager = Advanced(f)
+  def apply(warnRetries: Boolean)(f: Int => Option[FiniteDuration]): RetryManager = Standard(f, warnRetries)
 
-  case class Simple(retries: Int, delay: FiniteDuration) extends RetryManager {
-    override def retry(request: HttpRequest,
-                       retry: IO[Try[HttpResponse]],
-                       failures: Int,
-                       throwable: Throwable): IO[Try[HttpResponse]] = {
-      if (failures > retries) {
-        IO.pure(Failure(throwable))
-      } else {
-        for {
-          _ <- logger.warn(s"Request to ${request.url} failed (${throwable.getMessage}). Retrying after $delay...")
-          _ <- IO.sleep(delay)
-          response <- retry
-        } yield response
-      }
-    }
-  }
-
-  case class Delays(delays: FiniteDuration*) extends RetryManager {
-    private val v = delays.toVector
-
-    override def retry(request: HttpRequest,
-                       retry: IO[Try[HttpResponse]],
-                       failures: Int,
-                       throwable: Throwable): IO[Try[HttpResponse]] = {
-      if (failures > v.length) {
-        IO.pure(Failure(throwable))
-      } else {
-        IO.sleep(v(failures - 1)).flatMap(_ => retry)
-      }
-    }
-  }
-
-  case class Advanced(delay: Int => Option[FiniteDuration]) extends RetryManager {
+  case class Standard(delay: Int => Option[FiniteDuration], warnRetries: Boolean) extends RetryManager {
     override def retry(request: HttpRequest,
                        retry: IO[Try[HttpResponse]],
                        failures: Int,
                        throwable: Throwable): IO[Try[HttpResponse]] = delay(failures) match {
       case Some(d) => for {
-        _ <- logger.warn(s"Request to ${request.url} failed (${throwable.getMessage}, failures: $failures). Retrying after $d...")
+        _ <- if (warnRetries) {
+          logger.warn(s"Request to ${request.url} failed (${throwable.getMessage}, failures: $failures). Retrying after $d...")
+        } else {
+          IO.unit
+        }
         _ <- IO.sleep(d)
         response <- retry
       } yield response
