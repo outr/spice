@@ -3,6 +3,8 @@ package spice.util
 import cats.effect.{FiberIO, IO}
 import cats.syntax.all._
 
+import scribe.cats.{io => logger}
+
 import java.util.concurrent.atomic.AtomicLong
 import scala.concurrent.duration._
 
@@ -30,18 +32,21 @@ case class BufferManager(checkEvery: FiniteDuration = 10.seconds,
   private def recurse(): IO[Unit] = IO
     .sleep(checkFrequency)
     .flatMap { _ =>
-      if (keepAlive) {
-        val timeElapsed: Boolean = lastCheck.get() + checkEvery.toMillis < System.currentTimeMillis()
-        queues
-          .filter(q => q.nonEmpty && (timeElapsed || q.ready))
-          .map(q => q.process())
-          .parSequence
-          .map { _ =>
-            if (timeElapsed) lastCheck.set(System.currentTimeMillis())
-          }
-          .flatMap(_ => recurse())
-      } else {
-        IO.unit
-      }
+      val timeElapsed: Boolean = lastCheck.get() + checkEvery.toMillis < System.currentTimeMillis()
+      queues
+        .filter(q => q.nonEmpty && (timeElapsed || q.ready))
+        .map(q => q.process())
+        .parSequence
+        .map { _ =>
+          if (timeElapsed) lastCheck.set(System.currentTimeMillis())
+        }
+        .flatMap(_ => recurse())
+        .whenA(keepAlive)
+    }
+    .handleErrorWith { throwable =>
+      logger.error("An error occurred processing the buffer. Delaying before trying again.", throwable)
+        .flatMap { _ =>
+          IO.sleep(checkEvery).flatMap(_ => recurse()).whenA(keepAlive)
+        }
     }
 }
