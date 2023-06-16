@@ -2,11 +2,11 @@ import sbt.*
 
 object Dependencies {
   object version {
-    val profig: String = "3.4.10"
+    val profig: String = "3.4.11"
     
     val scribe: String = "3.11.5"
 
-    val fabric: String = "1.11.2"
+    val fabric: String = "1.12.0"
     
     val reactify: String = "4.0.8"
     

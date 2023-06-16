@@ -103,7 +103,7 @@ case class HttpHandlerBuilder(server: MutableHttpServer,
   }
 
   def restful[Request, Response](handler: Request => Response)
-                                (implicit writer: Writer[Request], reader: Reader[Response]): HttpHandler = {
+                                (implicit requestRW: RW[Request], responseRW: RW[Response]): HttpHandler = {
     handle { exchange =>
       val jsonOption: Option[Json] = exchange.request.method match {
         case HttpMethod.Get => {

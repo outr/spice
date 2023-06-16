@@ -2,6 +2,7 @@ package spec
 
 import cats.effect.testing.scalatest.AsyncIOSpec
 import fabric._
+import fabric.rw._
 import org.scalatest.matchers.should.Matchers
 import org.scalatest.wordspec.AsyncWordSpec
 import spice.http.content.JsonContent

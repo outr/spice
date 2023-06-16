@@ -24,5 +24,5 @@ case class JsonContent(json: Json,
 }
 
 object JsonContent {
-  def from[T: Reader](value: T, compact: Boolean = true): JsonContent = JsonContent(value.json, compact)
+  def from[T: RW](value: T, compact: Boolean = true): JsonContent = JsonContent(value.json, compact)
 }

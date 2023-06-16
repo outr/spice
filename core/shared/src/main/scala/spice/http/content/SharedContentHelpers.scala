@@ -1,6 +1,6 @@
 package spice.http.content
 
-import fabric.rw.Reader
+import fabric.rw._
 import fabric.{Json, Null, obj, str}
 import spice.net.ContentType
 
@@ -21,7 +21,7 @@ trait SharedContentHelpers {
 
   def json(value: Json, compact: Boolean = true): Content = JsonContent(value, compact)
 
-  def jsonFrom[T: Reader](value: T, compact: Boolean = true): Content = JsonContent.from(value, compact)
+  def jsonFrom[T: RW](value: T, compact: Boolean = true): Content = JsonContent.from(value, compact)
 
   def string(value: String, contentType: ContentType): Content = StringContent(value, contentType)
 

@@ -1,6 +1,6 @@
 package spice.net
 
-import fabric.rw.RW
+import fabric.rw._
 
 case class Protocol private(scheme: String, description: String, rfc: String, defaultPort: Option[Int] = None) {
   Protocol.schemeMap += scheme -> this

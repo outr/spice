@@ -12,6 +12,7 @@ import spice.http.server.dsl._
 import spice.http.server.handler.{HttpHandler, LifecycleHandler}
 import spice.http.server.rest.{Restful, RestfulResponse}
 import spice.net._
+import fabric.rw._
 
 class ServerDSLSpec extends AsyncWordSpec with AsyncIOSpec with Matchers {
   private lazy val text = "Hello, World!".withContentType(ContentType.`text/plain`)

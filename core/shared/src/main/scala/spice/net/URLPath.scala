@@ -1,6 +1,6 @@
 package spice.net
 
-import fabric.rw.RW
+import fabric.rw._
 import spice.net.URLPathPart._
 
 case class URLPath(parts: List[URLPathPart]) {

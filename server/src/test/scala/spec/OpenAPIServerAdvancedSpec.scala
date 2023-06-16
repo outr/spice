@@ -3,7 +3,7 @@ package spec
 import cats.effect.testing.scalatest.AsyncIOSpec
 import fabric._
 import fabric.io.JsonFormatter
-import fabric.rw.RW
+import fabric.rw._
 import org.scalatest.matchers.should.Matchers
 import org.scalatest.wordspec.AsyncWordSpec
 import spice.http.server.openapi._

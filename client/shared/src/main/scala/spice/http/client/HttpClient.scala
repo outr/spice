@@ -165,7 +165,7 @@ case class HttpClient(request: HttpRequest,
    * @tparam Response the response type
    * @return Try[Response]
    */
-  def callTry[Response: Writer]: IO[Try[Response]] = sendTry().flatMap { responseTry =>
+  def callTry[Response: RW]: IO[Try[Response]] = sendTry().flatMap { responseTry =>
     IO {
       responseTry match {
         case Success(response) =>
@@ -188,7 +188,7 @@ case class HttpClient(request: HttpRequest,
    * @tparam Response the response type
    * @return Response
    */
-  def call[Response: Writer]: IO[Response] = callTry[Response].map {
+  def call[Response: RW]: IO[Response] = callTry[Response].map {
     case Success(response) => response
     case Failure(throwable) => throw throwable
   }
@@ -202,12 +202,12 @@ case class HttpClient(request: HttpRequest,
    * @tparam Response the response type
    * @return Future[Response]
    */
-  def restfulTry[Request: Reader, Response: Writer](request: Request): IO[Try[Response]] = {
+  def restfulTry[Request: RW, Response: RW](request: Request): IO[Try[Response]] = {
     val requestJson = request.json
     method(if (method == HttpMethod.Get) HttpMethod.Post else method).json(requestJson).callTry[Response]
   }
 
-  def restful[Request: Reader, Response: Writer](request: Request): IO[Response] =
+  def restful[Request: RW, Response: RW](request: Request): IO[Response] =
     restfulTry[Request, Response](request).map {
       case Success(response) => response
       case Failure(throwable) => throw throwable
@@ -222,7 +222,7 @@ case class HttpClient(request: HttpRequest,
    * @tparam Failure the failure (non-OK response) response type
    * @return either Failure or Success
    */
-  def restfulEither[Request: Reader, Success: Writer, Failure: Writer](request: Request): IO[Either[Failure, Success]] = {
+  def restfulEither[Request: RW, Success: RW, Failure: RW](request: Request): IO[Either[Failure, Success]] = {
     val requestJson = request.json
     method(if (method == HttpMethod.Get) HttpMethod.Post else method).json(requestJson).send().flatMap { response =>
       IO {

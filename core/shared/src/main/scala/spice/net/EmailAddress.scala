@@ -1,6 +1,6 @@
 package spice.net
 
-import fabric.rw.RW
+import fabric.rw._
 
 class EmailAddress private(val value: String) {
   private lazy val index = value.indexOf('@')

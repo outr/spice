@@ -1,6 +1,6 @@
 package spice.http.server.config
 
-import fabric.rw.RW
+import fabric.rw._
 
 import java.io.File
 
