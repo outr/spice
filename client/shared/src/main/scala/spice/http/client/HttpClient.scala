@@ -27,6 +27,14 @@ case class HttpClient(request: HttpRequest,
                       validateSSLCertificates: Boolean,
                       proxy: Option[Proxy],
                       failures: Int) {
+  private[client] lazy val instanceKey: String = List(
+    implementation.getClass.getName,
+    timeout,
+    pingInterval,
+    dns,
+    validateSSLCertificates,
+    proxy
+  ).map(_.toString).mkString(",")
   private lazy val instance: HttpClientInstance = implementation.instance(this)
 
   def connectionPool: ConnectionPool = ConnectionPool(this)

@@ -7,19 +7,25 @@ import spice.http.content.Content
 import scala.concurrent.duration.FiniteDuration
 
 trait HttpClientImplementation {
-  private var instances = Set.empty[HttpClientInstance]
+  private var instances = Map.empty[String, HttpClientInstance]
 
   def connectionPool(maxIdleConnections: Int, keepAlive: FiniteDuration): ConnectionPool
 
   final def instance(client: HttpClient): HttpClientInstance = synchronized {
-    val i = createInstance(client)
-    instances += i
-    i
+    instances.get(client.instanceKey) match {
+      case Some(i) => i
+      case None =>
+        val i = createInstance(client)
+        instances += client.instanceKey -> i
+        i
+    }
   }
 
   protected def createInstance(client: HttpClient): HttpClientInstance
 
   def content2String(content: Content): String
 
-  def dispose(): IO[Unit] = instances.map(_.dispose()).toList.sequence.map(_ => ())
+  def dispose(): IO[Unit] = instances.map(_._2.dispose()).toList.sequence.map { _ =>
+    instances = Map.empty
+  }
 }
