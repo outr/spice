@@ -86,6 +86,7 @@ class OkHttpClientInstance(client: HttpClient) extends HttpClientInstance {
     b.hostnameVerifier(new HostnameVerifier {
       override def verify(s: String, sslSession: SSLSession): Boolean = true
     })
+    b.connectionPool(client.connectionPool.asInstanceOf[OkHttpConnectionPool].pool)
     b.connectTimeout(client.timeout.toMillis, TimeUnit.MILLISECONDS)
     b.readTimeout(client.timeout.toMillis, TimeUnit.MILLISECONDS)
     b.writeTimeout(client.timeout.toMillis, TimeUnit.MILLISECONDS)

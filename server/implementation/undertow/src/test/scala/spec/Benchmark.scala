@@ -7,7 +7,7 @@ import spice.http.{HttpExchange, HttpStatus}
 import spice.http.content.Content
 import spice.http.server.StaticHttpServer
 import spice.http.server.handler.HttpHandler
-import spice.net.{ContentType, URLPath, interpolation}
+import spice.net._
 import scribe.cats.{io => logger}
 import spice.http.client.HttpClient
 
