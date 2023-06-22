@@ -1,6 +1,6 @@
 name := "spice"
 ThisBuild / organization := "com.outr"
-ThisBuild / version := "0.0.36"
+ThisBuild / version := "0.0.37-SNAPSHOT"
 
 val scala213: String = "2.13.11"
 val scala3: String = "3.3.0"
@@ -36,7 +36,7 @@ def dep: Dependencies.type = Dependencies
 lazy val root = project.in(file("."))
 	.aggregate(
 		coreJS, coreJVM,
-		clientJS, clientJVM, clientImplementationOkHttp,
+		clientJS, clientJVM, clientImplementationOkHttp, clientImplementationJVM,
 		delta,
 		server, serverImplementationUndertow
 	)
@@ -89,6 +89,16 @@ lazy val clientImplementationOkHttp = project
 		)
 	)
 
+lazy val clientImplementationJVM = project
+	.dependsOn(clientJVM)
+	.in(file("client/implementation/jvm"))
+	.settings(
+		name := "spice-client-jvm",
+		libraryDependencies ++= Seq(
+			dep.scalaTest, dep.catsEffectTesting
+		)
+	)
+
 lazy val delta = project
 	.dependsOn(coreJVM)
 	.in(file("delta"))
@@ -110,7 +120,7 @@ lazy val server = project
 	)
 
 lazy val serverImplementationUndertow = project
-	.dependsOn(server, clientImplementationOkHttp % "test->test")
+	.dependsOn(server, clientImplementationJVM % "test->test")
 	.in(file("server/implementation/undertow"))
 	.settings(
 		name := "spice-server-undertow",

@@ -21,13 +21,6 @@ object OkHttpClientImplementation extends Moduload with HttpClientImplementation
   override def connectionPool(maxIdleConnections: Int, keepAlive: FiniteDuration): ConnectionPool =
     OkHttpConnectionPool(maxIdleConnections, keepAlive)
 
-  override def content2String(content: Content): String = content match {
-    case c: StringContent => c.value
-    case c: BytesContent => String.valueOf(c.value)
-    case c: FileContent => Streamer(c.file, new mutable.StringBuilder).unsafeRunSync().toString
-    case _ => throw new RuntimeException(s"$content not supported")
-  }
-
   override protected def createInstance(client: HttpClient): HttpClientInstance = new OkHttpClientInstance(client)
 
   override def load(): Unit = {
