@@ -19,9 +19,4 @@ object JSHttpClientImplementation extends Moduload with HttpClientImplementation
     JSConnectionPool(maxIdleConnections, keepAlive)
 
   override protected def createInstance(client: HttpClient): HttpClientInstance = new JSHttpClientInstance(client)
-
-  override def content2String(content: Content): String = content match {
-    case c: StringContent => c.value
-    case _ => throw new RuntimeException(s"$content not supported")
-  }
 }

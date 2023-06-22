@@ -11,7 +11,7 @@ case class BytesContent(value: Array[Byte], contentType: ContentType, lastModifi
 
   override def toString: String = s"BytesContent(${value.take(100).mkString("Array(", ", ", ")")}, contentType: $contentType)"
 
-  override def asString: String = new String(value, "UTF-8")
+  override def asString: IO[String] = IO.pure(new String(value, "UTF-8"))
 
   override def asStream: fs2.Stream[IO, Byte] = fs2.Stream.fromIterator[IO](value.iterator, 1024)
 }

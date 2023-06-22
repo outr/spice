@@ -173,20 +173,21 @@ case class HttpClient(request: HttpRequest,
    * @tparam Response the response type
    * @return Try[Response]
    */
-  def callTry[Response: RW]: IO[Try[Response]] = sendTry().flatMap { responseTry =>
-    IO {
-      responseTry match {
-        case Success(response) =>
-          val responseJson = response.content.map(implementation.content2String).getOrElse("")
-          if (!failOnHttpStatus || response.status.isSuccess) {
-            if (responseJson.isEmpty) throw new ClientException(s"No content received in response for ${request.url}.", request, response, None)
-            Success(JsonParser(responseJson, Format.Json).as[Response])
-          } else {
-            throw new ClientException(s"HttpStatus was not successful for ${request.url}: ${response.status} - ${response.content.map(_.asString)}", request, response, None)
-          }
-        case Failure(exception) => throw exception
+  def callTry[Response: RW]: IO[Try[Response]] = sendTry().flatMap {
+    case Success(response) =>
+      val contentString = response.content match {
+        case Some(content) => content.asString
+        case None => IO.pure("")
       }
-    }
+      contentString.map { responseJson =>
+        if (!failOnHttpStatus || response.status.isSuccess) {
+          if (responseJson.isEmpty) throw new ClientException(s"No content received in response for ${request.url}.", request, response, None)
+          Success(JsonParser(responseJson, Format.Json).as[Response])
+        } else {
+          throw new ClientException(s"HttpStatus was not successful for ${request.url}: ${response.status} - ${response.content.map(_.asString)}", request, response, None)
+        }
+      }
+    case Failure(exception) => throw exception
   }
 
   /**
@@ -233,8 +234,11 @@ case class HttpClient(request: HttpRequest,
   def restfulEither[Request: RW, Success: RW, Failure: RW](request: Request): IO[Either[Failure, Success]] = {
     val requestJson = request.json
     method(if (method == HttpMethod.Get) HttpMethod.Post else method).json(requestJson).send().flatMap { response =>
-      IO {
-        val responseJson = response.content.map(implementation.content2String).getOrElse("")
+      val contentString = response.content match {
+        case Some(content) => content.asString
+        case None => IO.pure("")
+      }
+      contentString.map { responseJson =>
         if (responseJson.isEmpty) throw new ClientException(s"No content received in response for ${this.request.url}.", this.request, response, None)
         if (response.status.isSuccess) {
           Right(JsonParser(responseJson, Format.Json).as[Success])

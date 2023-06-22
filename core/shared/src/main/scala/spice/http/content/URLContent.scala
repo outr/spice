@@ -30,7 +30,7 @@ case class URLContent(url: URL, contentType: ContentType, lastModifiedOverride: 
 
   override def toString: String = s"URLContent(url: $url, contentType: $contentType)"
 
-  override def asString: String = Streamer(url, new mutable.StringBuilder).unsafeRunSync().toString
+  override def asString: IO[String] = Streamer(url, new mutable.StringBuilder).map(_.toString)
 
   override def asStream: fs2.Stream[IO, Byte] = fs2.io.readInputStream[IO](IO(url.openStream()), 1024)
 }

@@ -36,7 +36,7 @@ case class FormDataContent(data: List[FormData]) extends Content {
 
   override def toString: String = s"FormDataContent(${data.map(_.key).mkString(", ")})"
 
-  override def asString: String = toString
+  override def asString: IO[String] = IO.pure(toString)
 
   override def asStream: fs2.Stream[IO, Byte] = throw new UnsupportedOperationException("FormDataContent cannot be represented as a stream!")
 }

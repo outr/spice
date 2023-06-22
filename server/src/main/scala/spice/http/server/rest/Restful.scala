@@ -73,26 +73,25 @@ abstract class Restful[Request, Response](implicit val requestRW: RW[Request],
     } else {
       // Build JSON
       val io: IO[RestfulResponse[Response]] = {
-        val json = Restful.jsonFromExchange(exchange)
-        // Decode request
-        val req = json.as[Request]
-        // Validations
-        Restful.validate(req, validations) match {
-          case Left(errors) => {
-            val status = errors.map(_.status).max
-            IO.pure(error(errors, status))
-          }
-          case Right(request) => try {
-            apply(exchange, request)
-              .timeout(timeout)
-              .handleError { throwable =>
-                scribe.error(s"Error occurred in ${getClass.getName}", throwable)
-                error("An internal error occurred.")
-              }
-          } catch {
-            case t: Throwable => {
-              val err = ValidationError(s"Error while calling restful: ${t.getMessage}", ValidationError.Internal)
-              IO.pure(error(List(err), err.status))
+        Restful.jsonFromExchange(exchange).flatMap { json =>
+          // Decode request
+          val req = json.as[Request]
+          // Validations
+          Restful.validate[Request](req, validations) match {
+            case Left(errors) =>
+              val status = errors.map(_.status).max
+              IO.pure(error(errors, status))
+            case Right(request) => try {
+              apply(exchange, request)
+                .timeout(timeout)
+                .handleError { throwable =>
+                  scribe.error(s"Error occurred in ${getClass.getName}", throwable)
+                  error("An internal error occurred.")
+                }
+            } catch {
+              case t: Throwable =>
+                val err = ValidationError(s"Error while calling restful: ${t.getMessage}", ValidationError.Internal)
+                IO.pure(error(List(err), err.status))
             }
           }
         }
@@ -157,30 +156,34 @@ object Restful {
     }
   }
 
-  def jsonFromExchange(exchange: HttpExchange): Json = {
+  def jsonFromExchange(exchange: HttpExchange): IO[Json] = {
     val request = exchange.request
-    val contentJson = request.content.map(jsonFromContent).flatMap(_.toOption).getOrElse(obj())
-    val urlJson = jsonFromURL(request.url)
-    val pathJson = PathFilter.argumentsFromConnection(exchange).json
-    val storeJson = exchange.store.getOrElse[Json](key, obj())
-    List(urlJson, pathJson, storeJson).foldLeft(contentJson)((merged, json) => {
-      if (json.nonEmpty) {
-        Json.merge(merged, json)
-      } else {
-        merged
-      }
-    })
+    val content = request.content match {
+      case Some(content) => jsonFromContent(content)
+      case None => IO.pure(obj())
+    }
+    content.map { contentJson =>
+      val urlJson = jsonFromURL(request.url)
+      val pathJson = PathFilter.argumentsFromConnection(exchange).json
+      val storeJson = exchange.store.getOrElse[Json](key, obj())
+      List(urlJson, pathJson, storeJson).foldLeft(contentJson)((merged, json) => {
+        if (json.nonEmpty) {
+          Json.merge(merged, json)
+        } else {
+          merged
+        }
+      })
+    }
   }
 
-  def jsonFromContent(content: Content): Either[ValidationError, Json] = {
-    val contentString = content.asString
+  def jsonFromContent(content: Content): IO[Json] = content.asString.map { contentString =>
     val firstChar = contentString.charAt(0)
     val json = if (Set('"', '{', '[').contains(firstChar)) {
       JsonParser(contentString)
     } else {
       Str(contentString)
     }
-    Right(json)
+    json
   }
 
   def jsonFromURL(url: URL): Json = {

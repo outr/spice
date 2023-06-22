@@ -126,8 +126,10 @@ class ServerDSLSpec extends AsyncWordSpec with AsyncIOSpec with Matchers {
             url = url"http://localhost:8080/r1",
             content = Some(Content.string("testing", ContentType.`text/plain`))
           )))
-          .map { exchange =>
-            exchange.response.content.map(_.asString) should be(Some("\"gnitset\""))
+          .flatMap { exchange =>
+            exchange.response.content.get.asString.map { s =>
+              s should be("\"gnitset\"")
+            }
           }
       }
       "properly fall through to the second path" in {
@@ -136,8 +138,10 @@ class ServerDSLSpec extends AsyncWordSpec with AsyncIOSpec with Matchers {
             url = url"http://localhost:8080/r2",
             content = Some(Content.string("testing", ContentType.`text/plain`))
           )))
-          .map { exchange =>
-            exchange.response.content.map(_.asString) should be(Some("\"Testing\""))
+          .flatMap { exchange =>
+            exchange.response.content.get.asString.map { s =>
+              s should be("\"Testing\"")
+            }
           }
       }
     }

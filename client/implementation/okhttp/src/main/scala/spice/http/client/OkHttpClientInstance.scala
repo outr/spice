@@ -142,11 +142,11 @@ class OkHttpClientInstance(client: HttpClient) extends HttpClientInstance {
     instance.newCall(req).enqueue(new okhttp3.Callback {
       override def onResponse(call: okhttp3.Call, res: okhttp3.Response): Unit = {
         val response = responseFromOk(res)
-        deferred.complete(Success(response)).unsafeRunSync()
+        deferred.complete(Success(response)).unsafeRunAndForget()
       }
 
       override def onFailure(call: okhttp3.Call, exc: IOException): Unit = {
-        deferred.complete(Failure(exc)).unsafeRunSync()
+        deferred.complete(Failure(exc)).unsafeRunAndForget()
       }
     })
     OkHttpClientImplementation.process(deferred.get)

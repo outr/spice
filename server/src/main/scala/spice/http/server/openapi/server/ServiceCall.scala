@@ -47,15 +47,15 @@ trait ServiceCall extends HttpHandler {
       case (key, value) => key -> Try(JsonParser(value)).getOrElse(Str(value))
     }
     val argsJson = obj(args: _*)
-    // TODO: Support GET params
-    val contentJson = exchange.request.content.map(Restful.jsonFromContent).flatMap(_.toOption).getOrElse(obj())
-    val requestJson = if (argsJson.isEmpty) {
-      contentJson
-    } else {
-      argsJson.merge(contentJson)
+    Restful.jsonFromExchange(exchange).flatMap { contentJson =>
+      val requestJson = if (argsJson.isEmpty) {
+        contentJson
+      } else {
+        argsJson.merge(contentJson)
+      }
+      val request = requestJson.as[Request]
+      apply(ServiceRequest[Request](request, exchange)).map(_.exchange)
     }
-    val request = requestJson.as[Request]
-    apply(ServiceRequest[Request](request, exchange)).map(_.exchange)
   }
 
   lazy val openAPI: Option[OpenAPIPathEntry] = if (this eq ServiceCall.NotSupported) {

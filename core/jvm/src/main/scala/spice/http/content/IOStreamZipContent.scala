@@ -1,5 +1,6 @@
 package spice.http.content
 
+import cats.effect.IO
 import cats.effect.unsafe.implicits.global
 import spice.net.ContentType
 import spice.streamer._
@@ -31,5 +32,5 @@ class IOStreamZipContent(entries: List[ZipFileEntry],
     zos.close()
   }
 
-  override def asString: String = entries.mkString(", ")
+  override def asString: IO[String] = IO(entries.mkString(", "))
 }

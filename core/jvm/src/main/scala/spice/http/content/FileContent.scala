@@ -21,7 +21,7 @@ case class FileContent(file: File, contentType: ContentType, lastModifiedOverrid
 
   override def toString: String = s"FileContent(file: ${file.getAbsolutePath}, contentType: $contentType)"
 
-  override def asString: String = Streamer(file, new mutable.StringBuilder).unsafeRunSync().toString
+  override def asString: IO[String] = Streamer(file, new mutable.StringBuilder).map(_.toString)
 
   override def asStream: fs2.Stream[IO, Byte] = Files[IO].readAll(Path.fromNioPath(file.toPath))
 }

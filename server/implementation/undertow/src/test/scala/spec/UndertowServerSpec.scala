@@ -45,10 +45,11 @@ class UndertowServerSpec extends AsyncWordSpec with AsyncIOSpec with Matchers {
       client
         .path(path"/test.txt")
         .send()
-        .map { response =>
+        .flatMap { response =>
           response.status should be(HttpStatus.OK)
-          val content = response.content.get.asString
-          content should be("test!")
+          response.content.get.asString.map { content =>
+            content should be("test!")
+          }
         }
     }
     "receive NotFound for test.html" in {
