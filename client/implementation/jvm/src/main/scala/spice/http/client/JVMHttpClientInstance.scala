@@ -1,6 +1,7 @@
 package spice.http.client
 
 import cats.effect.IO
+import cats.effect.unsafe.implicits.global
 import spice.http.content.StreamContent
 import spice.http.{Headers, HttpMethod, HttpRequest, HttpResponse, HttpStatus, WebSocket}
 import spice.net.{ContentType, URL}
@@ -17,17 +18,11 @@ import scala.jdk.CollectionConverters._
 import scala.jdk.FutureConverters._
 
 class JVMHttpClientInstance(client: HttpClient) extends HttpClientInstance {
-  implicit class CompletableFutureExtras[T](cf: CompletableFuture[T]) {
-    def toIO: IO[T] = IO.fromFuture(IO(cf.asScala)).recover {
-      case exc: CompletionException => throw exc.getCause
-    }
-  }
-
   private lazy val proxy = client.proxy match {
     case Some(p) => ProxySelector.of(new InetSocketAddress(p.host, p.port))
     case None => ProxySelector.getDefault
   }
-  private lazy val jvmClient = jvm.HttpClient.newBuilder()
+  private[client] lazy val jvmClient = jvm.HttpClient.newBuilder()
     .version(Version.HTTP_2)
     .followRedirects(Redirect.NORMAL)
     .connectTimeout(Duration.ofMillis(client.timeout.toMillis))
@@ -40,15 +35,16 @@ class JVMHttpClientInstance(client: HttpClient) extends HttpClientInstance {
     response <- response2Spice(jvmResponse)
   } yield Success(response)
 
-  override def webSocket(url: URL): WebSocket = throw new UnsupportedOperationException("WebSockets not supported on JVM implementation")
+  override def webSocket(url: URL): WebSocket = new JVMHttpClientWebSocket(url, this)
 
   override def dispose(): IO[Unit] = IO.unit
 
   private def request2JVM(request: HttpRequest): IO[jvm.HttpRequest] = for {
+    // TODO: Investigate streaming through InputStream
     bodyPublisher <- request.content match {
-      case Some(content) => content.asStream.through(fs2.io.toInputStream).map { inputStream =>
-        BodyPublishers.ofInputStream(() => inputStream)
-      }.compile.lastOrError
+      case Some(content) => content.asStream.compile.toList.map { bytes =>
+        BodyPublishers.ofByteArray(bytes.toArray)
+      }
       case None => IO.pure(null)
     }
     jvmRequest <- IO.blocking {

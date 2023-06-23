@@ -120,7 +120,11 @@ lazy val server = project
 	)
 
 lazy val serverImplementationUndertow = project
-	.dependsOn(server, clientImplementationJVM % "test->test")
+	.dependsOn(
+		server,
+		clientImplementationJVM % "test->test",
+//		clientImplementationOkHttp % "test->test"
+	)
 	.in(file("server/implementation/undertow"))
 	.settings(
 		name := "spice-server-undertow",
