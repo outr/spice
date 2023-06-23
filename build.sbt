@@ -122,8 +122,7 @@ lazy val server = project
 lazy val serverImplementationUndertow = project
 	.dependsOn(
 		server,
-		clientImplementationJVM % "test->test",
-//		clientImplementationOkHttp % "test->test"
+		clientImplementationOkHttp % "test->test"
 	)
 	.in(file("server/implementation/undertow"))
 	.settings(
