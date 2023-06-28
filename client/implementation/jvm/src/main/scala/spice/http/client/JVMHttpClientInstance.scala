@@ -45,24 +45,17 @@ class JVMHttpClientInstance(client: HttpClient) extends HttpClientInstance {
       case Some(content) => content.asStream.compile.toList.map { bytes =>
         BodyPublishers.ofByteArray(bytes.toArray)
       }
-      case None => IO.pure(null)
+      case None => IO.pure(BodyPublishers.noBody())
     }
     jvmRequest <- IO.blocking {
-      val b = jvm.HttpRequest.newBuilder()
+      jvm.HttpRequest.newBuilder()
         .uri(URI.create(request.url.toString))
         .timeout(Duration.ofMillis(client.timeout.toMillis))
         .headers(request.headers.map.toList.flatMap {
           case (key, values) => values.flatMap(value => List(key, value))
         }: _*)
-      val builder = request.method match {
-        case HttpMethod.Get => b.GET()
-        case HttpMethod.Put => b.PUT(bodyPublisher)
-        case HttpMethod.Head => b.HEAD()
-        case HttpMethod.Delete => b.DELETE()
-        case HttpMethod.Post => b.POST(bodyPublisher)
-        case m => throw new UnsupportedOperationException(s"$m not supported!")
-      }
-      builder.build()
+        .method(request.method.value, bodyPublisher)
+        .build()
     }
   } yield jvmRequest
 
