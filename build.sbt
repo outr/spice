@@ -1,6 +1,6 @@
 name := "spice"
 ThisBuild / organization := "com.outr"
-ThisBuild / version := "0.1.0"
+ThisBuild / version := "0.1.1-SNAPSHOT"
 
 val scala213: String = "2.13.11"
 val scala3: String = "3.3.0"
@@ -110,7 +110,7 @@ lazy val delta = project
 	)
 
 lazy val server = project
-	.dependsOn(coreJVM, delta, clientImplementationOkHttp % "test->test")
+	.dependsOn(coreJVM, delta, clientImplementationJVM % "test->test")
 	.in(file("server"))
 	.settings(
 		name := "spice-server",
@@ -122,7 +122,7 @@ lazy val server = project
 lazy val serverImplementationUndertow = project
 	.dependsOn(
 		server,
-		clientImplementationOkHttp % "test->test"
+		clientImplementationJVM % "test->test"
 	)
 	.in(file("server/implementation/undertow"))
 	.settings(

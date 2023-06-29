@@ -2,7 +2,7 @@ package spice.http.client
 
 import cats.effect.IO
 import cats.effect.unsafe.implicits.global
-import spice.http.content.StreamContent
+import spice.http.content.{StreamContent, StringContent}
 import spice.http.{Headers, HttpMethod, HttpRequest, HttpResponse, HttpStatus, WebSocket}
 import spice.net.{ContentType, URL}
 
@@ -42,8 +42,9 @@ class JVMHttpClientInstance(client: HttpClient) extends HttpClientInstance {
   private def request2JVM(request: HttpRequest): IO[jvm.HttpRequest] = for {
     // TODO: Investigate streaming through InputStream
     bodyPublisher <- request.content match {
-      case Some(content) => content.asStream.compile.toList.map { bytes =>
-        BodyPublishers.ofByteArray(bytes.toArray)
+      case Some(content: StringContent) => IO.blocking(BodyPublishers.ofString(content.value))
+      case Some(content) => content.asStream.compile.toList.map(_.toArray).map { bytes =>
+        BodyPublishers.ofByteArray(bytes)
       }
       case None => IO.pure(BodyPublishers.noBody())
     }
@@ -51,6 +52,7 @@ class JVMHttpClientInstance(client: HttpClient) extends HttpClientInstance {
       jvm.HttpRequest.newBuilder()
         .uri(URI.create(request.url.toString))
         .timeout(Duration.ofMillis(client.timeout.toMillis))
+        .header("Content-Type", request.content.map(_.contentType).getOrElse(ContentType.`application/octet-stream`).outputString)
         .headers(request.headers.map.toList.flatMap {
           case (key, values) => values.flatMap(value => List(key, value))
         }: _*)
