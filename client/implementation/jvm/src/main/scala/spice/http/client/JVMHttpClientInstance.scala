@@ -2,7 +2,7 @@ package spice.http.client
 
 import cats.effect.IO
 import cats.effect.unsafe.implicits.global
-import spice.http.content.{StreamContent, StringContent}
+import spice.http.content.{BytesContent, StreamContent, StringContent}
 import spice.http.{Headers, HttpMethod, HttpRequest, HttpResponse, HttpStatus, WebSocket}
 import spice.net.{ContentType, URL}
 
@@ -31,7 +31,7 @@ class JVMHttpClientInstance(client: HttpClient) extends HttpClientInstance {
 
   override def send(request: HttpRequest): IO[Try[HttpResponse]] = for {
     jvmRequest <- request2JVM(request)
-    jvmResponse <- jvmClient.sendAsync(jvmRequest, BodyHandlers.ofInputStream()).toIO
+    jvmResponse <- jvmClient.sendAsync(jvmRequest, BodyHandlers.ofByteArray()).toIO
     response <- response2Spice(jvmResponse)
   } yield Success(response)
 
@@ -49,30 +49,29 @@ class JVMHttpClientInstance(client: HttpClient) extends HttpClientInstance {
       case None => IO.pure(BodyPublishers.noBody())
     }
     jvmRequest <- IO.blocking {
-      jvm.HttpRequest.newBuilder()
+      val builder = jvm.HttpRequest.newBuilder()
         .uri(URI.create(request.url.toString))
         .timeout(Duration.ofMillis(client.timeout.toMillis))
-        .header("Content-Type", request.content.map(_.contentType).getOrElse(ContentType.`application/octet-stream`).outputString)
-        .headers(request.headers.map.toList.flatMap {
+        .method(request.method.value, bodyPublisher)
+      request.content.foreach { content =>
+        builder.header("Content-Type", content.contentType.outputString)
+      }
+      builder.headers(request.headers.map.toList.flatMap {
           case (key, values) => values.flatMap(value => List(key, value))
         }: _*)
-        .method(request.method.value, bodyPublisher)
-        .build()
+      builder.build()
     }
   } yield jvmRequest
 
-  private def response2Spice(jvmResponse: jvm.HttpResponse[InputStream]): IO[HttpResponse] = IO.blocking {
+  private def response2Spice(jvmResponse: jvm.HttpResponse[Array[Byte]]): IO[HttpResponse] = IO.blocking {
     val headers = Headers(jvmResponse.headers().map().asScala.map {
       case (key, list) => key -> list.asScala.toList
     }.toMap)
     val contentType = Headers.`Content-Type`.value(headers).getOrElse(ContentType.`text/plain`)
     val lastModified = Headers.Response.`Last-Modified`.value(headers).getOrElse(System.currentTimeMillis())
-    val content = Option(jvmResponse.body()).map { inputStream =>
-      StreamContent(
-        stream = fs2.io.readInputStream[IO](IO.pure(inputStream), 512),
-        contentType = contentType,
-        lastModified = lastModified
-      )
+    // TODO: Investigate streaming through InputStream
+    val content = Option(jvmResponse.body()).map { bytes =>
+      BytesContent(bytes, contentType, lastModified)
     }
     HttpResponse(
       status = HttpStatus.byCode(jvmResponse.statusCode()),
