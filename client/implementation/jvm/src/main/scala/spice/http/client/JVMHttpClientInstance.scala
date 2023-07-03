@@ -70,8 +70,9 @@ class JVMHttpClientInstance(client: HttpClient) extends HttpClientInstance {
     val contentType = Headers.`Content-Type`.value(headers).getOrElse(ContentType.`text/plain`)
     val lastModified = Headers.Response.`Last-Modified`.value(headers).getOrElse(System.currentTimeMillis())
     // TODO: Investigate streaming through InputStream
-    val content = Option(jvmResponse.body()).map { bytes =>
-      BytesContent(bytes, contentType, lastModified)
+    val content = Option(jvmResponse.body()) match {
+      case Some(bytes) if bytes.nonEmpty => Some(BytesContent(bytes, contentType, lastModified))
+      case _ => None
     }
     HttpResponse(
       status = HttpStatus.byCode(jvmResponse.statusCode()),
