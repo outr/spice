@@ -20,7 +20,7 @@ object Dependencies {
     
     val undertow: String = "2.3.7.Final"
     
-    val moduload: String = "1.1.6"
+    val moduload: String = "1.1.7"
 
     val scalaJSDOM: String = "2.6.0"
 
