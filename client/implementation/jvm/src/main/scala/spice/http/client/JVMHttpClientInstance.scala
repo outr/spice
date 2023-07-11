@@ -50,7 +50,7 @@ class JVMHttpClientInstance(client: HttpClient) extends HttpClientInstance {
     }
     jvmRequest <- IO.blocking {
       val builder = jvm.HttpRequest.newBuilder()
-        .uri(URI.create(request.url.toString))
+        .uri(URI.create(request.url.toString.replace("{", "%7B").replace("}", "%7D")))
         .timeout(Duration.ofMillis(client.timeout.toMillis))
         .method(request.method.value, bodyPublisher)
       request.content.foreach { content =>
