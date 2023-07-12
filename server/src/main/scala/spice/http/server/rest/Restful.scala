@@ -25,6 +25,8 @@ abstract class Restful[Request, Response](implicit val requestRW: RW[Request],
 
   def validations: List[RestfulValidation[Request]] = Nil
 
+  def error(throwable: Throwable): RestfulResponse[Response] = error(List(ValidationError("An internal error occurred")), HttpStatus.InternalServerError)
+
   def error(message: String): RestfulResponse[Response] =
     error(List(ValidationError(message)), HttpStatus.InternalServerError)
 
@@ -86,12 +88,12 @@ abstract class Restful[Request, Response](implicit val requestRW: RW[Request],
                 .timeout(timeout)
                 .handleError { throwable =>
                   scribe.error(s"Error occurred in ${getClass.getName}", throwable)
-                  error("An internal error occurred.")
+                  error(throwable)
                 }
             } catch {
               case t: Throwable =>
                 val err = ValidationError(s"Error while calling restful: ${t.getMessage}", ValidationError.Internal)
-                IO.pure(error(List(err), err.status))
+                IO.pure(error(t))
             }
           }
         }
