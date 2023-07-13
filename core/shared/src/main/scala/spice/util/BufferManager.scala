@@ -46,7 +46,7 @@ case class BufferManager(checkEvery: FiniteDuration = 10.seconds,
     .handleErrorWith { throwable =>
       val message = s"An error occurred processing the buffer (failure count: $failures). Delaying before trying again."
       val log = if (failures < logErrorAfter) {
-        logger.warn(message, throwable)
+        logger.warn(message)
       } else {
         logger.error(message, throwable)
       }
