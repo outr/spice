@@ -25,7 +25,6 @@ object OpenAPI {
 
   private def asJson(api: OpenAPI): Json = api
     .json
-    .filter(RemoveNullsFilter)
-    .flatMap(_.filter(RemoveEmptyFilter))
-    .get
+    .filterOne(RemoveNullsFilter)
+    .filterOne(RemoveEmptyFilter)
 }
