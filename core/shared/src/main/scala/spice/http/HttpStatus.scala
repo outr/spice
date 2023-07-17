@@ -24,7 +24,7 @@ case class HttpStatus(code: Int, message: String) extends Ordered[HttpStatus] {
 
   override def compare(that: HttpStatus): Int = this.code.compare(that.code)
 
-  override def toString = s"HttpResponseStatus($code: $message)"
+  override def toString = s"$code: $message"
 }
 
 object HttpStatus {
