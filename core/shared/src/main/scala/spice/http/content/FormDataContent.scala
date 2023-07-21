@@ -8,15 +8,15 @@ import java.io.File
 import spice.http.Headers
 import spice.net.ContentType
 
-case class FormDataContent(data: List[FormData]) extends Content {
+case class FormDataContent(entries: Map[String, FormDataEntry]) extends Content {
   override def length: Long = -1
   override def lastModified: Long = -1
   override def contentType: ContentType = ContentType.`multipart/form-data`
   override def withContentType(contentType: ContentType): Content = this
   override def withLastModified(lastModified: Long): Content = this
 
-  def fileOption(key: String): Option[FormDataEntry.FileEntry] = data.find(_.key == key).map(_.entries.head.asInstanceOf[FormDataEntry.FileEntry])
-  def stringOption(key: String): Option[FormDataEntry.StringEntry] = data.find(_.key == key).map(_.entries.head.asInstanceOf[FormDataEntry.StringEntry])
+  def fileOption(key: String): Option[FormDataEntry.FileEntry] = entries.get(key).map(_.asInstanceOf[FormDataEntry.FileEntry])
+  def stringOption(key: String): Option[FormDataEntry.StringEntry] = entries.get(key).map(_.asInstanceOf[FormDataEntry.StringEntry])
   def file(key: String): FormDataEntry.FileEntry = fileOption(key).getOrElse(throw new RuntimeException(s"Not found: $key in $this."))
   def string(key: String): FormDataEntry.StringEntry = stringOption(key).getOrElse(throw new RuntimeException(s"Not found: $key in $this."))
   def json(key: String): Json = JsonParser(string(key).value)
@@ -37,17 +37,16 @@ case class FormDataContent(data: List[FormData]) extends Content {
     withEntry(key, entry)
   }
 
-  def withEntry(key: String, entry: FormDataEntry): FormDataContent = {
-    val formData = data.find(_.key == key).getOrElse(FormData(key, Nil))
-    val updated = formData.copy(entries = formData.entries ::: List(entry))
-    copy(data = data.filterNot(_.key == key) ::: List(updated))
+  def withEntry(key: String, entry: FormDataEntry, replace: Boolean = false): FormDataContent = {
+    if (!replace && entries.contains(key)) throw new RuntimeException(s"Key $key already exists in the form data!")
+    copy(entries + (key -> entry))
   }
 
-  override def toString: String = s"FormDataContent(${data.map(_.key).mkString(", ")})"
+  override def toString: String = s"FormDataContent(${entries.map(t => s"${t._1}: ${t._2}")})"
 
   override def asString: IO[String] = IO.pure(toString)
 
   override def asStream: fs2.Stream[IO, Byte] = throw new UnsupportedOperationException("FormDataContent cannot be represented as a stream!")
 }
 
-object FormDataContent extends FormDataContent(Nil)
+object FormDataContent extends FormDataContent(Map.empty)

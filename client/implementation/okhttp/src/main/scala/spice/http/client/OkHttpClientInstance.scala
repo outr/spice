@@ -170,11 +170,11 @@ class OkHttpClientInstance(client: HttpClient) extends HttpClientInstance {
       case JsonContent(json, compact, contentType, _) =>
         val jsonString = if (compact) JsonFormatter.Compact(json) else JsonFormatter.Default(json)
         okhttp3.RequestBody.create(jsonString, ct(contentType))
-      case FormDataContent(data) =>
+      case FormDataContent(entries) =>
         val form = new okhttp3.MultipartBody.Builder()
         form.setType(ct(ContentType.`multipart/form-data`))
-        data.foreach {
-          case FormData(key, entries) => entries.foreach {
+        entries.foreach {
+          case (key, entry) => entry match {
             case StringEntry(value, _) => form.addFormDataPart(key, value)
             case FileEntry(fileName, file, headers) =>
               val partType = Headers.`Content-Type`.value(headers).getOrElse(ContentType.`application/octet-stream`)

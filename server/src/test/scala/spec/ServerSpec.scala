@@ -159,6 +159,8 @@ class ServerSpec extends AsyncWordSpec with AsyncIOSpec with Matchers {
                        request: FileInfo)
                       (implicit mdc: MDC): IO[RestfulResponse[String]] = IO {
       val content = exchange.request.content.get.asInstanceOf[FormDataContent]
+      val fileEntry = content.file("image")
+      assert(fileEntry.file.length() == 33404)
       ok(request.fileName)
     }
 

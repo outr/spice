@@ -1,11 +1,9 @@
 package spice.ajax
 
 import cats.effect.IO
-import org.scalajs.dom
 import org.scalajs.dom.XMLHttpRequest
 import scribe.Logging
 import spice.http.HttpMethod
-import spice.http.content.FormData
 import spice.net.URL
 
 import scala.collection.immutable.Queue
@@ -21,7 +19,7 @@ class AjaxManager(val maxConcurrent: Int) extends Logging {
 
   def enqueue(url: URL,
               method: HttpMethod = HttpMethod.Post,
-              data: Option[FormData | String] = None,
+              data: Option[String] = None,
               timeout: Int = 0,
               headers: Map[String, String] = Map.empty,
               withCredentials: Boolean = true,

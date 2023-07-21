@@ -9,7 +9,6 @@ import java.net.URL
 
 trait SharedContentHelpers {
   val empty: Content = string("", ContentType.`text/plain`)
-  lazy val form: FormDataContent = FormDataContent(Nil)
 
   def graphql(query: String, operationName: Option[String] = None, variables: List[(String, Json)] = Nil): Content = {
     json(obj(

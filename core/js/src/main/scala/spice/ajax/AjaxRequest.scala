@@ -5,16 +5,14 @@ import org.scalajs.dom
 import org.scalajs.dom.{ProgressEvent, XMLHttpRequest}
 import reactify._
 import spice.http.HttpMethod
-import spice.http.content.FormData
 import spice.net.URL
 
 import scala.scalajs.js
-import scala.scalajs.js.|
 import scala.util.{Failure, Success, Try}
 
 class AjaxRequest(url: URL,
                   method: HttpMethod = HttpMethod.Post,
-                  data: Option[FormData | String] = None,
+                  data: Option[String] = None,
                   timeout: Int = 0,
                   headers: Map[String, String] = Map.empty,
                   withCredentials: Boolean = true,

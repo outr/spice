@@ -5,7 +5,7 @@ import io.undertow.server.HttpServerExchange
 import io.undertow.server.handlers.form.{FormDataParser, FormParserFactory}
 import io.undertow.util.HeaderMap
 import org.xnio.streams.ChannelInputStream
-import spice.http.content.{Content, FormData, FormDataContent, FormDataEntry, StreamContent, StringContent}
+import spice.http.content.{Content, FormDataContent, FormDataEntry, StreamContent}
 import spice.http.content.FormDataEntry.{FileEntry, StringEntry}
 import spice.http.{Headers, HttpMethod, HttpRequest}
 import spice.net.{ContentType, IP, URL}
@@ -40,9 +40,10 @@ object UndertowRequestParser {
                 StringEntry(entry.getValue, headers)
               }
             }.toList
-            FormData(key, entries)
+            if (entries.length > 1) throw new UnsupportedOperationException(s"More than one entry for $key found! Not currently supported!")
+            key -> entries.head
           }
-          Some(FormDataContent(data))
+          Some(FormDataContent(data.toMap))
         case ct =>
           val stream = fs2.io.readInputStream[IO](
             fis = IO(new ChannelInputStream(exchange.getRequestChannel)),
