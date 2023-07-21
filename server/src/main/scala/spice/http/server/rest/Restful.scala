@@ -179,7 +179,7 @@ object Restful {
   }
 
   def jsonFromContent(content: Content): IO[Json] = content match {
-    case fdc: FormDataContent => IO(fdc.json("request"))
+    case fdc: FormDataContent => IO(fdc.jsons.head._2)
     case _ => content.asString.map { contentString =>
       val firstChar = contentString.charAt(0)
       val json = if (Set('"', '{', '[').contains(firstChar)) {

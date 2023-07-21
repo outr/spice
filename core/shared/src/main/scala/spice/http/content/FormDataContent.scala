@@ -15,11 +15,19 @@ case class FormDataContent(entries: Map[String, FormDataEntry]) extends Content 
   override def withContentType(contentType: ContentType): Content = this
   override def withLastModified(lastModified: Long): Content = this
 
-  def fileOption(key: String): Option[FormDataEntry.FileEntry] = entries.get(key).map(_.asInstanceOf[FormDataEntry.FileEntry])
-  def stringOption(key: String): Option[FormDataEntry.StringEntry] = entries.get(key).map(_.asInstanceOf[FormDataEntry.StringEntry])
-  def file(key: String): FormDataEntry.FileEntry = fileOption(key).getOrElse(throw new RuntimeException(s"Not found: $key in $this."))
-  def string(key: String): FormDataEntry.StringEntry = stringOption(key).getOrElse(throw new RuntimeException(s"Not found: $key in $this."))
-  def json(key: String): Json = JsonParser(string(key).value)
+  lazy val strings: Map[String, FormDataEntry.StringEntry] = entries.collect {
+    case (key, entry: FormDataEntry.StringEntry) => key -> entry
+  }
+  lazy val jsons: Map[String, Json] = strings.collect {
+    case (key, entry) if entry.headers.contains(Headers.`Content-Type`) => key -> JsonParser(entry.value)
+  }
+  lazy val files: Map[String, FormDataEntry.FileEntry] = entries.collect {
+    case (key, entry: FormDataEntry.FileEntry) => key -> entry
+  }
+
+  def file(key: String): FormDataEntry.FileEntry = files.getOrElse(key, throw new RuntimeException(s"Not found: $key in $this."))
+  def string(key: String): FormDataEntry.StringEntry = strings.getOrElse(key, throw new RuntimeException(s"Not found: $key in $this."))
+  def json(key: String): Json = jsons.getOrElse(key, throw new RuntimeException(s"Not found: $key in $this."))
 
   def withFile(key: String, fileName: String, file: File, headers: Headers = Headers.empty): FormDataContent = {
     assert(file.exists(), s"Unable to find file: ${file.getAbsolutePath}")

@@ -7,6 +7,7 @@ import scala.collection.immutable.TreeMap
 case class Headers(map: TreeMap[String, List[String]] = TreeMap.empty(Ordering.by(_.toLowerCase))) {
   def first(key: HeaderKey): Option[String] = get(key).headOption
   def get(key: HeaderKey): List[String] = map.getOrElse(key.key, Nil)
+  def contains(key: HeaderKey): Boolean = map.contains(key.key)
   def withHeader(header: Header): Headers = {
     val list = get(header.key)
     copy(map + (header.key.key -> (list ::: List(header.value))))
