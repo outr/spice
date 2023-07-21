@@ -3,18 +3,21 @@ package spec
 import cats.effect.IO
 import cats.effect.testing.scalatest.AsyncIOSpec
 import fabric.io.JsonParser
+import fabric.obj
 import fabric.rw._
 import org.scalatest.matchers.should.Matchers
 import org.scalatest.wordspec.AsyncWordSpec
 import scribe.data.MDC
 import spice.ValidationError
-import spice.http.content.{Content, StringContent}
+import spice.http.content.{Content, FormDataContent, StringContent}
 import spice.http.server.dsl._
 import spice.http.server.handler.HttpHandler
 import spice.http.{HttpExchange, HttpMethod, HttpRequest, HttpStatus, paths}
 import spice.http.server.{HttpServer, MutableHttpServer}
 import spice.http.server.rest.{Restful, RestfulResponse}
 import spice.net._
+
+import java.io.File
 
 class ServerSpec extends AsyncWordSpec with AsyncIOSpec with Matchers {
   object server extends MutableHttpServer
@@ -30,12 +33,13 @@ class ServerSpec extends AsyncWordSpec with AsyncIOSpec with Matchers {
       })
       server.handlers.size should be(1)
     }
-    "configure Restful endpoint" in {
+    "configure Restful endpoints" in {
       server.handler(
         filters(
           path"/test/reverse" / ReverseService,
           path"/test/reverse/:value" / ReverseService,
-          path"/test/time" / ServerTimeService
+          path"/test/time" / ServerTimeService,
+          path"/test/file" / FileUploadService
         )
       )
       server.handlers.size should be(2)
@@ -100,6 +104,21 @@ class ServerSpec extends AsyncWordSpec with AsyncIOSpec with Matchers {
         response should be >= begin
       }
     }
+    "call a Restful endpoint that takes multipart content" in {
+      server.handle(HttpExchange(HttpRequest(
+        method = HttpMethod.Post,
+        url = url"http://localhost/test/file",
+        content = Some(FormDataContent
+          .withJson("request", FileInfo("test.png", "Test Image").json)
+          .withFile("image", "test.png", new File("test.png"))
+        )
+      ))).map { exchange =>
+        exchange.response.status should be(HttpStatus.OK)
+        val jsonString = exchange.response.content.get.asInstanceOf[StringContent].value
+        val fileName = JsonParser(jsonString).as[String]
+        fileName should be("test.png")
+      }
+    }
   }
 
   case class ReverseRequest(value: String)
@@ -133,5 +152,22 @@ class ServerSpec extends AsyncWordSpec with AsyncIOSpec with Matchers {
     override def error(errors: List[ValidationError], status: HttpStatus): RestfulResponse[Long] = {
       RestfulResponse(0L, status)
     }
+  }
+
+  object FileUploadService extends Restful[FileInfo, String] {
+    override def apply(exchange: HttpExchange,
+                       request: FileInfo)
+                      (implicit mdc: MDC): IO[RestfulResponse[String]] = IO {
+      val content = exchange.request.content.get.asInstanceOf[FormDataContent]
+      ok(request.fileName)
+    }
+
+    override def error(errors: List[ValidationError], status: HttpStatus): RestfulResponse[String] = RestfulResponse("Failure!", HttpStatus.InternalServerError)
+  }
+
+  case class FileInfo(fileName: String, description: String)
+
+  object FileInfo {
+    implicit val rw: RW[FileInfo] = RW.gen
   }
 }

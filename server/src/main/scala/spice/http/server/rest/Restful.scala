@@ -6,9 +6,9 @@ import fabric.rw._
 import fabric.{Json, Str, arr, obj, str}
 import scribe.data.MDC
 import spice.ValidationError
-import spice.http.content.Content
+import spice.http.content.{Content, FormDataContent}
 import spice.http.server.dsl.{ConnectionFilter, FilterResponse, PathFilter}
-import spice.http.{HttpExchange, HttpMethod, HttpStatus}
+import spice.http.{HeaderKey, Headers, HttpExchange, HttpMethod, HttpStatus}
 import spice.net.{ContentType, URL, URLPath}
 
 import scala.collection.mutable.ListBuffer
@@ -178,14 +178,17 @@ object Restful {
     }
   }
 
-  def jsonFromContent(content: Content): IO[Json] = content.asString.map { contentString =>
-    val firstChar = contentString.charAt(0)
-    val json = if (Set('"', '{', '[').contains(firstChar)) {
-      JsonParser(contentString)
-    } else {
-      Str(contentString)
+  def jsonFromContent(content: Content): IO[Json] = content match {
+    case fdc: FormDataContent => IO(fdc.json("request"))
+    case _ => content.asString.map { contentString =>
+      val firstChar = contentString.charAt(0)
+      val json = if (Set('"', '{', '[').contains(firstChar)) {
+        JsonParser(contentString)
+      } else {
+        Str(contentString)
+      }
+      json
     }
-    json
   }
 
   def jsonFromURL(url: URL): Json = {
