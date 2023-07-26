@@ -19,6 +19,11 @@ abstract class Restful[Request, Response](implicit val requestRW: RW[Request],
                                           val responseRW: RW[Response]) extends ConnectionFilter {
   protected def allowGet: Boolean = true
 
+  protected implicit val contentRW: RW[Content] = RW.string[Content](
+    _.contentType.outputString,
+    fromString = _ => throw new UnsupportedOperationException("Content cannot be deserialized")
+  )
+
   def pathOption: Option[URLPath] = None
 
   def apply(exchange: HttpExchange, request: Request)(implicit mdc: MDC): IO[RestfulResponse[Response]]
@@ -91,30 +96,30 @@ abstract class Restful[Request, Response](implicit val requestRW: RW[Request],
                   error(throwable)
                 }
             } catch {
-              case t: Throwable =>
-                val err = ValidationError(s"Error while calling restful: ${t.getMessage}", ValidationError.Internal)
-                IO.pure(error(t))
+              case t: Throwable => IO.pure(error(t))
             }
           }
         }
       }
 
       io.flatMap { result =>
-        // Encode response
-        val responseJsonString = JsonFormatter.Default(result.response.json)
-
-        // Attach content
-        exchange.modify { httpResponse =>
-          IO {
-            httpResponse
-              .withContent(Content.string(responseJsonString, ContentType.`application/json`))
-              .withStatus(result.status)
+        responseToContent(result.response).flatMap { content =>
+          exchange.modify { httpResponse =>
+            IO.pure(httpResponse.withContent(content).withStatus(result.status))
           }
         }
       }
     }
   } else {
     IO.pure(exchange)
+  }
+
+  protected def responseToContent(response: Response): IO[Content] = response match {
+    case content: Content => IO.pure(content)
+    case _ => IO.blocking {
+      val json = response.json
+      Content.json(json, compact = false)
+    }
   }
 }
 

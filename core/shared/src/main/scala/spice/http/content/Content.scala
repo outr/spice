@@ -1,6 +1,7 @@
 package spice.http.content
 
 import cats.effect.IO
+import fabric.rw.RW
 import spice.net.ContentType
 
 trait Content {

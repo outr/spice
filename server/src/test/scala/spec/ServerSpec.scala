@@ -9,7 +9,7 @@ import org.scalatest.matchers.should.Matchers
 import org.scalatest.wordspec.AsyncWordSpec
 import scribe.data.MDC
 import spice.ValidationError
-import spice.http.content.{Content, FormDataContent, StringContent}
+import spice.http.content.{Content, FormDataContent, JsonContent, StringContent}
 import spice.http.server.dsl._
 import spice.http.server.handler.HttpHandler
 import spice.http.{HttpExchange, HttpMethod, HttpRequest, HttpStatus, paths}
@@ -62,8 +62,8 @@ class ServerSpec extends AsyncWordSpec with AsyncIOSpec with Matchers {
         content = Some(content)
       ))).map { exchange =>
         exchange.response.status should be(HttpStatus.OK)
-        val jsonString = exchange.response.content.get.asInstanceOf[StringContent].value
-        val response = JsonParser(jsonString).as[ReverseResponse]
+        val json = exchange.response.content.get.asInstanceOf[JsonContent].json
+        val response = json.as[ReverseResponse]
         response.errors should be(Nil)
         response.reversed should be(Some("gnitseT"))
       }
@@ -74,8 +74,8 @@ class ServerSpec extends AsyncWordSpec with AsyncIOSpec with Matchers {
         url = url"http://localhost/test/reverse?value=Testing"
       ))).map { exchange =>
         exchange.response.status should be(HttpStatus.OK)
-        val jsonString = exchange.response.content.get.asInstanceOf[StringContent].value
-        val response = JsonParser(jsonString).as[ReverseResponse]
+        val json = exchange.response.content.get.asInstanceOf[JsonContent].json
+        val response = json.as[ReverseResponse]
         response.errors should be(Nil)
         response.reversed should be(Some("gnitseT"))
       }
@@ -86,8 +86,8 @@ class ServerSpec extends AsyncWordSpec with AsyncIOSpec with Matchers {
         url = url"http://localhost/test/reverse/Testing"
       ))).map { exchange =>
         exchange.response.status should be(HttpStatus.OK)
-        val jsonString = exchange.response.content.get.asInstanceOf[StringContent].value
-        val response = JsonParser(jsonString).as[ReverseResponse]
+        val json = exchange.response.content.get.asInstanceOf[JsonContent].json
+        val response = json.as[ReverseResponse]
         response.errors should be(Nil)
         response.reversed should be(Some("gnitseT"))
       }
@@ -99,8 +99,8 @@ class ServerSpec extends AsyncWordSpec with AsyncIOSpec with Matchers {
         url = url"http://localhost/test/time"
       ))).map { exchange =>
         exchange.response.status should be(HttpStatus.OK)
-        val jsonString = exchange.response.content.get.asInstanceOf[StringContent].value
-        val response = JsonParser(jsonString).as[Long]
+        val json = exchange.response.content.get.asInstanceOf[JsonContent].json
+        val response = json.as[Long]
         response should be >= begin
       }
     }
@@ -114,8 +114,8 @@ class ServerSpec extends AsyncWordSpec with AsyncIOSpec with Matchers {
         )
       ))).map { exchange =>
         exchange.response.status should be(HttpStatus.OK)
-        val jsonString = exchange.response.content.get.asInstanceOf[StringContent].value
-        val fileName = JsonParser(jsonString).as[String]
+        val json = exchange.response.content.get.asInstanceOf[JsonContent].json
+        val fileName = json.as[String]
         fileName should be("test.png")
       }
     }
