@@ -211,7 +211,7 @@ class OkHttpClientInstance(client: HttpClient) extends HttpClientInstance {
 
   private def responseFromOk(r: okhttp3.Response): HttpResponse = {
     // Status
-    val status = HttpStatus(code = r.code(), message = r.message())
+    val status = HttpStatus.getByCode(r.code()).getOrElse(HttpStatus(code = r.code(), message = r.message()))
 
     // Headers
     val headersMap = r.headers().names().asScala.toList.map { key =>

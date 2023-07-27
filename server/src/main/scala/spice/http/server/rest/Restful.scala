@@ -1,15 +1,15 @@
 package spice.http.server.rest
 
 import cats.effect.IO
-import fabric.io.{JsonFormatter, JsonParser}
+import fabric.io.JsonParser
 import fabric.rw._
 import fabric.{Json, Str, arr, obj, str}
 import scribe.data.MDC
 import spice.ValidationError
 import spice.http.content.{Content, FormDataContent}
 import spice.http.server.dsl.{ConnectionFilter, FilterResponse, PathFilter}
-import spice.http.{HeaderKey, Headers, HttpExchange, HttpMethod, HttpStatus}
-import spice.net.{ContentType, URL, URLPath}
+import spice.http.{HttpExchange, HttpMethod, HttpStatus}
+import spice.net.{URL, URLPath}
 
 import scala.collection.mutable.ListBuffer
 import scala.concurrent.duration.Duration
@@ -18,11 +18,6 @@ import scala.language.experimental.macros
 abstract class Restful[Request, Response](implicit val requestRW: RW[Request],
                                           val responseRW: RW[Response]) extends ConnectionFilter {
   protected def allowGet: Boolean = true
-
-  protected implicit val contentRW: RW[Content] = RW.string[Content](
-    _.contentType.outputString,
-    fromString = _ => throw new UnsupportedOperationException("Content cannot be deserialized")
-  )
 
   def pathOption: Option[URLPath] = None
 
@@ -184,16 +179,17 @@ object Restful {
   }
 
   def jsonFromContent(content: Content): IO[Json] = content match {
-    case fdc: FormDataContent => IO(fdc.jsons.head._2)
-    case _ => content.asString.map { contentString =>
-      val firstChar = contentString.charAt(0)
-      val json = if (Set('"', '{', '[').contains(firstChar)) {
-        JsonParser(contentString)
-      } else {
-        Str(contentString)
+    case fdc: FormDataContent => IO(JsonParser(fdc.strings.head._2.value))
+    case _ =>
+      content.asString.map { contentString =>
+        val firstChar = contentString.charAt(0)
+        val json = if (Set('"', '{', '[').contains(firstChar)) {
+          JsonParser(contentString)
+        } else {
+          Str(contentString)
+        }
+        json
       }
-      json
-    }
   }
 
   def jsonFromURL(url: URL): Json = {

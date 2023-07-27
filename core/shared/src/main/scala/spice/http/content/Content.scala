@@ -16,6 +16,11 @@ trait Content {
 }
 
 object Content extends SharedContentHelpers with ContentHelpers {
+  implicit val rw: RW[Content] = RW.string[Content](
+    asString = _ => throw new UnsupportedOperationException("Content cannot be converted"),
+    fromString = _ => throw new UnsupportedOperationException("Content cannot be converted")
+  )
+
   case object none extends Content {
     override def length: Long = -1L
     override def lastModified: Long = -1L

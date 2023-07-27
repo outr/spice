@@ -216,11 +216,10 @@ case class HttpClient(request: HttpRequest,
     method(if (method == HttpMethod.Get) HttpMethod.Post else method).json(requestJson).callTry[Response]
   }
 
-  def restful[Request: RW, Response: RW](request: Request): IO[Response] =
-    restfulTry[Request, Response](request).map {
-      case Success(response) => response
-      case Failure(throwable) => throw throwable
-    }
+  def restful[Request: RW, Response: RW](request: Request): IO[Response] = restfulTry[Request, Response](request).map {
+    case Success(response) => response
+    case Failure(throwable) => throw throwable
+  }
 
   /**
    * Similar to the restful call, but provides a different return-type if the response is an error.

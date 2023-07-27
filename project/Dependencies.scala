@@ -17,6 +17,8 @@ object Dependencies {
     val literally: String = "1.1.0"
     
     val okHttp: String = "4.11.0"
+
+    val httpMime: String = "4.5.14"
     
     val undertow: String = "2.3.7.Final"
     
@@ -40,6 +42,7 @@ object Dependencies {
   val fs2IO: ModuleID = "co.fs2" %% "fs2-io" % version.fs2
 	val literally: ModuleID = "org.typelevel" %% "literally" % version.literally
 	val okHttp: ModuleID = "com.squareup.okhttp3" % "okhttp" % version.okHttp
+  val httpMime: ModuleID = "org.apache.httpcomponents" % "httpmime" % version.httpMime
 	val undertow: ModuleID = "io.undertow" % "undertow-core" % version.undertow
 	val moduload: ModuleID = "com.outr" %% "moduload" % version.moduload
 

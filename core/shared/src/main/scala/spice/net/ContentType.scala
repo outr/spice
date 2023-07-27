@@ -27,7 +27,9 @@ case class ContentType(`type`: String,
   lazy val extension: Option[String] = ContentType.mimeType2Extensions.getOrElse(mimeType, Nil).headOption
 
   def withExtra(key: String, value: String): ContentType = copy(extras = extras + (key -> value))
+  def withBoundary(value: String): ContentType = withExtra("boundary", value)
   def withCharSet(charSet: String): ContentType = withExtra("charset", charSet)
+  def withStart(value: String): ContentType = withExtra("start", value)
 
   def is(contentType: ContentType): Boolean = contentType.mimeType == mimeType
 
