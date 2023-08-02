@@ -16,7 +16,7 @@ case class HttpExchange(request: HttpRequest,
     IO.pure(response.withContent(content))
   }
 
-  def isWebSocketUpgradeRequest: Boolean = Headers.`Connection`.all(request.headers).contains("Upgrade")
+  def isWebSocketUpgradeRequest: Boolean = Headers.`Connection`.all(request.headers).exists(_.equalsIgnoreCase("Upgrade"))
 
   def webSocketListener: Option[WebSocketListener] = store.get[WebSocketListener](WebSocketListener.key)
 
