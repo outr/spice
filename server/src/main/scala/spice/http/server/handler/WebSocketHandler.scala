@@ -1,7 +1,7 @@
 package spice.http.server.handler
 
 import cats.effect.IO
-import scribe.data.MDC
+import scribe.mdc.MDC
 import spice.http.{HttpExchange, WebSocketListener}
 
 trait WebSocketHandler extends HttpHandler {

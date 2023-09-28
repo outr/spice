@@ -7,7 +7,7 @@ import fabric.obj
 import fabric.rw._
 import org.scalatest.matchers.should.Matchers
 import org.scalatest.wordspec.AsyncWordSpec
-import scribe.data.MDC
+import scribe.mdc.MDC
 import spice.ValidationError
 import spice.http.content.{Content, FormDataContent, JsonContent, StringContent}
 import spice.http.server.dsl._

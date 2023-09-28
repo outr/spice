@@ -151,6 +151,10 @@ class URLSpec extends AnyWordSpec with Matchers {
         url.path.toString should be("/")
         url.parameters should be(Parameters.empty)
       }
+      "properly parse a URL with IPv6" in {
+        val url = URL.parse("https://0:0:0:0:0:0:0:0:8080")
+        url.toString should be("https://0:0:0:0:0:0:0:0:8080/")
+      }
       "properly parse a URL with a colon" in {
         val url = URL.parse("https://user1:detail@example.com/more/complex")
         url.toString should be("https://user1:detail@example.com/more/complex")

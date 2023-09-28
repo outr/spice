@@ -2,7 +2,7 @@ package spice.http.server
 
 import cats.effect.IO
 import fabric.rw._
-import scribe.data.MDC
+import scribe.mdc.MDC
 import spice.http.content.Content
 import spice.http.server.handler._
 import spice.http.server.rest.Restful

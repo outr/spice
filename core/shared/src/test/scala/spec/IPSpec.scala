@@ -54,6 +54,13 @@ class IPSpec extends AnyWordSpec with Matchers {
         ip.addressString should be("2604:ca00:129:99af:0:0:860:930a")
         ip.canonicalString should be("2604:ca00:0129:99af:0000:0000:0860:930a")
       }
+      "properly parse 0:0:0:0:0:0:0:0" in {
+        val ip = ip"0:0:0:0:0:0:0:0".asInstanceOf[IP.v6]
+        ip.address should be(Vector(0, 0, 0, 0, 0, 0, 0, 0))
+        ip.scope should be(None)
+        ip.addressString should be("0:0:0:0:0:0:0:0")
+        ip.canonicalString should be("0000:0000:0000:0000:0000:0000:0000:0000")
+      }
     }
   }
 }

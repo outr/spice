@@ -1,7 +1,7 @@
 package spice.http.server.dsl
 
 import cats.effect.IO
-import scribe.data.MDC
+import scribe.mdc.MDC
 import spice.http.HttpExchange
 import spice.http.content.Content
 import spice.http.server.handler.SenderHandler

@@ -1,7 +1,7 @@
 package spice.http.server.dsl
 
 import cats.effect.IO
-import scribe.data.MDC
+import scribe.mdc.MDC
 import spice.http.HttpExchange
 
 class ActionFilter(f: HttpExchange => IO[HttpExchange]) extends ConnectionFilter {

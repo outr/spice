@@ -4,7 +4,7 @@ import cats.effect.IO
 import fabric.io.JsonParser
 import fabric.rw._
 import fabric.{Json, Str, arr, obj, str}
-import scribe.data.MDC
+import scribe.mdc.MDC
 import spice.ValidationError
 import spice.http.content.{Content, FormDataContent}
 import spice.http.server.dsl.{ConnectionFilter, FilterResponse, PathFilter}

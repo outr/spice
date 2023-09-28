@@ -5,7 +5,7 @@ import fabric._
 import fabric.define.DefType
 import fabric.io.JsonParser
 import fabric.rw._
-import scribe.data.MDC
+import scribe.mdc.MDC
 import spice.http.{HttpExchange, HttpStatus}
 import spice.http.content.Content
 import spice.http.server.BasePath

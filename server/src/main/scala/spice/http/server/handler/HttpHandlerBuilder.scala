@@ -5,7 +5,7 @@ import fabric._
 import fabric.io.{JsonFormatter, JsonParser}
 import fabric.rw._
 import scribe.Priority
-import scribe.data.MDC
+import scribe.mdc.MDC
 import spice.http.content.{Content, StringContent}
 import spice.http.server.dsl.ClassLoaderPath
 import spice.http.{HttpExchange, HttpMethod, HttpRequest}

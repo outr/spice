@@ -2,7 +2,7 @@ package spec
 
 import cats.effect.{ExitCode, IO, IOApp}
 import profig.Profig
-import scribe.data.MDC
+import scribe.mdc.MDC
 import spice.http.{HttpExchange, HttpStatus}
 import spice.http.content.Content
 import spice.http.server.StaticHttpServer

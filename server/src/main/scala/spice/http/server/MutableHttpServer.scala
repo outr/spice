@@ -2,7 +2,7 @@ package spice.http.server
 
 import cats.effect.IO
 import reactify.Var
-import scribe.data.MDC
+import scribe.mdc.MDC
 import spice.ItemContainer
 import spice.http.{HttpExchange, HttpStatus}
 import spice.http.server.handler.{HttpHandler, HttpHandlerBuilder}

@@ -2,7 +2,7 @@ package spice.http.server.openapi.server
 
 import cats.effect.IO
 import fabric.rw._
-import scribe.data.MDC
+import scribe.mdc.MDC
 
 case class TypedServiceCall[Req, Res](call: ServiceRequest[Req] => IO[ServiceResponse[Res]],
                                       summary: String,

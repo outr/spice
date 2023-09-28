@@ -1,7 +1,7 @@
 package spice.http.server
 
 import cats.effect.IO
-import scribe.data.MDC
+import scribe.mdc.MDC
 import spice.http.HttpExchange
 import spice.http.server.handler.HttpHandler
 

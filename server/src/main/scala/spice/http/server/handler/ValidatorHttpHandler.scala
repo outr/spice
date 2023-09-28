@@ -1,7 +1,7 @@
 package spice.http.server.handler
 
 import cats.effect.IO
-import scribe.data.MDC
+import scribe.mdc.MDC
 import spice.http.content.Content
 import spice.http.{HttpExchange, HttpStatus}
 import spice.http.server.validation.ValidationResult.{Continue, Redirect}

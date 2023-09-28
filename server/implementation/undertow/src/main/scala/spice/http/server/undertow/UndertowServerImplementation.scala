@@ -15,7 +15,7 @@ import spice.net.{MalformedURLException, URL}
 
 import java.util.logging.LogManager
 import cats.effect.unsafe.implicits.global
-import scribe.data.MDC
+import scribe.mdc.MDC
 
 import scala.jdk.CollectionConverters.ListHasAsScala
 
@@ -52,7 +52,8 @@ class UndertowServerImplementation(server: HttpServer) extends HttpServerImpleme
     try {
       u.start()
       val urls = u.getListenerInfo.asScala.map { info =>
-        val address = s"${info.getProtcol}:/${info.getAddress}"
+        val a = info.getAddress.toString.replace("[", "").replace("]", "")
+        val address = s"${info.getProtcol}:/$a"
         try {
           Some(URL.parse(address))
         } catch {
