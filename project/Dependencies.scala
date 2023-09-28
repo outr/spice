@@ -10,9 +10,9 @@ object Dependencies {
     
     val reactify: String = "4.0.8"
     
-    val cats: String = "3.5.1"
+    val cats: String = "3.5.2"
     
-    val fs2: String = "3.8.0"
+    val fs2: String = "3.9.2"
     
     val literally: String = "1.1.0"
     
@@ -24,9 +24,9 @@ object Dependencies {
     
     val moduload: String = "1.1.7"
 
-    val scalaJSDOM: String = "2.6.0"
+    val scalaJSDOM: String = "2.7.0"
 
-    val scalaTest: String = "3.2.16"
+    val scalaTest: String = "3.2.17"
     
     val catsEffectTesting: String = "1.5.0"
   }
