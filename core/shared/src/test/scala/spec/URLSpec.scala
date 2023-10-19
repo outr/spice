@@ -14,6 +14,15 @@ class URLSpec extends AnyWordSpec with Matchers {
         url.path.encoded should be("/")
         url.port should be(443)
       }
+      "properly parse a URL with GET params" in {
+        val url = URL.parse("https://somewhere.com?foo.one=1&foo.two=2")
+        url.host should be("somewhere.com")
+        url.protocol should be(Protocol.Https)
+        url.path.encoded should be("/")
+        url.port should be(443)
+        url.parameters.value("foo.one") should be(Some("1"))
+        url.parameters.value("foo.two") should be(Some("2"))
+      }
       "quick fail parsing a non-URL" in {
         URL.get("test") should be(Left(URLParseFailure("test is not a valid URL", URLParseFailure.QuickFail)))
       }
@@ -204,6 +213,10 @@ class URLSpec extends AnyWordSpec with Matchers {
       "apply a complete path with port properly" in {
         val url = URL.parse("https://cdnjs.cloudflare.com/ajax/libs/pixi.js/4.5.0/pixi.min.js")
         url.asPath(includePort = true) should be("/cdnjs.cloudflare.com/443/ajax/libs/pixi.js/4.5.0/pixi.min.js")
+      }
+      "should handle commas" in {
+        val url = URL.parse("https://api.mapbox.com/styles/v1/mapbox/streets-v12/static/-122.256654%2C37.804077%2C13/500x300")
+        url.toString should be("https://api.mapbox.com/styles/v1/mapbox/streets-v12/static/-122.256654%2C37.804077%2C13/500x300")
       }
     }
   }

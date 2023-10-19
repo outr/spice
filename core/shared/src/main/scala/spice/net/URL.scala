@@ -148,19 +148,16 @@ object URL {
   }
 
   def parse(url: String,
-            absolutizePath: Boolean = true,
             validateTLD: Boolean = true,
-            defaultProtocol: Protocol = Protocol.Https): URL = get(url, absolutizePath, validateTLD, defaultProtocol) match {
+            defaultProtocol: Protocol = Protocol.Https): URL = get(url, validateTLD, defaultProtocol) match {
     case Left(parseFailure) => throw MalformedURLException(s"Unable to parse URL: [$url] (${parseFailure.message})", url, parseFailure.cause)
     case Right(url) => url
   }
 
   def get(url: String,
-          absolutizePath: Boolean = true,
           validateTLD: Boolean = true,
           defaultProtocol: Protocol = Protocol.Https): Either[URLParseFailure, URL] = URLParser(
     s = url,
-    absolutizePath = absolutizePath,
     validateTLD = validateTLD,
     defaultProtocol = defaultProtocol
   )

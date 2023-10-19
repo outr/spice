@@ -4,6 +4,7 @@ import cats.effect.IO
 import fabric.io.JsonParser
 import fabric.rw._
 import fabric.{Json, Str, arr, obj, str}
+import profig.Profig
 import scribe.mdc.MDC
 import spice.ValidationError
 import spice.http.content.{Content, FormDataContent}
@@ -193,7 +194,8 @@ object Restful {
   }
 
   def jsonFromURL(url: URL): Json = {
-    val entries = url.parameters.map.toList.map {
+    val p = Profig.empty
+    url.parameters.map.toList.foreach {
       case (key, param) =>
         val values = param.values
         val valuesJson = if (values.length > 1) {
@@ -201,8 +203,8 @@ object Restful {
         } else {
           str(values.head)
         }
-        key -> valuesJson
+        p(key).merge(valuesJson)
     }
-    obj(entries: _*)
+    p.json
   }
 }

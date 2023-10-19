@@ -4,7 +4,6 @@ import scala.util.Try
 
 object URLParser {
   def apply(s: String,
-            absolutizePath: Boolean = true,
             validateTLD: Boolean = true,
             defaultProtocol: Protocol = Protocol.Https): Either[URLParseFailure, URL] = {
     if ((s.contains('.') || s.contains(":")) && !s.startsWith(":") && !s.endsWith(".")) {
@@ -59,6 +58,9 @@ object URLParser {
 
   def separateHostAndPath(s: String): (String, String) = if (s.contains('/')) {
     val index = s.indexOf('/')
+    (s.substring(0, index), s.substring(index))
+  } else if (s.contains('?')) {
+    val index = s.indexOf('?')
     (s.substring(0, index), s.substring(index))
   } else {
     (s, "")
