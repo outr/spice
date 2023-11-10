@@ -70,14 +70,16 @@ case class HttpClient(request: HttpRequest,
   def method(method: HttpMethod): HttpClient = modify(_.copy(method = method))
   def get: HttpClient = method(HttpMethod.Get)
   def post: HttpClient = method(HttpMethod.Post)
-  def header(header: Header, replace: Boolean = true): HttpClient = {
+  def header(header: Header): HttpClient = this.header(header, replace = true)
+  def header(header: Header, replace: Boolean): HttpClient = {
     if (replace) {
       modify(r => r.copy(headers = r.headers.setHeader(header)))
     } else {
       modify(r => r.copy(headers = r.headers.withHeader(header)))
     }
   }
-  def header(key: String, value: String, replace: Boolean = true): HttpClient = header(Header(HeaderKey(key), value), replace)
+  def header(key: String, value: String): HttpClient = header(key, value, replace = true)
+  def header(key: String, value: String, replace: Boolean): HttpClient = header(Header(HeaderKey(key), value), replace)
   def headers(headers: Headers, replace: Boolean = false): HttpClient = if (replace) {
     modify(_.copy(headers = headers))
   } else {
