@@ -5,6 +5,7 @@ import fabric.define.DefType
 import fabric.rw._
 
 case class OpenAPIComponentSchema(`type`: String,
+                                  nullable: Option[Boolean] = None,
                                   description: Option[String] = None,
                                   maxLength: Option[Int] = None,
                                   minimum: Option[Int] = None,

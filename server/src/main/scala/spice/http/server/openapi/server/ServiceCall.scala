@@ -66,12 +66,20 @@ trait ServiceCall extends HttpHandler {
       description = description,
       tags = tags,
       operationId = operationId,
-      requestBody = None, // TODO: Implement
+      requestBody = Some(OpenAPIRequestBody(
+        required = true,
+        content = OpenAPIContent(
+          ContentType.`application/json` -> OpenAPIContentType(
+            schema = Left(schemaFrom(requestRW.definition, requestSchema.getOrElse(Schema())))
+          )
+        )
+      )),
       responses = Map(
         "200" -> OpenAPIResponse(
           description = successDescription,
           content = OpenAPIContent(
             ContentType.`application/json` -> OpenAPIContentType(
+              // TODO: Replace Left(OpenAPIComponentSchema) with Right(OpenAPISchema)
               schema = Left(schemaFrom(responseRW.definition, responseSchema.getOrElse(Schema())))
             )
           )
@@ -99,6 +107,16 @@ trait ServiceCall extends HttpHandler {
       `type` = "string",
       `enum` = values
     )
+    case DefType.Bool => OpenAPIComponentSchema(
+      `type` = "boolean"
+    )
+    case DefType.Int => OpenAPIComponentSchema(
+      `type` = "integer"
+    )
+    case DefType.Dec => OpenAPIComponentSchema(
+      `type` = "number"
+    )
+    case DefType.Opt(t) => schemaFrom(t, schema).copy(nullable = Some(true))
     case _ => throw new UnsupportedOperationException(s"DefType not supported: $dt")
   }).copy(
     description = schema.description,

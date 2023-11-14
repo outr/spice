@@ -3,8 +3,10 @@ package spice.http.server.openapi.server
 import cats.effect.IO
 import scribe.mdc.MDC
 import spice.http.HttpExchange
+import spice.http.content.Content
 import spice.http.server.HttpServer
 import spice.http.server.openapi._
+import spice.net.{ContentType, interpolation}
 
 trait OpenAPIServer extends HttpServer {
   def openAPIVersion: String = "3.0.3"
@@ -45,6 +47,12 @@ trait OpenAPIServer extends HttpServer {
     .flatMap(_(exchange))
     .headOption match {
       case Some(sc) => sc.handle(exchange)
+      case None if exchange.request.url.path == path"/swagger.json" => exchange.withContent(
+        Content.json(api.asJson, compact = false)
+      )
+      case None if exchange.request.url.path == path"/swagger.yaml" => exchange.withContent(
+        Content.string(api.asYaml, ContentType.`text/yaml`)
+      )
       case None => IO.pure(exchange)
-  }
+    }
 }
