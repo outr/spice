@@ -35,6 +35,14 @@ class OpenAPISpec extends AnyWordSpec with Matchers {
             get = Some(OpenAPIPathEntry(
               summary = "Returns a list of users.",
               description = "Optional extended description in CommonMark or HTML.",
+              requestBody = Some(OpenAPIRequestBody(
+                content = OpenAPIContent(
+                  ContentType.`application/json` -> OpenAPIContentType(Left(OpenAPIComponentSchema(
+                    `type` = "null"
+                  )))
+                ),
+                required = true
+              )),
               responses = Map(
                 "200" -> OpenAPIResponse(
                   description = "A JSON array of user names",

@@ -117,6 +117,9 @@ trait ServiceCall extends HttpHandler {
       `type` = "number"
     )
     case DefType.Opt(t) => schemaFrom(t, schema).copy(nullable = Some(true))
+    case DefType.Null => OpenAPIComponentSchema(
+      `type` = "null"
+    )
     case _ => throw new UnsupportedOperationException(s"DefType not supported: $dt")
   }).copy(
     description = schema.description,

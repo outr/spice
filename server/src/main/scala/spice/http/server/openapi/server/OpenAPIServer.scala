@@ -6,7 +6,7 @@ import spice.http.HttpExchange
 import spice.http.content.Content
 import spice.http.server.HttpServer
 import spice.http.server.openapi._
-import spice.net.{ContentType, interpolation}
+import spice.net._
 
 trait OpenAPIServer extends HttpServer {
   def openAPIVersion: String = "3.0.3"
