@@ -120,6 +120,9 @@ trait ServiceCall extends HttpHandler {
       `type` = "null"
     )
     case DefType.Poly(values) => OpenAPISchema.OneOf(values.values.map(dt => schemaFrom(dt, schema)).toList)
+    case DefType.Json => OpenAPISchema.Component(
+      `type` = "json"
+    )
     case _ => throw new UnsupportedOperationException(s"DefType not supported: $dt")
   }).withSchema(schema)
 }

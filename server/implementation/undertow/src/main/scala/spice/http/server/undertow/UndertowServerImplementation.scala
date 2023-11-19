@@ -111,7 +111,7 @@ class UndertowServerImplementation(server: HttpServer) extends HttpServerImpleme
           MDC { implicit mdc =>
             mdc("url") = url
             val io = UndertowRequestParser(undertow, url).flatMap { request =>
-              val exchange = HttpExchange(request, HttpResponse())
+              val exchange = HttpExchange(request)
               server.handle(exchange)
                 .redeemWith(server.errorRecovery(exchange, _), IO.pure)
             }.flatMap { exchange =>
