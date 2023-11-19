@@ -12,11 +12,14 @@ trait ServerSocketListener {
   def description: Option[String]
 
   def baseUrlFor(url: URL): Option[URL] = {
-    val s = url.toString
-    urls.find(u => s.startsWith(u.toString))
+    val s = url.toString.toLowerCase
+    urls.find(u => s.startsWith(u.toString.toLowerCase))
   }
 
   def matches(url: URL): Boolean = baseUrlFor(url).nonEmpty
+
+  def unapply(url: URL): Option[URLPath] = baseUrlFor(url)
+    .map(baseUrl => URLPath(url.path.parts.drop(baseUrl.path.parts.length)))
 }
 
 object ServerSocketListener {

@@ -2,6 +2,7 @@ package spec
 
 import cats.effect.testing.scalatest.AsyncIOSpec
 import fabric._
+import fabric.io.JsonParser
 import fabric.rw._
 import org.scalatest.matchers.should.Matchers
 import org.scalatest.wordspec.AsyncWordSpec
@@ -21,10 +22,13 @@ class OpenAPIServerSpec extends AsyncWordSpec with AsyncIOSpec with Matchers {
     }
     "call the /users endpoint on api.example.com" in {
       val request = HttpRequest(url = url"http://api.example.com/v1/users")
-      SimpleOpenAPIServer.handle(HttpExchange(request)).map { exchange =>
-        exchange.response.content.map(_.asInstanceOf[JsonContent].json) should be(Some(arr(
-          "root", "john.doe"
-        )))
+      SimpleOpenAPIServer.handle(HttpExchange(request)).flatMap { exchange =>
+        exchange.response.content.get.asString.map { contentString =>
+          val json = JsonParser(contentString)
+          json should be(arr(
+            "root", "john.doe"
+          ))
+        }
       }
     }
     "call the /users endpoint on staging-api.example.com" in {

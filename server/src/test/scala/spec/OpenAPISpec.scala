@@ -37,9 +37,9 @@ class OpenAPISpec extends AnyWordSpec with Matchers {
               description = "Optional extended description in CommonMark or HTML.",
               requestBody = Some(OpenAPIRequestBody(
                 content = OpenAPIContent(
-                  ContentType.`application/json` -> OpenAPIContentType(Left(OpenAPIComponentSchema(
+                  ContentType.`application/json` -> OpenAPIContentType(OpenAPISchema.Component(
                     `type` = "null"
-                  )))
+                  ))
                 ),
                 required = true
               )),
@@ -48,12 +48,12 @@ class OpenAPISpec extends AnyWordSpec with Matchers {
                   description = "A JSON array of user names",
                   content = OpenAPIContent(
                     ContentType.`application/json` -> OpenAPIContentType(
-                      schema = Left(OpenAPIComponentSchema(
+                      schema = OpenAPISchema.Component(
                         `type` = "array",
-                        items = Some(Left(OpenAPIComponentSchema(
+                        items = Some(OpenAPISchema.Component(
                           `type` = "string"
-                        )))
-                      ))
+                        ))
+                      )
                     )
                   )
                 )
@@ -63,6 +63,55 @@ class OpenAPISpec extends AnyWordSpec with Matchers {
         )
       )
       val expected = loadString("openapi-simple.yml")
+      api.asYaml should be(expected)
+    }
+    "create a simple OpenAPI document manually using oneOf" in {
+      val api = OpenAPI(
+        info = OpenAPIInfo(
+          title = "Sample API",
+          description = Some("Optional multiline or single-line description in [CommonMark](http://commonmark.org/help/) or HTML."),
+          version = "0.1.9"
+        ),
+        paths = Map(
+          "/poly" -> OpenAPIPath(
+            post = Some(OpenAPIPathEntry(
+              summary = "Polymorphic",
+              description = "Example",
+              requestBody = Some(OpenAPIRequestBody(
+                required = true,
+                content = OpenAPIContent(
+                  ContentType.`application/json` -> OpenAPIContentType(
+                    schema = OpenAPISchema.OneOf(List(
+                      OpenAPISchema.Component(
+                        `type` = "string"
+                      ),
+                      OpenAPISchema.Component(
+                        `type` = "integer"
+                      )
+                    ))
+                  )
+                )
+              )),
+              responses = Map(
+                "200" -> OpenAPIResponse(
+                  description = "A JSON array of user names",
+                  content = OpenAPIContent(
+                    ContentType.`application/json` -> OpenAPIContentType(
+                      schema = OpenAPISchema.Component(
+                        `type` = "array",
+                        items = Some(OpenAPISchema.Component(
+                          `type` = "string"
+                        ))
+                      )
+                    )
+                  )
+                )
+              )
+            ))
+          ),
+        )
+      )
+      val expected = loadString("openapi-poly.yml")
       api.asYaml should be(expected)
     }
     "create a tic tac toe example manually" in {
@@ -89,7 +138,7 @@ class OpenAPISpec extends AnyWordSpec with Matchers {
                   description = "OK",
                   content = OpenAPIContent(
                     ContentType.`application/json` -> OpenAPIContentType(
-                      schema = Right(OpenAPISchema(ref = "#/components/schemas/status"))
+                      schema = OpenAPISchema.Ref(ref = "#/components/schemas/status")
                     )
                   )
                 )
@@ -98,8 +147,8 @@ class OpenAPISpec extends AnyWordSpec with Matchers {
           ),
           "/board/{row}/{column}" -> OpenAPIPath(
             parameters = List(
-              OpenAPISchema("#/components/parameters/rowParam"),
-              OpenAPISchema("#/components/parameters/columnParam")
+              OpenAPISchema.Ref("#/components/parameters/rowParam"),
+              OpenAPISchema.Ref("#/components/parameters/columnParam")
             ),
             get = Some(OpenAPIPathEntry(
               summary = "Get a single board square",
@@ -111,7 +160,7 @@ class OpenAPISpec extends AnyWordSpec with Matchers {
                   description = "OK",
                   content = OpenAPIContent(
                     ContentType.`application/json` -> OpenAPIContentType(
-                      schema = Right(OpenAPISchema("#/components/schemas/mark"))
+                      schema = OpenAPISchema.Ref("#/components/schemas/mark")
                     )
                   )
                 ),
@@ -119,7 +168,7 @@ class OpenAPISpec extends AnyWordSpec with Matchers {
                   description = "The provided parameters are incorrect",
                   content = OpenAPIContent(
                     ContentType.`text/html` -> OpenAPIContentType(
-                      schema = Right(OpenAPISchema("#/components/schemas/errorMessage")),
+                      schema = OpenAPISchema.Ref("#/components/schemas/errorMessage"),
                       example = Some("Illegal coordinates")
                     )
                   )
@@ -135,7 +184,7 @@ class OpenAPISpec extends AnyWordSpec with Matchers {
                 required = true,
                 content = OpenAPIContent(
                   ContentType.`application/json` -> OpenAPIContentType(
-                    schema = Right(OpenAPISchema("#/components/schemas/mark"))
+                    schema = OpenAPISchema.Ref("#/components/schemas/mark")
                   )
                 )
               )),
@@ -144,7 +193,7 @@ class OpenAPISpec extends AnyWordSpec with Matchers {
                   description = "OK",
                   content = OpenAPIContent(
                     ContentType.`application/json` -> OpenAPIContentType(
-                      schema = Right(OpenAPISchema("#/components/schemas/status"))
+                      schema = OpenAPISchema.Ref("#/components/schemas/status")
                     )
                   )
                 ),
@@ -152,7 +201,7 @@ class OpenAPISpec extends AnyWordSpec with Matchers {
                   description = "The provided parameters are incorrect",
                   content = OpenAPIContent(
                     ContentType.`text/html` -> OpenAPIContentType(
-                      schema = Right(OpenAPISchema("#/components/schemas/errorMessage")),
+                      schema = OpenAPISchema.Ref("#/components/schemas/errorMessage"),
                       examples = Map(
                         "illegalCoordinates" -> OpenAPIValue("Illegal coordinates."),
                         "notEmpty" -> OpenAPIValue("Square is not empty."),
@@ -172,29 +221,29 @@ class OpenAPISpec extends AnyWordSpec with Matchers {
               name = "row",
               in = "path",
               required = true,
-              schema = OpenAPISchema("#/components/schemas/coordinate")
+              schema = OpenAPISchema.Ref("#/components/schemas/coordinate")
             ),
             "columnParam" -> OpenAPIParameter(
               description = "Board column (horizontal coordinate)",
               name = "column",
               in = "path",
               required = true,
-              schema = OpenAPISchema("#/components/schemas/coordinate")
+              schema = OpenAPISchema.Ref("#/components/schemas/coordinate")
             )
           ),
           schemas = Map(
-            "errorMessage" -> OpenAPIComponentSchema(
+            "errorMessage" -> OpenAPISchema.Component(
               `type` = "string",
               maxLength = Some(256),
               description = Some("A text message describing an error")
             ),
-            "coordinate" -> OpenAPIComponentSchema(
+            "coordinate" -> OpenAPISchema.Component(
               `type` = "integer",
               minimum = Some(1),
               maximum = Some(3),
               example = Some(1)
             ),
-            "mark" -> OpenAPIComponentSchema(
+            "mark" -> OpenAPISchema.Component(
               `type` = "string",
               `enum` = List(
                 ".",
@@ -204,18 +253,18 @@ class OpenAPISpec extends AnyWordSpec with Matchers {
               description = Some("Possible values for a board square. `.` means empty square."),
               example = Some(".")
             ),
-            "board" -> OpenAPIComponentSchema(
+            "board" -> OpenAPISchema.Component(
               `type` = "array",
               maxItems = Some(3),
               minItems = Some(3),
-              items = Some(Left(OpenAPIComponentSchema(
+              items = Some(OpenAPISchema.Component(
                 `type` = "array",
                 maxItems = Some(3),
                 minItems = Some(3),
-                items = Some(Right(OpenAPISchema("#/components/schemas/mark")))
-              )))
+                items = Some(OpenAPISchema.Ref("#/components/schemas/mark"))
+              ))
             ),
-            "winner" -> OpenAPIComponentSchema(
+            "winner" -> OpenAPISchema.Component(
               `type` = "string",
               `enum` = List(
                 ".",
@@ -225,11 +274,11 @@ class OpenAPISpec extends AnyWordSpec with Matchers {
               description = Some("Winner of the game. `.` means nobody has won yet."),
               example = Some(".")
             ),
-            "status" -> OpenAPIComponentSchema(
+            "status" -> OpenAPISchema.Component(
               `type` = "object",
               properties = Map(
-                "winner" -> Right(OpenAPISchema("#/components/schemas/winner")),
-                "board" -> Right(OpenAPISchema("#/components/schemas/board"))
+                "winner" -> OpenAPISchema.Ref("#/components/schemas/winner"),
+                "board" -> OpenAPISchema.Ref("#/components/schemas/board")
               )
             )
           )

@@ -12,11 +12,17 @@ trait Service {
   val post: ServiceCall = ServiceCall.NotSupported
   val put: ServiceCall = ServiceCall.NotSupported
 
-  def apply(exchange: HttpExchange): Option[ServiceCall] = exchange.request.method match {
-    case HttpMethod.Get if get != ServiceCall.NotSupported => Some(get)
-    case HttpMethod.Post if post != ServiceCall.NotSupported => Some(post)
-    case HttpMethod.Put if put != ServiceCall.NotSupported => Some(put)
-    case _ => None    // TODO: Support all methods
+  def apply(exchange: HttpExchange): Option[ServiceCall] = {
+    if (exchange.path == path) {
+      exchange.request.method match {
+        case HttpMethod.Get if get != ServiceCall.NotSupported => Some(get)
+        case HttpMethod.Post if post != ServiceCall.NotSupported => Some(post)
+        case HttpMethod.Put if put != ServiceCall.NotSupported => Some(put)
+        case _ => None    // TODO: Support all methods
+      }
+    } else {
+      None
+    }
   }
 
   def serviceCall[Request, Response](summary: String,

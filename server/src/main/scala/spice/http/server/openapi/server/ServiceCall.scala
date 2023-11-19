@@ -70,7 +70,7 @@ trait ServiceCall extends HttpHandler {
         required = true,
         content = OpenAPIContent(
           ContentType.`application/json` -> OpenAPIContentType(
-            schema = Left(schemaFrom(requestRW.definition, requestSchema.getOrElse(Schema())))
+            schema = schemaFrom(requestRW.definition, requestSchema.getOrElse(Schema()))
           )
         )
       )),
@@ -79,8 +79,7 @@ trait ServiceCall extends HttpHandler {
           description = successDescription,
           content = OpenAPIContent(
             ContentType.`application/json` -> OpenAPIContentType(
-              // TODO: Replace Left(OpenAPIComponentSchema) with Right(OpenAPISchema)
-              schema = Left(schemaFrom(responseRW.definition, responseSchema.getOrElse(Schema())))
+              schema = schemaFrom(responseRW.definition, responseSchema.getOrElse(Schema()))
             )
           )
         )
@@ -89,47 +88,40 @@ trait ServiceCall extends HttpHandler {
     ))
   }
 
-  private def schemaFrom(dt: DefType, schema: Schema): OpenAPIComponentSchema = (dt match {
-    case DefType.Obj(map) => OpenAPIComponentSchema(
+  private def schemaFrom(dt: DefType, schema: Schema): OpenAPISchema = (dt match {
+    case DefType.Obj(map) => OpenAPISchema.Component(
       `type` = "object",
       properties = map.map {
-        case (key, t) => key -> Left(schemaFrom(t, schema.properties.getOrElse(key, Schema())))
+        case (key, t) => key -> schemaFrom(t, schema.properties.getOrElse(key, Schema()))
       }
     )
-    case DefType.Arr(t) => OpenAPIComponentSchema(
+    case DefType.Arr(t) => OpenAPISchema.Component(
       `type` = "array",
-      items = Some(Left(schemaFrom(t, schema.items.getOrElse(Schema()))))
+      items = Some(schemaFrom(t, schema.items.getOrElse(Schema())))
     )
-    case DefType.Str => OpenAPIComponentSchema(
+    case DefType.Str => OpenAPISchema.Component(
       `type` = "string"
     )
-    case DefType.Enum(values) => OpenAPIComponentSchema(
+    case DefType.Enum(values) => OpenAPISchema.Component(
       `type` = "string",
       `enum` = values
     )
-    case DefType.Bool => OpenAPIComponentSchema(
+    case DefType.Bool => OpenAPISchema.Component(
       `type` = "boolean"
     )
-    case DefType.Int => OpenAPIComponentSchema(
+    case DefType.Int => OpenAPISchema.Component(
       `type` = "integer"
     )
-    case DefType.Dec => OpenAPIComponentSchema(
+    case DefType.Dec => OpenAPISchema.Component(
       `type` = "number"
     )
-    case DefType.Opt(t) => schemaFrom(t, schema).copy(nullable = Some(true))
-    case DefType.Null => OpenAPIComponentSchema(
+    case DefType.Opt(t) => schemaFrom(t, schema).makeNullable
+    case DefType.Null => OpenAPISchema.Component(
       `type` = "null"
     )
+    case DefType.Poly(values) => OpenAPISchema.OneOf(values.values.map(dt => schemaFrom(dt, schema)).toList)
     case _ => throw new UnsupportedOperationException(s"DefType not supported: $dt")
-  }).copy(
-    description = schema.description,
-    maxLength = schema.maxLength,
-    minimum = schema.minimum,
-    maximum = schema.maximum,
-    example = schema.example,
-    maxItems = schema.maxItems,
-    minItems = schema.minItems
-  )
+  }).withSchema(schema)
 }
 
 object ServiceCall {

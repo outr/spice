@@ -47,10 +47,10 @@ trait OpenAPIServer extends HttpServer {
     .flatMap(_(exchange))
     .headOption match {
       case Some(sc) => sc.handle(exchange)
-      case None if exchange.request.url.path == path"/swagger.json" => exchange.withContent(
+      case None if exchange.request.url.path == path"/openapi.json" => exchange.withContent(
         Content.json(api.asJson, compact = false)
       )
-      case None if exchange.request.url.path == path"/swagger.yaml" => exchange.withContent(
+      case None if exchange.request.url.path == path"/openapi.yaml" => exchange.withContent(
         Content.string(api.asYaml, ContentType.`text/yaml`)
       )
       case None => IO.pure(exchange)

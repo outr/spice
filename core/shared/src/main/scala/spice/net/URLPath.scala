@@ -32,7 +32,7 @@ case class URLPath(parts: List[URLPathPart]) {
   }
 
   def extractArguments(literal: URLPath): Map[String, String] = {
-    assert(parts.length == literal.parts.length, s"Literal path must have the same number of parts as the one being extracted for")
+    assert(parts.length == literal.parts.length, s"Literal path ($literal) must have the same number of parts as the one being extracted for ($parts)")
     parts.zip(literal.parts).flatMap {
       case (p1, p2) => p1 match {
         case ap: Argument => Some(ap.name -> p2.value)

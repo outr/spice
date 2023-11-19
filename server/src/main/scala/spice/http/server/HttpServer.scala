@@ -65,14 +65,16 @@ trait HttpServer extends LifecycleHandler with Initializable {
     start()
   }
 
-  override protected def preHandle(exchange: HttpExchange): IO[HttpExchange] = {
+  override protected def preHandle(exchange: HttpExchange): IO[HttpExchange] = IO {
     val listener = config.listeners().find(l => l.matches(exchange.request.url))
-    listener.foreach { l =>
+    listener.map { l =>
       ServerSocketListener.set(exchange, l)
       BasePath.set(exchange, l.basePath)
       BaseURL.set(exchange, l.baseUrlFor(exchange.request.url).get)
-    }
-    IO.pure(exchange)
+      exchange.copy(
+        path = URLPath(exchange.path.parts.drop(l.basePath.parts.length))
+      )
+    }.getOrElse(exchange)
   }
 
   override protected def postHandle(exchange: HttpExchange): IO[HttpExchange] = IO.pure(exchange)

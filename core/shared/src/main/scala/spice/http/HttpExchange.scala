@@ -2,12 +2,14 @@ package spice.http
 
 import cats.effect.IO
 import spice.http.content.Content
+import spice.net.URLPath
 import spice.store.{MapStore, Store}
 
 case class HttpExchange(request: HttpRequest,
-                        response: HttpResponse = HttpResponse(),
-                        store: Store = new MapStore(),
-                        finished: Boolean = false) {
+                        response: HttpResponse,
+                        path: URLPath,
+                        store: Store,
+                        finished: Boolean) {
   def modify(f: HttpResponse => IO[HttpResponse]): IO[HttpExchange] = {
     f(response).map(r => copy(response = r))
   }
@@ -33,4 +35,14 @@ case class HttpExchange(request: HttpRequest,
   }
 
   def finish(): HttpExchange = copy(finished = true)
+}
+
+object HttpExchange {
+  def apply(request: HttpRequest): HttpExchange = HttpExchange(
+    request = request,
+    response = HttpResponse(),
+    path = request.url.path,
+    store = new MapStore(),
+    finished = false
+  )
 }
