@@ -5,7 +5,7 @@ import spice.http.server.ServerUtil
 import spice.net._
 
 case class HttpsServerListener(host: String = "127.0.0.1",
-                               port: Option[Int] = Some(8443),
+                               port: Option[Int] = Some(443),
                                keyStore: KeyStore = KeyStore(),
                                enabled: Boolean = false,
                                basePath: URLPath = path"/",

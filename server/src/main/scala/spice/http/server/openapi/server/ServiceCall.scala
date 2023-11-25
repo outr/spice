@@ -6,7 +6,7 @@ import fabric.define.DefType
 import fabric.io.JsonParser
 import fabric.rw._
 import scribe.mdc.MDC
-import spice.http.{HttpExchange, HttpStatus}
+import spice.http.{HttpExchange, HttpMethod, HttpStatus}
 import spice.http.content.Content
 import spice.http.server.BasePath
 import spice.http.server.handler.HttpHandler
@@ -20,6 +20,7 @@ import scala.util.Try
 trait ServiceCall extends HttpHandler {
   type Request
   type Response
+  def method: HttpMethod
 
   def summary: String
   def description: String
@@ -58,22 +59,25 @@ trait ServiceCall extends HttpHandler {
     }
   }
 
-  lazy val openAPI: Option[OpenAPIPathEntry] = if (this eq ServiceCall.NotSupported) {
-    None
-  } else {
-    Some(OpenAPIPathEntry(
-      summary = summary,
-      description = description,
-      tags = tags,
-      operationId = operationId,
-      requestBody = Some(OpenAPIRequestBody(
+  lazy val openAPI: Option[OpenAPIPathEntry] = {
+    val requestBody = if (requestRW.definition == DefType.Null || method == HttpMethod.Get) {
+      None
+    } else {
+      Some(OpenAPIRequestBody(
         required = true,
         content = OpenAPIContent(
           ContentType.`application/json` -> OpenAPIContentType(
             schema = schemaFrom(requestRW.definition, requestSchema.getOrElse(Schema()))
           )
         )
-      )),
+      ))
+    }
+    Some(OpenAPIPathEntry(
+      summary = summary,
+      description = description,
+      tags = tags,
+      operationId = operationId,
+      requestBody = requestBody,
       responses = Map(
         "200" -> OpenAPIResponse(
           description = successDescription,
@@ -88,13 +92,24 @@ trait ServiceCall extends HttpHandler {
     ))
   }
 
+  private def componentSchema(schema: Schema, map: Map[String, DefType]): OpenAPISchema = OpenAPISchema.Component(
+    `type` = "object",
+    properties = map.map {
+      case (key, t) => key -> schemaFrom(t, schema.properties.getOrElse(key, Schema()))
+    }
+  )
+
   private def schemaFrom(dt: DefType, schema: Schema): OpenAPISchema = (dt match {
-    case DefType.Obj(map) => OpenAPISchema.Component(
-      `type` = "object",
-      properties = map.map {
-        case (key, t) => key -> schemaFrom(t, schema.properties.getOrElse(key, Schema()))
+    case DefType.Obj(map, None) => componentSchema(schema, map)
+    case DefType.Obj(map, Some(className)) =>
+      OpenAPIHttpServer.register(className)(componentSchema(schema, map))
+      val index = className.lastIndexOf('.')
+      val name = if (index != -1) {
+        className.substring(index + 1)
+      } else {
+        className
       }
-    )
+      OpenAPISchema.Ref(s"#/components/schemas/$name")
     case DefType.Arr(t) => OpenAPISchema.Component(
       `type` = "array",
       items = Some(schemaFrom(t, schema.items.getOrElse(Schema())))
@@ -125,24 +140,4 @@ trait ServiceCall extends HttpHandler {
     )
     case _ => throw new UnsupportedOperationException(s"DefType not supported: $dt")
   }).withSchema(schema)
-}
-
-object ServiceCall {
-  private val svc = new Service {
-    override val path: net.URLPath = path"/"
-  }
-
-  val NotSupported: ServiceCall = svc.serviceCall[Unit, Unit](
-    summary = "",
-    description = "",
-    successDescription = ""
-  ) { request =>
-    request.exchange.modify { response =>
-      IO(response.withContent(Content.json(obj(
-        "error" -> "Unsupported method"
-      ))).withStatus(HttpStatus.MethodNotAllowed))
-    }.map { exchange =>
-      ServiceResponse[Unit](exchange)
-    }
-  }
 }

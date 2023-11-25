@@ -2,23 +2,17 @@ openapi: '3.0.3'
 info:
   title: 'Sample API'
   version: '0.1.9'
-  description: 'Optional multiline or single-line description in [CommonMark](http://commonmark.org/help/) or HTML.'
+  description: 'Optional multiline or single-line description in [CommonMark](https://commonmark.org/help/) or HTML.'
 servers:
-  - url: 'http://api.example.com/v1'
+  - url: 'https://api.example.com/v1'
     description: 'Optional server description, e.g. Main (production) server'
-  - url: 'http://staging-api.example.com/'
+  - url: 'https://staging-api.example.com/'
     description: 'Optional server description, e.g. Internal staging server for testing'
 paths:
   /users:
     get:
       summary: 'Returns a list of users.'
       description: 'Optional extended description in CommonMark or HTML.'
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: 'null'
       responses:
         200:
           description: 'A JSON array of user names'
