@@ -50,7 +50,7 @@ object OpenAPISchema {
     implicit val rw: RW[Ref] = RW.from(
       r = s => obj("$ref" -> s.ref),
       w = j => Ref(j("$ref").asString),
-      d = DefType.Obj("$ref" -> DefType.Str)
+      d = DefType.Obj(Some("Ref"), "$ref" -> DefType.Str)
     )
   }
 
@@ -74,19 +74,20 @@ object OpenAPISchema {
     override protected def modify(f: List[OpenAPISchema] => List[OpenAPISchema]): OpenAPISchema = copy(f(schemas))
   }
 
+  private def multi(`type`: String, schemas: List[OpenAPISchema]): Json = obj(
+    `type` -> schemas.json,
+    "discriminator" -> obj(
+      "propertyName" -> "type"
+    )
+  )
+
   implicit val rw: RW[OpenAPISchema] = RW.from[OpenAPISchema](
     r = {
       case s: Component => Component.rw.read(s)
       case s: Ref => Ref.rw.read(s)
-      case OneOf(schemas) => obj(
-        "oneOf" -> schemas.json
-      )
-      case AllOf(schemas) => obj(
-        "allOf" -> schemas.json
-      )
-      case AnyOf(schemas) => obj(
-        "anyOf" -> schemas.json
-      )
+      case OneOf(schemas) => multi("oneOf", schemas)
+      case AllOf(schemas) => multi("allOf", schemas)
+      case AnyOf(schemas) => multi("anyOf", schemas)
       case s => throw new UnsupportedOperationException(s"Unsupported schema: $s")
     },
     w = json => if (json.get("$ref").nonEmpty) {

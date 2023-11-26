@@ -4,6 +4,7 @@ import fabric._
 import org.scalatest.matchers.should.Matchers
 import org.scalatest.wordspec.AnyWordSpec
 import spec.TestUtils._
+import spice.http.HttpMethod
 import spice.http.server.openapi._
 import spice.net._
 
@@ -23,42 +24,36 @@ class OpenAPISpec extends AnyWordSpec with Matchers {
       val api = OpenAPI(
         info = OpenAPIInfo(
           title = "Sample API",
-          description = Some("Optional multiline or single-line description in [CommonMark](http://commonmark.org/help/) or HTML."),
+          description = Some("Optional multiline or single-line description in [CommonMark](https://commonmark.org/help/) or HTML."),
           version = "0.1.9"
         ),
         servers = List(
-          OpenAPIServer(url = url"http://api.example.com/v1", description = Some("Optional server description, e.g. Main (production) server")),
-          OpenAPIServer(url = url"http://staging-api.example.com", description = Some("Optional server description, e.g. Internal staging server for testing"))
+          OpenAPIServer(url = url"https://api.example.com/v1", description = Some("Optional server description, e.g. Main (production) server")),
+          OpenAPIServer(url = url"https://staging-api.example.com", description = Some("Optional server description, e.g. Internal staging server for testing"))
         ),
         paths = Map(
           "/users" -> OpenAPIPath(
-            get = Some(OpenAPIPathEntry(
-              summary = "Returns a list of users.",
-              description = "Optional extended description in CommonMark or HTML.",
-              requestBody = Some(OpenAPIRequestBody(
-                content = OpenAPIContent(
-                  ContentType.`application/json` -> OpenAPIContentType(OpenAPISchema.Component(
-                    `type` = "null"
-                  ))
-                ),
-                required = true
-              )),
-              responses = Map(
-                "200" -> OpenAPIResponse(
-                  description = "A JSON array of user names",
-                  content = OpenAPIContent(
-                    ContentType.`application/json` -> OpenAPIContentType(
-                      schema = OpenAPISchema.Component(
-                        `type` = "array",
-                        items = Some(OpenAPISchema.Component(
-                          `type` = "string"
-                        ))
+            methods = Map(
+              HttpMethod.Get -> OpenAPIPathEntry(
+                summary = "Returns a list of users.",
+                description = "Optional extended description in CommonMark or HTML.",
+                responses = Map(
+                  "200" -> OpenAPIResponse(
+                    description = "A JSON array of user names",
+                    content = OpenAPIContent(
+                      ContentType.`application/json` -> OpenAPIContentType(
+                        schema = OpenAPISchema.Component(
+                          `type` = "array",
+                          items = Some(OpenAPISchema.Component(
+                            `type` = "string"
+                          ))
+                        )
                       )
                     )
                   )
                 )
               )
-            ))
+            )
           )
         )
       )
@@ -69,45 +64,47 @@ class OpenAPISpec extends AnyWordSpec with Matchers {
       val api = OpenAPI(
         info = OpenAPIInfo(
           title = "Sample API",
-          description = Some("Optional multiline or single-line description in [CommonMark](http://commonmark.org/help/) or HTML."),
+          description = Some("Optional multiline or single-line description in [CommonMark](https://commonmark.org/help/) or HTML."),
           version = "0.1.9"
         ),
         paths = Map(
           "/poly" -> OpenAPIPath(
-            post = Some(OpenAPIPathEntry(
-              summary = "Polymorphic",
-              description = "Example",
-              requestBody = Some(OpenAPIRequestBody(
-                required = true,
-                content = OpenAPIContent(
-                  ContentType.`application/json` -> OpenAPIContentType(
-                    schema = OpenAPISchema.OneOf(List(
-                      OpenAPISchema.Component(
-                        `type` = "string"
-                      ),
-                      OpenAPISchema.Component(
-                        `type` = "integer"
-                      )
-                    ))
-                  )
-                )
-              )),
-              responses = Map(
-                "200" -> OpenAPIResponse(
-                  description = "A JSON array of user names",
+            methods = Map(
+              HttpMethod.Post -> OpenAPIPathEntry(
+                summary = "Polymorphic",
+                description = "Example",
+                requestBody = Some(OpenAPIRequestBody(
+                  required = true,
                   content = OpenAPIContent(
                     ContentType.`application/json` -> OpenAPIContentType(
-                      schema = OpenAPISchema.Component(
-                        `type` = "array",
-                        items = Some(OpenAPISchema.Component(
+                      schema = OpenAPISchema.OneOf(List(
+                        OpenAPISchema.Component(
                           `type` = "string"
-                        ))
+                        ),
+                        OpenAPISchema.Component(
+                          `type` = "integer"
+                        )
+                      ))
+                    )
+                  )
+                )),
+                responses = Map(
+                  "200" -> OpenAPIResponse(
+                    description = "A JSON array of user names",
+                    content = OpenAPIContent(
+                      ContentType.`application/json` -> OpenAPIContentType(
+                        schema = OpenAPISchema.Component(
+                          `type` = "array",
+                          items = Some(OpenAPISchema.Component(
+                            `type` = "string"
+                          ))
+                        )
                       )
                     )
                   )
                 )
               )
-            ))
+            )
           ),
         )
       )
@@ -126,92 +123,96 @@ class OpenAPISpec extends AnyWordSpec with Matchers {
         ),
         paths = Map(
           "/board" -> OpenAPIPath(
-            get = Some(OpenAPIPathEntry(
-              summary = "Get the whole board",
-              description = "Retrieves the current state of the board and the winner.",
-              tags = List(
-                "Gameplay"
-              ),
-              operationId = Some("get-board"),
-              responses = Map(
-                "200" -> OpenAPIResponse(
-                  description = "OK",
-                  content = OpenAPIContent(
-                    ContentType.`application/json` -> OpenAPIContentType(
-                      schema = OpenAPISchema.Ref(ref = "#/components/schemas/status")
+            methods = Map(
+              HttpMethod.Get -> OpenAPIPathEntry(
+                summary = "Get the whole board",
+                description = "Retrieves the current state of the board and the winner.",
+                tags = List(
+                  "Gameplay"
+                ),
+                operationId = Some("get-board"),
+                responses = Map(
+                  "200" -> OpenAPIResponse(
+                    description = "OK",
+                    content = OpenAPIContent(
+                      ContentType.`application/json` -> OpenAPIContentType(
+                        schema = OpenAPISchema.Ref(ref = "#/components/schemas/status")
+                      )
                     )
                   )
                 )
               )
-            ))
+            )
           ),
           "/board/{row}/{column}" -> OpenAPIPath(
             parameters = List(
               OpenAPISchema.Ref("#/components/parameters/rowParam"),
               OpenAPISchema.Ref("#/components/parameters/columnParam")
             ),
-            get = Some(OpenAPIPathEntry(
-              summary = "Get a single board square",
-              description = "Retrieves the requested square.",
-              tags = List("Gameplay"),
-              operationId = Some("get-square"),
-              responses = Map(
-                "200" -> OpenAPIResponse(
-                  description = "OK",
+            methods = Map(
+              HttpMethod.Get -> OpenAPIPathEntry(
+                summary = "Get a single board square",
+                description = "Retrieves the requested square.",
+                tags = List("Gameplay"),
+                operationId = Some("get-square"),
+                responses = Map(
+                  "200" -> OpenAPIResponse(
+                    description = "OK",
+                    content = OpenAPIContent(
+                      ContentType.`application/json` -> OpenAPIContentType(
+                        schema = OpenAPISchema.Ref("#/components/schemas/mark")
+                      )
+                    )
+                  ),
+                  "400" -> OpenAPIResponse(
+                    description = "The provided parameters are incorrect",
+                    content = OpenAPIContent(
+                      ContentType.`text/html` -> OpenAPIContentType(
+                        schema = OpenAPISchema.Ref("#/components/schemas/errorMessage"),
+                        example = Some("Illegal coordinates")
+                      )
+                    )
+                  )
+                )
+              ),
+              HttpMethod.Put -> OpenAPIPathEntry(
+                summary = "Set a single board square",
+                description = "Places a mark on the board and retrieves the whole board and the winner (if any).",
+                tags = List("Gameplay"),
+                operationId = Some("put-square"),
+                requestBody = Some(OpenAPIRequestBody(
+                  required = true,
                   content = OpenAPIContent(
                     ContentType.`application/json` -> OpenAPIContentType(
                       schema = OpenAPISchema.Ref("#/components/schemas/mark")
                     )
                   )
-                ),
-                "400" -> OpenAPIResponse(
-                  description = "The provided parameters are incorrect",
-                  content = OpenAPIContent(
-                    ContentType.`text/html` -> OpenAPIContentType(
-                      schema = OpenAPISchema.Ref("#/components/schemas/errorMessage"),
-                      example = Some("Illegal coordinates")
+                )),
+                responses = Map(
+                  "200" -> OpenAPIResponse(
+                    description = "OK",
+                    content = OpenAPIContent(
+                      ContentType.`application/json` -> OpenAPIContentType(
+                        schema = OpenAPISchema.Ref("#/components/schemas/status")
+                      )
                     )
-                  )
-                )
-              )
-            )),
-            put = Some(OpenAPIPathEntry(
-              summary = "Set a single board square",
-              description = "Places a mark on the board and retrieves the whole board and the winner (if any).",
-              tags = List("Gameplay"),
-              operationId = Some("put-square"),
-              requestBody = Some(OpenAPIRequestBody(
-                required = true,
-                content = OpenAPIContent(
-                  ContentType.`application/json` -> OpenAPIContentType(
-                    schema = OpenAPISchema.Ref("#/components/schemas/mark")
-                  )
-                )
-              )),
-              responses = Map(
-                "200" -> OpenAPIResponse(
-                  description = "OK",
-                  content = OpenAPIContent(
-                    ContentType.`application/json` -> OpenAPIContentType(
-                      schema = OpenAPISchema.Ref("#/components/schemas/status")
-                    )
-                  )
-                ),
-                "400" -> OpenAPIResponse(
-                  description = "The provided parameters are incorrect",
-                  content = OpenAPIContent(
-                    ContentType.`text/html` -> OpenAPIContentType(
-                      schema = OpenAPISchema.Ref("#/components/schemas/errorMessage"),
-                      examples = Map(
-                        "illegalCoordinates" -> OpenAPIValue("Illegal coordinates."),
-                        "notEmpty" -> OpenAPIValue("Square is not empty."),
-                        "invalidMark" -> OpenAPIValue("Invalid Mark (X or O).")
+                  ),
+                  "400" -> OpenAPIResponse(
+                    description = "The provided parameters are incorrect",
+                    content = OpenAPIContent(
+                      ContentType.`text/html` -> OpenAPIContentType(
+                        schema = OpenAPISchema.Ref("#/components/schemas/errorMessage"),
+                        examples = Map(
+                          "illegalCoordinates" -> OpenAPIValue("Illegal coordinates."),
+                          "notEmpty" -> OpenAPIValue("Square is not empty."),
+                          "invalidMark" -> OpenAPIValue("Invalid Mark (X or O).")
+                        )
                       )
                     )
                   )
                 )
               )
-            ))
+            )
           )
         ),
         components = Some(OpenAPIComponents(

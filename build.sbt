@@ -32,6 +32,14 @@ ThisBuild / versionScheme := Some("semver-spec")
 ThisBuild / outputStrategy := Some(StdoutOutput)
 ThisBuild / Test / testOptions += Tests.Argument("-oDF")
 
+def groupTests(tests: Seq[TestDefinition]): Seq[Tests.Group] = tests.map { test =>
+	Tests.Group(
+		name = test.name,
+		tests = Seq(test),
+		runPolicy = Tests.SubProcess(ForkOptions())
+	)
+}
+
 def dep: Dependencies.type = Dependencies
 
 lazy val root = project.in(file("."))
@@ -116,6 +124,7 @@ lazy val server = project
 	.in(file("server"))
 	.settings(
 		name := "spice-server",
+		Test / testGrouping := groupTests((Test / definedTests).value),
 		libraryDependencies ++= Seq(
 			dep.scalaTest, dep.catsEffectTesting
 		)

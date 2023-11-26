@@ -3,8 +3,10 @@ package spice.http.server.openapi.server
 import cats.effect.IO
 import fabric.rw._
 import scribe.mdc.MDC
+import spice.http.HttpMethod
 
 case class TypedServiceCall[Req, Res](call: ServiceRequest[Req] => IO[ServiceResponse[Res]],
+                                      method: HttpMethod,
                                       summary: String,
                                       description: String,
                                       successDescription: String,

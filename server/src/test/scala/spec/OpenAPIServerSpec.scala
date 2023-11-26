@@ -7,9 +7,9 @@ import fabric.rw._
 import org.scalatest.matchers.should.Matchers
 import org.scalatest.wordspec.AsyncWordSpec
 import spice.http.content.JsonContent
-import spice.http.{HttpExchange, HttpRequest}
-import spice.http.server.config.HttpServerListener
-import spice.http.server.openapi.server.{Service, ServiceCall}
+import spice.http.{HttpExchange, HttpMethod, HttpRequest}
+import spice.http.server.config.{HttpServerListener, HttpsServerListener}
+import spice.http.server.openapi.server.{OpenAPIHttpServer, Service, ServiceCall}
 import spice.http.server.openapi._
 import spice.net._
 
@@ -21,7 +21,7 @@ class OpenAPIServerSpec extends AsyncWordSpec with AsyncIOSpec with Matchers {
       json should be(expected)
     }
     "call the /users endpoint on api.example.com" in {
-      val request = HttpRequest(url = url"http://api.example.com/v1/users")
+      val request = HttpRequest(url = url"https://api.example.com/v1/users")
       SimpleOpenAPIServer.handle(HttpExchange(request)).flatMap { exchange =>
         exchange.response.content.get.asString.map { contentString =>
           val json = JsonParser(contentString)
@@ -32,7 +32,7 @@ class OpenAPIServerSpec extends AsyncWordSpec with AsyncIOSpec with Matchers {
       }
     }
     "call the /users endpoint on staging-api.example.com" in {
-      val request = HttpRequest(url = url"http://staging-api.example.com/users")
+      val request = HttpRequest(url = url"https://staging-api.example.com/users")
       SimpleOpenAPIServer.handle(HttpExchange(request)).map { exchange =>
         exchange.response.content.map(_.asInstanceOf[JsonContent].json) should be(Some(arr(
           "root", "john.doe"
@@ -41,36 +41,37 @@ class OpenAPIServerSpec extends AsyncWordSpec with AsyncIOSpec with Matchers {
     }
   }
 
-  object SimpleOpenAPIServer extends server.OpenAPIServer {
+  object SimpleOpenAPIServer extends server.OpenAPIHttpServer {
     config
       .clearListeners()
       .addListeners(
-        HttpServerListener(
+        HttpsServerListener(
           host = "api.example.com",
-          port = Some(80),
           basePath = path"/v1",
           description = Some("Optional server description, e.g. Main (production) server")
         ),
-        HttpServerListener(
+        HttpsServerListener(
           host = "staging-api.example.com",
-          port = Some(80),
           description = Some("Optional server description, e.g. Internal staging server for testing")
         )
       )
 
     override val title: String = "Sample API"
     override val version: String = "0.1.9"
-    override val description: Option[String] = Some("Optional multiline or single-line description in [CommonMark](http://commonmark.org/help/) or HTML.")
+    override val description: Option[String] = Some("Optional multiline or single-line description in [CommonMark](https://commonmark.org/help/) or HTML.")
 
     object usersService extends Service {
       override val path: URLPath = path"/users"
-      override val get: ServiceCall = serviceCall[Unit, List[String]](
-        summary = "Returns a list of users.",
-        description = "Optional extended description in CommonMark or HTML.",
-        successDescription = "A JSON array of user names"
-      ) { request =>
-        request.response(List("root", "john.doe"))
-      }
+      override val calls: List[ServiceCall] = List(
+        serviceCall[Unit, List[String]](
+          method = HttpMethod.Get,
+          summary = "Returns a list of users.",
+          description = "Optional extended description in CommonMark or HTML.",
+          successDescription = "A JSON array of user names"
+        ) { request =>
+          request.response(List("root", "john.doe"))
+        }
+      )
     }
 
     override val services: List[Service] = List(

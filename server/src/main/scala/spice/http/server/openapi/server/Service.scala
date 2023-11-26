@@ -7,25 +7,18 @@ import spice.net.URLPath
 
 trait Service {
   val path: URLPath
-
-  val get: ServiceCall = ServiceCall.NotSupported
-  val post: ServiceCall = ServiceCall.NotSupported
-  val put: ServiceCall = ServiceCall.NotSupported
+  val calls: List[ServiceCall]
 
   def apply(exchange: HttpExchange): Option[ServiceCall] = {
     if (exchange.path == path) {
-      exchange.request.method match {
-        case HttpMethod.Get if get != ServiceCall.NotSupported => Some(get)
-        case HttpMethod.Post if post != ServiceCall.NotSupported => Some(post)
-        case HttpMethod.Put if put != ServiceCall.NotSupported => Some(put)
-        case _ => None    // TODO: Support all methods
-      }
+      calls.find(_.method == exchange.request.method)
     } else {
       None
     }
   }
 
-  def serviceCall[Request, Response](summary: String,
+  def serviceCall[Request, Response](method: HttpMethod,
+                                     summary: String,
                                      description: String,
                                      successDescription: String,
                                      tags: List[String] = Nil,
@@ -36,6 +29,7 @@ trait Service {
                                     (implicit requestRW: RW[Request], responseRW: RW[Response]): ServiceCall = {
     TypedServiceCall[Request, Response](
       call = call,
+      method = method,
       summary = summary,
       description = description,
       successDescription = successDescription,

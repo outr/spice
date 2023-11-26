@@ -8,7 +8,9 @@ import spice.http.server.HttpServer
 import spice.http.server.openapi._
 import spice.net._
 
-trait OpenAPIServer extends HttpServer {
+import scala.annotation.tailrec
+
+trait OpenAPIHttpServer extends HttpServer {
   def openAPIVersion: String = "3.0.3"
 
   def title: String
@@ -32,12 +34,13 @@ trait OpenAPIServer extends HttpServer {
     paths = services.map { service =>
       service.path.toString -> OpenAPIPath(
         parameters = Nil, // TODO: Implement
-        get = service.get.openAPI,
-        post = service.post.openAPI,
-        put = service.put.openAPI
+        methods = service.calls.flatMap(sc => sc.openAPI.map(sc.method -> _)).toMap
       )
     }.toMap,
-    components = None // TODO: Implement
+    components = Some(OpenAPIComponents(
+      parameters = Map.empty,
+      schemas = OpenAPIHttpServer.components
+    ))
   )
 
   def services: List[Service]
@@ -55,4 +58,43 @@ trait OpenAPIServer extends HttpServer {
       )
       case None => IO.pure(exchange)
     }
+}
+
+object OpenAPIHttpServer {
+  private var fullNameMap = Map.empty[String, String]
+  private var componentsMap = Map.empty[String, OpenAPISchema]
+
+  def register(fullName: String)(f: => OpenAPISchema): String = synchronized {
+    fullNameMap.get(fullName) match {
+      case Some(name) => name
+      case None =>
+        val name = determineAvailableName(fullName)
+        fullNameMap += fullName -> name
+        componentsMap += name -> f
+        name
+    }
+  }
+
+  def components: Map[String, OpenAPISchema] = componentsMap
+
+  private def determineAvailableName(fullName: String): String = {
+    val index = fullName.lastIndexOf('.')
+    val shortName = fullName.substring(index + 1)
+
+    @tailrec
+    def recurse(i: Int): String =  {
+      val n = if (i == 0) {
+        shortName
+      } else {
+        s"$shortName-$i"
+      }
+      if (!fullNameMap.valuesIterator.contains(n)) {
+        n
+      } else {
+        recurse(i + 1)
+      }
+    }
+
+    recurse(0)
+  }
 }
