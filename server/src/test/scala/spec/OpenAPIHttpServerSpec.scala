@@ -2,11 +2,11 @@ package spec
 
 import cats.effect.IO
 import cats.effect.testing.scalatest.AsyncIOSpec
-import fabric.rw.RW
+import fabric.rw._
 import org.scalatest.matchers.should.Matchers
 import org.scalatest.wordspec.AsyncWordSpec
 import spice.http.server.openapi.server.{OpenAPIHttpServer, RestService, Service}
-import spice.net.{URLPath, interpolation}
+import spice.net._
 
 class OpenAPIHttpServerSpec extends AsyncWordSpec with AsyncIOSpec with Matchers {
   "OpenAPIHttpServer" should {
