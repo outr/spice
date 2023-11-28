@@ -9,6 +9,7 @@ import spice.http.server.openapi._
 import spice.net._
 
 import scala.annotation.tailrec
+import scala.collection.immutable.{SortedMap, VectorMap}
 
 trait OpenAPIHttpServer extends HttpServer {
   def openAPIVersion: String = "3.0.3"
@@ -68,14 +69,15 @@ object OpenAPIHttpServer {
     fullNameMap.get(fullName) match {
       case Some(name) => name
       case None =>
+        val schema: OpenAPISchema = f
         val name = determineAvailableName(fullName)
         fullNameMap += fullName -> name
-        componentsMap += name -> f
+        componentsMap += name -> schema
         name
     }
   }
 
-  def components: Map[String, OpenAPISchema] = componentsMap
+  def components: Map[String, OpenAPISchema] = VectorMap(componentsMap.toList.sortBy(_._1): _*)
 
   private def determineAvailableName(fullName: String): String = {
     val index = fullName.lastIndexOf('.')

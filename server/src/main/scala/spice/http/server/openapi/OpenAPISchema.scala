@@ -22,7 +22,8 @@ object OpenAPISchema {
                        maxItems: Option[Int] = None,
                        minItems: Option[Int] = None,
                        items: Option[OpenAPISchema] = None,
-                       properties: Map[String, OpenAPISchema] = Map.empty) extends OpenAPISchema {
+                       properties: Map[String, OpenAPISchema] = Map.empty,
+                       additionalProperties: Option[OpenAPISchema] = None) extends OpenAPISchema {
     override def makeNullable: OpenAPISchema = copy(nullable = Some(true))
 
     override def withSchema(schema: Schema): OpenAPISchema = copy(

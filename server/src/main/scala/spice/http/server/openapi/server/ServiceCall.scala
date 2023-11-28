@@ -67,7 +67,7 @@ trait ServiceCall extends HttpHandler {
         required = true,
         content = OpenAPIContent(
           ContentType.`application/json` -> OpenAPIContentType(
-            schema = schemaFrom(requestRW.definition, requestSchema.getOrElse(Schema()))
+            schema = schemaFrom(requestRW.definition, requestSchema.getOrElse(Schema()), nullable = false)
           )
         )
       ))
@@ -83,7 +83,7 @@ trait ServiceCall extends HttpHandler {
           description = successDescription,
           content = OpenAPIContent(
             ContentType.`application/json` -> OpenAPIContentType(
-              schema = schemaFrom(responseRW.definition, responseSchema.getOrElse(Schema()))
+              schema = schemaFrom(responseRW.definition, responseSchema.getOrElse(Schema()), nullable = false)
             )
           )
         )
@@ -92,17 +92,32 @@ trait ServiceCall extends HttpHandler {
     ))
   }
 
-  private def componentSchema(schema: Schema, map: Map[String, DefType]): OpenAPISchema = OpenAPISchema.Component(
-    `type` = "object",
-    properties = map.map {
-      case (key, t) => key -> schemaFrom(t, schema.properties.getOrElse(key, Schema()))
+  private def componentSchema(schema: Schema, map: Map[String, DefType], nullable: Boolean): OpenAPISchema = {
+    val c = if (map.keySet == Set("[key]")) {
+      val t = map("[key]")
+      OpenAPISchema.Component(
+        `type` = "object",
+        additionalProperties = Some(schemaFrom(t, Schema(), nullable))
+      )
+    } else {
+      OpenAPISchema.Component(
+        `type` = "object",
+        properties = map.map {
+          case (key, t) => key -> schemaFrom(t, schema.properties.getOrElse(key, Schema()), nullable)
+        }
+      )
     }
-  )
+    if (nullable) {
+      c.makeNullable
+    } else {
+      c
+    }
+  }
 
-  private def schemaFrom(dt: DefType, schema: Schema): OpenAPISchema = (dt match {
-    case DefType.Obj(map, None) => componentSchema(schema, map)
+  private def schemaFrom(dt: DefType, schema: Schema, nullable: Boolean): OpenAPISchema = (dt match {
+    case DefType.Obj(map, None) => componentSchema(schema, map, nullable)
     case DefType.Obj(map, Some(className)) =>
-      OpenAPIHttpServer.register(className)(componentSchema(schema, map))
+      OpenAPIHttpServer.register(className)(componentSchema(schema, map, nullable))
       val index = className.lastIndexOf('.')
       val name = if (index != -1) {
         className.substring(index + 1)
@@ -112,7 +127,7 @@ trait ServiceCall extends HttpHandler {
       OpenAPISchema.Ref(s"#/components/schemas/$name")
     case DefType.Arr(t) => OpenAPISchema.Component(
       `type` = "array",
-      items = Some(schemaFrom(t, schema.items.getOrElse(Schema())))
+      items = Some(schemaFrom(t, schema.items.getOrElse(Schema()), nullable))
     )
     case DefType.Str => OpenAPISchema.Component(
       `type` = "string"
@@ -130,11 +145,11 @@ trait ServiceCall extends HttpHandler {
     case DefType.Dec => OpenAPISchema.Component(
       `type` = "number"
     )
-    case DefType.Opt(t) => schemaFrom(t, schema).makeNullable
+    case DefType.Opt(t) => schemaFrom(t, schema, nullable = true)
     case DefType.Null => OpenAPISchema.Component(
       `type` = "null"
     )
-    case DefType.Poly(values) => OpenAPISchema.OneOf(values.values.map(dt => schemaFrom(dt, schema)).toList)
+    case DefType.Poly(values) => OpenAPISchema.OneOf(values.values.map(dt => schemaFrom(dt, schema, nullable)).toList)
     case DefType.Json => OpenAPISchema.Component(
       `type` = "json"
     )

@@ -2,6 +2,7 @@ package spice.http.server.openapi.server
 
 import cats.effect.IO
 import fabric.rw._
+import spice.http.content.Content
 import spice.http.{HttpExchange, HttpMethod}
 import spice.net.URLPath
 
