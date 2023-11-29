@@ -6,13 +6,21 @@ import fabric.rw._
 import org.scalatest.matchers.should.Matchers
 import org.scalatest.wordspec.AsyncWordSpec
 import spice.net._
+import spice.openapi.generator.dart.OpenAPIDartGenerator
 import spice.openapi.server.{OpenAPIHttpServer, RestService, Service}
+
+import java.nio.file.Paths
 
 class OpenAPIHttpServerSpec extends AsyncWordSpec with AsyncIOSpec with Matchers {
   "OpenAPIHttpServer" should {
     "verify the YAML generated is correct" in {
       val expected = TestUtils.loadString("openapi-server.yaml")
       Example.api.asYaml should be(expected)
+    }
+    "generate Dart code for the server" in {
+      val sourceFiles = OpenAPIDartGenerator.generate(Example.api)
+      sourceFiles should not be Nil
+      succeed
     }
   }
 

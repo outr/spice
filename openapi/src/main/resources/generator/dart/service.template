@@ -1,0 +1,30 @@
+import 'dart:convert';
+import 'package:http/http.dart' as http;
+
+%%IMPORTS%%
+
+// GENERATED CODE: Do not edit!
+class Service {
+  static Uri base = Uri.base;
+
+  static Uri host(String path) => base.replace(path: path);
+
+  static Future<Response> restful<Response>(
+      String path,
+      Map<String, dynamic> request,
+      Response Function(Map<String, dynamic> json) convert
+      ) async {
+    final String body = jsonEncode(request);
+    final http.Response response = await http.post(
+        Service.host(path),
+        headers: {
+          "Content-Type": "application/json; charset=UTF-8",
+          "Accept": "application/json"
+        },
+        body: body
+    );
+    return convert(jsonDecode(response.body));
+  }
+
+%%SERVICES%%
+}

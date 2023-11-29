@@ -1,0 +1,16 @@
+import 'package:json_annotation/json_annotation.dart';
+
+%%IMPORTS%%
+
+part '%%FILENAME%%.g.dart';
+
+/// GENERATED CODE: Do not edit!
+@JsonSerializable()
+class %%CLASSNAME%% {
+  %%FIELDS%%
+
+  %%CLASSNAME%%(%%PARAMS%%);
+
+  static %%CLASSNAME%% fromJson(Map<String, dynamic> json) => _$%%CLASSNAME%%FromJson(json);
+  Map<String, dynamic> toJson() => _$%%CLASSNAME%%ToJson(this);
+}
