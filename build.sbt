@@ -1,6 +1,6 @@
 name := "spice"
 ThisBuild / organization := "com.outr"
-ThisBuild / version := "0.2.0"
+ThisBuild / version := "0.3.0-SNAPSHOT"
 
 val scala213: String = "2.13.12"
 
@@ -47,7 +47,7 @@ lazy val root = project.in(file("."))
 		coreJS, coreJVM,
 		clientJS, clientJVM, clientImplementationOkHttp, clientImplementationJVM,
 		delta,
-		server, serverImplementationUndertow
+		server, serverImplementationUndertow, serverOpenAPI
 	)
 	.settings(
 		publish := {},
@@ -141,6 +141,17 @@ lazy val serverImplementationUndertow = project
 		fork := true,
 		libraryDependencies ++= Seq(
 			dep.undertow, dep.scribeSlf4j,
+			dep.scalaTest, dep.catsEffectTesting
+		)
+	)
+
+lazy val serverOpenAPI = project
+	.dependsOn(server, server % "test->test")
+	.in(file("server/openapi"))
+	.settings(
+		name := "spice-server-openapi",
+		fork := true,
+		libraryDependencies ++= Seq(
 			dep.scalaTest, dep.catsEffectTesting
 		)
 	)

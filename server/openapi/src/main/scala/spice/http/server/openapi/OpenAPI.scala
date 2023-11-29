@@ -4,8 +4,6 @@ import fabric._
 import fabric.filter.{RemoveEmptyFilter, RemoveNullsFilter}
 import fabric.io.{JsonFormatter, YamlFormatter}
 import fabric.rw._
-import spice.http.HttpStatus
-import spice.net._
 
 case class OpenAPI(openapi: String = "3.0.3",
                    info: OpenAPIInfo,

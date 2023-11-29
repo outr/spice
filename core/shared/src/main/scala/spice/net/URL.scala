@@ -31,6 +31,7 @@ case class URL(protocol: Protocol = Protocol.Http,
   def replacePathAndParams(pathAndParams: String): URL = URL.parse(s"$base$pathAndParams")
 
   def withProtocol(protocol: Protocol): URL = copy(protocol = protocol)
+  def withPort(port: Int): URL = copy(port = port)
 
   def withPart(part: String): URL = if (part.indexOf("://") != -1) {
     URL.parse(part)

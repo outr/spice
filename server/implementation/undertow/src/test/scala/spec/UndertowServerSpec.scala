@@ -20,10 +20,13 @@ import spice.net._
 class UndertowServerSpec extends AsyncWordSpec with AsyncIOSpec with Matchers {
   "UndertowServerSpec" should {
     object server extends MutableHttpServer
-    val client = HttpClient.url(url"http://localhost:8080")
+    def serverPort: Int = server.config.listeners().head.port.getOrElse(0)
+
+    lazy val client = HttpClient.url(url"http://localhost".withPort(serverPort))
 
     "configure the server" in {
       Profig.initConfiguration()
+      server.config.clearListeners().addListeners(HttpServerListener(port = None))
       server.handler.matcher(paths.exact("/test.txt"))
         .content(Content.string("test!", ContentType.`text/plain`))
       server.handler(

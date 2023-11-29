@@ -7,10 +7,10 @@ import fabric.rw._
 import org.scalatest.matchers.should.Matchers
 import org.scalatest.wordspec.AsyncWordSpec
 import spice.http.content.JsonContent
-import spice.http.{HttpExchange, HttpMethod, HttpRequest}
-import spice.http.server.config.{HttpServerListener, HttpsServerListener}
-import spice.http.server.openapi.server.{OpenAPIHttpServer, Service, ServiceCall}
+import spice.http.server.config.HttpsServerListener
 import spice.http.server.openapi._
+import spice.http.server.openapi.server.{Service, ServiceCall}
+import spice.http.{HttpExchange, HttpMethod, HttpRequest}
 import spice.net._
 
 class OpenAPIServerSpec extends AsyncWordSpec with AsyncIOSpec with Matchers {

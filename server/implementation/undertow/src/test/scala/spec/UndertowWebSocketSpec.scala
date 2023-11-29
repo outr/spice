@@ -9,6 +9,7 @@ import org.scalatest.wordspec.AsyncWordSpec
 import spice.http.client.HttpClient
 import spice.http.{ConnectionStatus, HttpExchange, WebSocket, WebSocketListener}
 import spice.http.server.StaticHttpServer
+import spice.http.server.config.HttpServerListener
 import spice.http.server.dsl._
 import spice.http.server.handler.{HttpHandler, WebSocketHandler}
 import spice.net._
@@ -18,12 +19,15 @@ class UndertowWebSocketSpec extends AsyncWordSpec with AsyncIOSpec with Matchers
   private var fromServer = List.empty[String]
 
   "Undertow WebSocket" should {
+    def serverPort: Int = server.config.listeners().head.port.getOrElse(0)
+
     "start the server" in {
+      server.config.clearListeners().addListeners(HttpServerListener(port = None))
       server.start().map(_ => succeed)
     }
     "open a WebSocket to the server" in {
       webSocketClient = HttpClient
-        .url(url"ws://localhost:8080/webSocket")
+        .url(url"ws://localhost/webSocket".withPort(serverPort))
         .webSocket()
       webSocketClient.receive.text.attach { text =>
         scribe.info(s"Received $text from server!")
