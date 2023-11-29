@@ -1,0 +1,91 @@
+openapi: '3.0.3'
+info:
+  title: 'Example Server'
+  version: '1.0'
+servers:
+  - url: 'http://127.0.0.1:8080/'
+  - url: 'https://127.0.0.1/'
+paths:
+  /reverse:
+    post:
+      summary: 'Reverses text'
+      description: 'Reverses text'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReverseRequest'
+      responses:
+        200:
+          description: 'OK'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReverseResponse'
+  /combine:
+    post:
+      summary: 'Combines the values of an enum'
+      description: 'Combines the values of an enum'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CombineRequest'
+      responses:
+        200:
+          description: 'OK'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CombineResponse'
+components:
+  schemas:
+    Auth:
+      type: 'object'
+      properties:
+        username:
+          type: 'string'
+        password:
+          type: 'string'
+    CombineRequest:
+      type: 'object'
+      properties:
+        auth:
+          $ref: '#/components/schemas/Auth'
+        map:
+          type: 'object'
+          additionalProperties:
+            type: 'string'
+            enum:
+              - 'One'
+              - 'Two'
+              - 'Three'
+    CombineResponse:
+      type: 'object'
+      properties:
+        list:
+          type: 'array'
+          items:
+            type: 'string'
+            enum:
+              - 'One'
+              - 'Two'
+              - 'Three'
+        error:
+          type: 'string'
+    ReverseRequest:
+      type: 'object'
+      properties:
+        auth:
+          $ref: '#/components/schemas/Auth'
+        text:
+          type: 'string'
+    ReverseResponse:
+      type: 'object'
+      properties:
+        text:
+          type: 'string'
+        error:
+          type: 'string'

@@ -47,7 +47,8 @@ lazy val root = project.in(file("."))
 		coreJS, coreJVM,
 		clientJS, clientJVM, clientImplementationOkHttp, clientImplementationJVM,
 		delta,
-		server, serverImplementationUndertow, serverOpenAPI
+		server, serverImplementationUndertow,
+		openAPI
 	)
 	.settings(
 		publish := {},
@@ -145,11 +146,11 @@ lazy val serverImplementationUndertow = project
 		)
 	)
 
-lazy val serverOpenAPI = project
+lazy val openAPI = project
 	.dependsOn(server, server % "test->test")
-	.in(file("server/openapi"))
+	.in(file("openapi"))
 	.settings(
-		name := "spice-server-openapi",
+		name := "spice-openapi",
 		fork := true,
 		libraryDependencies ++= Seq(
 			dep.scalaTest, dep.catsEffectTesting

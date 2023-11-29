@@ -8,10 +8,14 @@ import spice.streamer._
 import scala.collection.mutable
 
 object TestUtils {
-  def loadString(name: String): String = Streamer(
-    getClass.getClassLoader.getResourceAsStream(name),
-    new mutable.StringBuilder
-  ).unsafeRunSync().toString
+  def loadString(name: String): String = {
+    val stream = getClass.getClassLoader.getResourceAsStream(name)
+    if (stream == null) throw new RuntimeException(s"Not found: $name")
+    Streamer(
+      stream,
+      new mutable.StringBuilder
+    ).unsafeRunSync().toString
+  }
 
   def loadJson(name: String): Json = JsonParser(loadString(name))
 
