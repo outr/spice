@@ -41,7 +41,7 @@ object OpenAPISchema {
     implicit val rw: RW[Component] = RW.gen
   }
 
-  case class Ref(ref: String) extends OpenAPISchema {
+  case class Ref(ref: String, nullable: Option[Boolean] = None) extends OpenAPISchema {
     override def makeNullable: OpenAPISchema = throw new UnsupportedOperationException("Ref cannot be made nullable")
 
     override def withSchema(schema: Schema): OpenAPISchema = this
@@ -49,9 +49,9 @@ object OpenAPISchema {
 
   object Ref {
     implicit val rw: RW[Ref] = RW.from(
-      r = s => obj("$ref" -> s.ref),
-      w = j => Ref(j("$ref").asString),
-      d = DefType.Obj(Some("Ref"), "$ref" -> DefType.Str)
+      r = s => obj("$ref" -> s.ref, "nullable" -> s.nullable.json),
+      w = j => Ref(j("$ref").asString, j.get("nullable").map(_.as[Boolean])),
+      d = DefType.Obj(Some("Ref"), "$ref" -> DefType.Str, "nullable" -> DefType.Opt(DefType.Bool))
     )
   }
 
@@ -63,46 +63,60 @@ object OpenAPISchema {
     override def withSchema(schema: Schema): OpenAPISchema = modify(_.map(_.withSchema(schema)))
   }
 
-  case class OneOf(schemas: List[OpenAPISchema]) extends MultiSchema {
+  case class OneOf(schemas: List[OpenAPISchema],
+                   discriminator: String = "type",
+                   nullable: Option[Boolean] = None) extends MultiSchema {
     override protected def modify(f: List[OpenAPISchema] => List[OpenAPISchema]): OpenAPISchema = copy(f(schemas))
   }
 
-  case class AllOf(schemas: List[OpenAPISchema]) extends MultiSchema {
+  case class AllOf(schemas: List[OpenAPISchema],
+                   discriminator: String = "type",
+                   nullable: Option[Boolean] = None) extends MultiSchema {
     override protected def modify(f: List[OpenAPISchema] => List[OpenAPISchema]): OpenAPISchema = copy(f(schemas))
   }
 
-  case class AnyOf(schemas: List[OpenAPISchema]) extends MultiSchema {
+  case class AnyOf(schemas: List[OpenAPISchema],
+                   discriminator: String = "type",
+                   nullable: Option[Boolean] = None) extends MultiSchema {
     override protected def modify(f: List[OpenAPISchema] => List[OpenAPISchema]): OpenAPISchema = copy(f(schemas))
   }
 
-  private def multi(`type`: String, schemas: List[OpenAPISchema]): Json = obj(
+  private def multi(`type`: String,
+                    schemas: List[OpenAPISchema],
+                    propertyName: String,
+                    nullable: Option[Boolean]): Json = obj(
     `type` -> schemas.json,
     "discriminator" -> obj(
-      "propertyName" -> "type"
-    )
+      "propertyName" -> propertyName
+    ),
+    "nullable" -> nullable.json
   )
 
   implicit val rw: RW[OpenAPISchema] = RW.from[OpenAPISchema](
     r = {
       case s: Component => Component.rw.read(s)
       case s: Ref => Ref.rw.read(s)
-      case OneOf(schemas) => multi("oneOf", schemas)
-      case AllOf(schemas) => multi("allOf", schemas)
-      case AnyOf(schemas) => multi("anyOf", schemas)
+      case OneOf(schemas, discriminator, nullable) => multi("oneOf", schemas, discriminator, nullable)
+      case AllOf(schemas, discriminator, nullable) => multi("allOf", schemas, discriminator, nullable)
+      case AnyOf(schemas, discriminator, nullable) => multi("anyOf", schemas, discriminator, nullable)
       case s => throw new UnsupportedOperationException(s"Unsupported schema: $s")
     },
-    w = json => if (json.get("$ref").nonEmpty) {
-      Ref.rw.write(json)
-    } else if (json.get("type").nonEmpty) {
-      Component.rw.write(json)
-    } else if (json.get("oneOf").nonEmpty) {
-      AnyOf(json("oneOf").as[List[OpenAPISchema]])
-    } else if (json.get("allOf").nonEmpty) {
-      AllOf(json("allOf").as[List[OpenAPISchema]])
-    } else if (json.get("anyOf").nonEmpty) {
-      AnyOf(json("anyOf").as[List[OpenAPISchema]])
-    } else {
-      throw new RuntimeException(s"Unsupported OpenAPISchema: $json")
+    w = json => {
+      def discriminator = json("discriminator").asString
+      val n = json.get("nullable").map(_.asBoolean)
+      if (json.get("$ref").nonEmpty) {
+        Ref.rw.write(json)
+      } else if (json.get("type").nonEmpty) {
+        Component.rw.write(json)
+      } else if (json.get("oneOf").nonEmpty) {
+        OneOf(json("oneOf").as[List[OpenAPISchema]], discriminator, n)
+      } else if (json.get("allOf").nonEmpty) {
+        AllOf(json("allOf").as[List[OpenAPISchema]], discriminator, n)
+      } else if (json.get("anyOf").nonEmpty) {
+        AnyOf(json("anyOf").as[List[OpenAPISchema]], discriminator, n)
+      } else {
+        throw new RuntimeException(s"Unsupported OpenAPISchema: $json")
+      }
     },
     d = DefType.Json
   )

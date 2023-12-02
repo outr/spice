@@ -85,11 +85,11 @@ object OpenAPIHttpServer {
     val shortName = fullName.substring(index + 1)
 
     @tailrec
-    def recurse(i: Int): String =  {
+    def recurse(i: Int): String = {
       val n = if (i == 0) {
         shortName
       } else {
-        s"$shortName-$i"
+        s"$shortName$i"
       }
       if (!fullNameMap.valuesIterator.contains(n)) {
         n

@@ -6,6 +6,8 @@ import fabric.rw._
 import org.scalatest.matchers.should.Matchers
 import org.scalatest.wordspec.AsyncWordSpec
 import spice.net._
+import spice.openapi.OpenAPI
+import spice.openapi.generator.OpenAPIGeneratorConfig
 import spice.openapi.generator.dart.OpenAPIDartGenerator
 import spice.openapi.server.{OpenAPIHttpServer, RestService, Service}
 
@@ -18,7 +20,7 @@ class OpenAPIHttpServerSpec extends AsyncWordSpec with AsyncIOSpec with Matchers
       Example.api.asYaml should be(expected)
     }
     "generate Dart code for the server" in {
-      val sourceFiles = OpenAPIDartGenerator.generate(Example.api)
+      val sourceFiles = OpenAPIDartGenerator.generate(Example.api, OpenAPIGeneratorConfig())
       sourceFiles should not be Nil
       succeed
     }

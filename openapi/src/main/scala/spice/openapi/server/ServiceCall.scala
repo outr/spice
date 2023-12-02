@@ -6,13 +6,10 @@ import fabric.define.DefType
 import fabric.io.JsonParser
 import fabric.rw._
 import scribe.mdc.MDC
-import spice.http.{HttpExchange, HttpMethod, HttpStatus}
-import spice.http.content.Content
+import spice.http.{HttpExchange, HttpMethod}
 import spice.http.server.BasePath
 import spice.http.server.handler.HttpHandler
-import spice.http.server.openapi._
 import spice.http.server.rest.Restful
-import spice.net
 import spice.net._
 import spice.openapi.{OpenAPIContent, OpenAPIContentType, OpenAPIPathEntry, OpenAPIRequestBody, OpenAPIResponse, OpenAPISchema}
 
@@ -68,7 +65,7 @@ trait ServiceCall extends HttpHandler {
         required = true,
         content = OpenAPIContent(
           ContentType.`application/json` -> OpenAPIContentType(
-            schema = schemaFrom(requestRW.definition, requestSchema.getOrElse(Schema()), nullable = false)
+            schema = schemaFrom(requestRW.definition, requestSchema.getOrElse(Schema()), nullable = None)
           )
         )
       ))
@@ -84,7 +81,7 @@ trait ServiceCall extends HttpHandler {
           description = successDescription,
           content = OpenAPIContent(
             ContentType.`application/json` -> OpenAPIContentType(
-              schema = schemaFrom(responseRW.definition, responseSchema.getOrElse(Schema()), nullable = false)
+              schema = schemaFrom(responseRW.definition, responseSchema.getOrElse(Schema()), nullable = None)
             )
           )
         )
@@ -93,7 +90,7 @@ trait ServiceCall extends HttpHandler {
     ))
   }
 
-  private def componentSchema(schema: Schema, map: Map[String, DefType], nullable: Boolean): OpenAPISchema = {
+  private def componentSchema(schema: Schema, map: Map[String, DefType], nullable: Option[Boolean]): OpenAPISchema = {
     val c = if (map.keySet == Set("[key]")) {
       val t = map("[key]")
       OpenAPISchema.Component(
@@ -108,51 +105,55 @@ trait ServiceCall extends HttpHandler {
         }
       )
     }
-    if (nullable) {
+    if (nullable.getOrElse(false)) {
       c.makeNullable
     } else {
       c
     }
   }
 
-  private def schemaFrom(dt: DefType, schema: Schema, nullable: Boolean): OpenAPISchema = (dt match {
+  private def schemaFrom(dt: DefType, schema: Schema, nullable: Option[Boolean]): OpenAPISchema = (dt match {
     case DefType.Obj(map, None) => componentSchema(schema, map, nullable)
     case DefType.Obj(map, Some(className)) =>
-      OpenAPIHttpServer.register(className)(componentSchema(schema, map, nullable))
-      val index = className.lastIndexOf('.')
-      val name = if (index != -1) {
-        className.substring(index + 1)
-      } else {
-        className
-      }
-      OpenAPISchema.Ref(s"#/components/schemas/$name")
+      val refName = OpenAPIHttpServer.register(className)(componentSchema(schema, map, None))
+      OpenAPISchema.Ref(s"#/components/schemas/$refName", nullable)
     case DefType.Arr(t) => OpenAPISchema.Component(
       `type` = "array",
-      items = Some(schemaFrom(t, schema.items.getOrElse(Schema()), nullable))
+      items = Some(schemaFrom(t, schema.items.getOrElse(Schema()), None)),
+      nullable = nullable
     )
     case DefType.Str => OpenAPISchema.Component(
-      `type` = "string"
+      `type` = "string",
+      nullable = nullable
     )
     case DefType.Enum(values) => OpenAPISchema.Component(
       `type` = "string",
-      `enum` = values
+      `enum` = values,
+      nullable = nullable
     )
     case DefType.Bool => OpenAPISchema.Component(
-      `type` = "boolean"
+      `type` = "boolean",
+      nullable = nullable
     )
     case DefType.Int => OpenAPISchema.Component(
-      `type` = "integer"
+      `type` = "integer",
+      nullable = nullable
     )
     case DefType.Dec => OpenAPISchema.Component(
-      `type` = "number"
+      `type` = "number",
+      nullable = nullable
     )
-    case DefType.Opt(t) => schemaFrom(t, schema, nullable = true)
+    case DefType.Opt(t) => schemaFrom(t, schema, nullable = Some(true))
     case DefType.Null => OpenAPISchema.Component(
       `type` = "null"
     )
-    case DefType.Poly(values) => OpenAPISchema.OneOf(values.values.map(dt => schemaFrom(dt, schema, nullable)).toList)
+    case DefType.Poly(values) => OpenAPISchema.OneOf(
+      schemas = values.values.map(dt => schemaFrom(dt, schema, nullable)).toList,
+      nullable = nullable
+    )
     case DefType.Json => OpenAPISchema.Component(
-      `type` = "json"
+      `type` = "json",
+      nullable = nullable
     )
     case _ => throw new UnsupportedOperationException(s"DefType not supported: $dt")
   }).withSchema(schema)

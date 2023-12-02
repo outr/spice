@@ -75,6 +75,7 @@ components:
               - 'Three'
         error:
           type: 'string'
+          nullable: true
     ReverseRequest:
       type: 'object'
       properties:
@@ -87,5 +88,7 @@ components:
       properties:
         text:
           type: 'string'
+          nullable: true
         error:
           type: 'string'
+          nullable: true

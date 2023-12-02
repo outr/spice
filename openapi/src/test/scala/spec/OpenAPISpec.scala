@@ -5,7 +5,6 @@ import org.scalatest.matchers.should.Matchers
 import org.scalatest.wordspec.AnyWordSpec
 import spec.TestUtils._
 import spice.http.HttpMethod
-import spice.http.server.openapi._
 import spice.net._
 import spice.openapi.{OpenAPI, OpenAPIComponents, OpenAPIContent, OpenAPIContentType, OpenAPIInfo, OpenAPIParameter, OpenAPIPath, OpenAPIPathEntry, OpenAPIRequestBody, OpenAPIResponse, OpenAPISchema, OpenAPIServer, OpenAPITag, OpenAPIValue}
 
@@ -85,7 +84,7 @@ class OpenAPISpec extends AnyWordSpec with Matchers {
                         OpenAPISchema.Component(
                           `type` = "integer"
                         )
-                      ))
+                      ), nullable = None)
                     )
                   )
                 )),

@@ -7,7 +7,6 @@ import fabric.rw._
 import org.scalatest.matchers.should.Matchers
 import org.scalatest.wordspec.AsyncWordSpec
 import spice.http.HttpMethod
-import spice.http.server.openapi._
 import spice.net.{URLPath, _}
 import spice.openapi.server.{OpenAPIHttpServer, Schema, Service, ServiceCall}
 

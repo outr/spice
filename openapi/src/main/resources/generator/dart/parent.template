@@ -1,0 +1,12 @@
+%%IMPORTS%%
+
+/// GENERATED CODE: Do not edit!
+abstract class %%CLASSNAME%% {
+  %%CLASSNAME%%();
+
+  factory %%CLASSNAME%%.fromJson(Map<String, dynamic> json) {
+    String t = json['type'];
+%%FROMJSON%%
+  }
+  Map<String, dynamic> toJson();
+}

@@ -16,7 +16,7 @@ object OpenAPIPath {
       }: _*
     ),
     w = json => OpenAPIPath(
-      parameters = json("parameters").as[List[OpenAPISchema]],
+      parameters = json.get("parameters").map(_.as[List[OpenAPISchema]]).getOrElse(Nil),
       methods = json.asObj.value.filterNot(_._1 == "parameters").map {
         case (m, e) => HttpMethod(m) -> e.as[OpenAPIPathEntry]
       }

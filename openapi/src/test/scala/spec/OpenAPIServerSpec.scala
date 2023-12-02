@@ -8,7 +8,6 @@ import org.scalatest.matchers.should.Matchers
 import org.scalatest.wordspec.AsyncWordSpec
 import spice.http.content.JsonContent
 import spice.http.server.config.HttpsServerListener
-import spice.http.server.openapi._
 import spice.http.{HttpExchange, HttpMethod, HttpRequest}
 import spice.net._
 import spice.openapi.server.{OpenAPIHttpServer, Service, ServiceCall}
