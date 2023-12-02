@@ -4,7 +4,7 @@ import cats.effect.unsafe.implicits.global
 import spice.http.HttpMethod
 import spice.openapi.{OpenAPI, OpenAPIContent, OpenAPISchema}
 import spice.openapi.generator.{OpenAPIGenerator, OpenAPIGeneratorConfig, SourceFile}
-import spice.streamer.Streamer
+import spice.streamer._
 
 import scala.collection.mutable
 
