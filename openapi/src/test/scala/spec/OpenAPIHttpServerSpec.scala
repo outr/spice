@@ -30,28 +30,20 @@ class OpenAPIHttpServerSpec extends AsyncWordSpec with AsyncIOSpec with Matchers
     override def title: String = "Example Server"
     override def version: String = "1.0"
     override lazy val services: List[Service] = List(
-      ReverseService, CombineService
+      reverseService, combineService
     )
   }
 
-  object ReverseService extends RestService[ReverseRequest, ReverseResponse] {
-    override val path: URLPath = path"/reverse"
-
-    override protected def summary: String = "Reverses text"
-
-    override protected def apply(request: ReverseRequest): IO[ReverseResponse] = if (request.auth.username == "admin" && request.auth.password == "password") {
+  private val reverseService = RestService[ReverseRequest, ReverseResponse](path"/reverse", "Reverses text") { request =>
+    if (request.auth.username == "admin" && request.auth.password == "password") {
       IO.pure(ReverseResponse(Some(request.text.reverse), None))
     } else {
       IO.pure(ReverseResponse(None, Some("Invalid username/password combination")))
     }
   }
 
-  object CombineService extends RestService[CombineRequest, CombineResponse] {
-    override val path: URLPath = path"/combine"
-
-    override protected def summary: String = "Combines the values of an enum"
-
-    override protected def apply(request: CombineRequest): IO[CombineResponse] = if (request.auth.username == "admin" && request.auth.password == "password") {
+  private val combineService = RestService[CombineRequest, CombineResponse](path"/combine", "Combines the values of an enum") { request =>
+    if (request.auth.username == "admin" && request.auth.password == "password") {
       IO.pure(CombineResponse(request.map.values.toList.sortBy(_.getClass.getName), None))
     } else {
       IO.pure(CombineResponse(Nil, Some("Invalid username/password combination")))
