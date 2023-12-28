@@ -6,12 +6,9 @@ import fabric.rw._
 import org.scalatest.matchers.should.Matchers
 import org.scalatest.wordspec.AsyncWordSpec
 import spice.net._
-import spice.openapi.OpenAPI
 import spice.openapi.generator.OpenAPIGeneratorConfig
 import spice.openapi.generator.dart.OpenAPIDartGenerator
 import spice.openapi.server.{OpenAPIHttpServer, RestService, Service}
-
-import java.nio.file.Paths
 
 class OpenAPIHttpServerSpec extends AsyncWordSpec with AsyncIOSpec with Matchers {
   "OpenAPIHttpServer" should {

@@ -14,7 +14,7 @@ import spice.http.server.dsl._
 import spice.http.server.handler.HttpHandler
 import spice.http.{HttpExchange, HttpMethod, HttpRequest, HttpStatus, paths}
 import spice.http.server.{HttpServer, MutableHttpServer}
-import spice.http.server.rest.{Restful, RestfulResponse}
+import spice.http.server.rest.{MultipartRequest, Restful, RestfulResponse}
 import spice.net._
 
 import java.io.File
@@ -154,14 +154,15 @@ class ServerSpec extends AsyncWordSpec with AsyncIOSpec with Matchers {
     }
   }
 
-  object FileUploadService extends Restful[FileInfo, String] {
+  object FileUploadService extends Restful[MultipartRequest[FileInfo], String] {
     override def apply(exchange: HttpExchange,
-                       request: FileInfo)
+                       request: MultipartRequest[FileInfo])
                       (implicit mdc: MDC): IO[RestfulResponse[String]] = IO {
-      val content = exchange.request.content.get.asInstanceOf[FormDataContent]
+      request.content should not be None
+      val content = request.content.get
       val fileEntry = content.file("image")
       assert(fileEntry.file.length() == 33404)
-      ok(request.fileName)
+      ok(request.request.fileName)
     }
 
     override def error(errors: List[ValidationError], status: HttpStatus): RestfulResponse[String] = RestfulResponse("Failure!", HttpStatus.InternalServerError)

@@ -56,7 +56,9 @@ trait HttpServer extends LifecycleHandler with Initializable {
     ()
   }
 
-  def errorRecovery(exchange: HttpExchange, throwable: Throwable): IO[HttpExchange] = IO.pure(exchange)
+  def errorRecovery(exchange: HttpExchange, throwable: Throwable): IO[HttpExchange] = logger
+    .error(throwable)
+    .map(_ => exchange)
 
   def stop(): IO[Unit] = implementation.stop(this)
 

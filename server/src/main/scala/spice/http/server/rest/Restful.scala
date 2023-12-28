@@ -26,8 +26,10 @@ abstract class Restful[Request, Response](implicit val requestRW: RW[Request],
 
   def validations: List[RestfulValidation[Request]] = Nil
 
-  def error(throwable: Throwable): RestfulResponse[Response] =
+  def error(throwable: Throwable): RestfulResponse[Response] = {
+    scribe.error(throwable)
     error(List(ValidationError("An internal error occurred")), HttpStatus.InternalServerError)
+  }
 
   def error(message: String): RestfulResponse[Response] =
     error(List(ValidationError(message)), HttpStatus.InternalServerError)
@@ -86,7 +88,15 @@ abstract class Restful[Request, Response](implicit val requestRW: RW[Request],
               val status = errors.map(_.status).max
               IO.pure(error(errors, status))
             case Right(request) => try {
-              apply(exchange, request)
+              val updatedRequest = request match {
+                case r: MultipartRequest[_] => exchange.request.content match {
+                  case Some(content: FormDataContent) => r.copy(content = Some(content)).asInstanceOf[Request]
+                  case _ => request
+                }
+                case r: ExchangeRequest[_] => r.copy(exchange = exchange).asInstanceOf[Request]
+                case _ => request
+              }
+              apply(exchange, updatedRequest)
                 .timeout(timeout)
                 .handleError { throwable =>
                   error(throwable)
