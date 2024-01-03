@@ -1,6 +1,7 @@
 package spice.net
 
 import fabric.rw._
+import spice.UserException
 
 class EmailAddress private(val value: String) {
   private lazy val index = value.indexOf('@')
@@ -51,7 +52,7 @@ object EmailAddress {
   }
 
   def apply(email: String): EmailAddress = parse(email)
-    .getOrElse(throw new RuntimeException(s"Invalid email address: $email"))
+    .getOrElse(throw UserException(s"Invalid email address: $email"))
 
   def unsafe(email: String): EmailAddress = new EmailAddress(email)
 }

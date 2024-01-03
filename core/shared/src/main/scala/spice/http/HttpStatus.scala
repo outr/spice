@@ -1,6 +1,7 @@
 package spice.http
 
 import fabric.rw._
+import spice.UserException
 
 case class HttpStatus(code: Int, message: String) extends Ordered[HttpStatus] {
   assert(message.trim.nonEmpty)
@@ -94,5 +95,5 @@ object HttpStatus {
   val NetworkAuthenticationRequired: HttpStatus = HttpStatus(511, "Network Authentication Required")
 
   def getByCode(code: Int): Option[HttpStatus] = codeMap.get(code)
-  def byCode(code: Int): HttpStatus = getByCode(code).getOrElse(throw new RuntimeException(s"Unable to find HttpResponseStatus by code: $code"))
+  def byCode(code: Int): HttpStatus = getByCode(code).getOrElse(throw UserException(s"Unable to find HttpResponseStatus by code: $code"))
 }

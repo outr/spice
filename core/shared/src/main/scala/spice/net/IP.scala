@@ -1,6 +1,7 @@
 package spice.net
 
 import fabric.rw._
+import spice.UserException
 
 import scala.util.Try
 import scala.util.matching.Regex
@@ -20,7 +21,7 @@ sealed trait IP {
 object IP {
   implicit val rw: RW[IP] = RW.string[IP](
     asString = (ip: IP) => ip.addressString,
-    fromString = (s: String) => fromString(s).getOrElse(throw new RuntimeException(s"Invalid IP address: $s"))
+    fromString = (s: String) => fromString(s).getOrElse(throw UserException(s"Invalid IP address: $s"))
   )
 
   case class v4(a: Int = 127, b: Int = 0, c: Int = 0, d: Int = 1) extends IP {

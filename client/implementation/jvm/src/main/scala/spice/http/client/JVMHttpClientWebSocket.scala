@@ -2,6 +2,7 @@ package spice.http.client
 
 import cats.effect.IO
 import reactify.Var
+import spice.UserException
 import spice.http.{ByteBufferData, ConnectionStatus, WebSocket}
 import spice.net.URL
 
@@ -21,7 +22,7 @@ class JVMHttpClientWebSocket(url: URL, instance: JVMHttpClientInstance) extends 
     }
     send.binary.attach {
       case data: ByteBufferData => jvmWebSocket().foreach(ws => ws.sendBinary(data.bb, true))
-      case data => throw new RuntimeException(s"Unsupported data type: $data")
+      case data => throw UserException(s"Unsupported data type: $data")
     }
     send.close.on {
       disconnect()

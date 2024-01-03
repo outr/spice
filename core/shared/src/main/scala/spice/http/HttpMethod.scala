@@ -3,6 +3,7 @@ package spice.http
 import fabric._
 import fabric.define.DefType
 import fabric.rw._
+import spice.UserException
 
 sealed abstract class HttpMethod private(val value: String) {
   HttpMethod.map += value -> this
@@ -36,5 +37,5 @@ object HttpMethod {
   val Options: HttpMethod = new HttpMethod("OPTIONS") {}
 
   def get(value: String): Option[HttpMethod] = map.get(value.toUpperCase)
-  def apply(value: String): HttpMethod = get(value).getOrElse(throw new RuntimeException(s"$value is an invalid Method."))
+  def apply(value: String): HttpMethod = get(value).getOrElse(throw UserException(s"$value is an invalid Method."))
 }

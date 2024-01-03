@@ -6,7 +6,7 @@ import fabric.rw._
 import fabric.{Json, Str, arr, obj, str}
 import profig.Profig
 import scribe.mdc.MDC
-import spice.ValidationError
+import spice.{UserException, ValidationError}
 import spice.http.content.{Content, FormDataContent}
 import spice.http.server.dsl.{ConnectionFilter, FilterResponse, PathFilter}
 import spice.http.{HttpExchange, HttpMethod, HttpStatus}
@@ -149,7 +149,7 @@ object Restful {
         }
 
       override def error(errors: List[ValidationError], status: HttpStatus): RestfulResponse[Response] =
-        throw new RuntimeException(s"Error occurred: ${errors.map(_.message).mkString(", ")}")
+        throw UserException(s"Error occurred: ${errors.map(_.message).mkString(", ")}")
     }
 
   def validate[Request](request: Request,

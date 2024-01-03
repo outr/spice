@@ -4,6 +4,7 @@ import cats.effect.{Deferred, IO}
 import org.scalajs.dom
 import org.scalajs.dom.{ProgressEvent, XMLHttpRequest}
 import reactify._
+import spice.UserException
 import spice.http.HttpMethod
 import spice.net.URL
 
@@ -29,7 +30,7 @@ class AjaxRequest(url: URL,
       if ((req.status >= 200 && req.status < 300) || req.status == 304) {
         deferred.complete(Success(req))
       } else {
-        deferred.complete(Failure(new RuntimeException(s"AjaxRequest failed: ${req.readyState}")))
+        deferred.complete(Failure(UserException(s"AjaxRequest failed: ${req.readyState}")))
       }
     }
   }

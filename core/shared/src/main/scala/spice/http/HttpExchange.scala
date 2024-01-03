@@ -1,6 +1,7 @@
 package spice.http
 
 import cats.effect.IO
+import spice.UserException
 import spice.http.content.Content
 import spice.net.URLPath
 import spice.store.{MapStore, Store}
@@ -30,7 +31,7 @@ case class HttpExchange(request: HttpRequest,
         IO(response.withStatus(HttpStatus.SwitchingProtocols))
       }.map(exchange => (exchange, listener))
     } else {
-      throw new RuntimeException(s"Not a WebSocket upgrade request! Expected 'Connection' set to 'Upgrade'. Headers: ${request.headers}")
+      throw UserException(s"Not a WebSocket upgrade request! Expected 'Connection' set to 'Upgrade'. Headers: ${request.headers}")
     }
   }
 

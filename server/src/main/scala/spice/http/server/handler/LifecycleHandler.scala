@@ -1,8 +1,11 @@
 package spice.http.server.handler
 
 import cats.effect.IO
+import fabric.obj
+import fabric.rw.Convertible
 import scribe.cats.{io => logger}
 import scribe.mdc.MDC
+import spice.UserException
 import spice.http.{HttpExchange, HttpStatus}
 import spice.http.content.Content
 import spice.net.ContentType
@@ -31,10 +34,34 @@ trait LifecycleHandler extends HttpHandler {
   protected def errorResponse(exchange: HttpExchange,
                               state: LifecycleState,
                               throwable: Throwable): IO[HttpExchange] = exchange.modify { response =>
-    IO(response.withContent(Content.string(
-      value = s"An internal error occurred: ${throwable.getClass.getSimpleName}",
+    IO {
+      val content = throwable match {
+        case UserException(message, code) => errorMessageToContent(message, code)
+        case _ => errorMessageToContent(s"An internal error occurred: ${throwable.getClass.getSimpleName}", None)
+      }
+      response.withContent(content)
+    }
+  }
+
+  protected def errorMessageToContent(message: String, code: Option[Int]): Content =
+    errorMessage2StringContent(message, code)
+
+  protected def errorMessage2StringContent(message: String, code: Option[Int]): Content = {
+    val output = code match {
+      case Some(c) => s"$message ($c)"
+      case None => message
+    }
+    Content.string(
+      value = output,
       contentType = ContentType.`text/plain`
-    )))
+    )
+  }
+
+  protected def errorMessage2JsonContent(message: String, code: Option[Int]): Content = {
+    Content.json(obj(
+      "message" -> message,
+      "code" -> code.json
+    ))
   }
 
   protected def notFoundContent: IO[Content] = IO.pure(LifecycleHandler.DefaultNotFound)

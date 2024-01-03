@@ -1,5 +1,7 @@
 import 'dart:convert';
+import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
+import 'package:overlay_support/overlay_support.dart';
 
 %%IMPORTS%%
 
@@ -10,20 +12,26 @@ class Service {
   static Uri host(String path) => base.replace(path: path);
 
   static Future<Response> restful<Response>(
-      String path,
-      Map<String, dynamic> request,
-      Response Function(Map<String, dynamic> json) convert
-      ) async {
-    final String body = jsonEncode(request);
-    final http.Response response = await http.post(
-        Service.host(path),
-        headers: {
-          "Content-Type": "application/json; charset=UTF-8",
-          "Accept": "application/json"
-        },
-        body: body
-    );
-    return convert(jsonDecode(response.body));
+    String path,
+    Map<String, dynamic> request,
+    Response Function(Map<String, dynamic> json) convert
+  ) async {
+    try {
+      final String body = jsonEncode(request);
+      final http.Response response = await http.post(
+          Service.host(path),
+          headers: {
+            "Content-Type": "application/json; charset=UTF-8",
+            "Accept": "application/json"
+          },
+          body: body
+      );
+      return convert(jsonDecode(response.body));
+    } on Exception catch(exc) {
+      String message = exc.toString();
+      Map<String, dynamic> json = jsonDecode('{"error": {"message": "$message"} }');
+      return convert(json);
+    }
   }
 
 %%SERVICES%%
