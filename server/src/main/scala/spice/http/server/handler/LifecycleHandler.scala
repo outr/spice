@@ -1,8 +1,8 @@
 package spice.http.server.handler
 
 import cats.effect.IO
-import fabric.obj
-import fabric.rw.Convertible
+import fabric._
+import fabric.rw._
 import scribe.cats.{io => logger}
 import scribe.mdc.MDC
 import spice.UserException

@@ -1,8 +1,10 @@
 package spice.http.content
 
 import cats.effect.IO
-import fabric.Json
+import fabric.define.DefType
+import fabric.{Json, Null}
 import fabric.io.JsonParser
+import fabric.rw.RW
 
 import java.io.File
 import spice.http.Headers
@@ -25,9 +27,9 @@ case class FormDataContent(entries: Map[String, FormDataEntry]) extends Content 
     case (key, entry: FormDataEntry.FileEntry) => key -> entry
   }
 
-  def file(key: String): FormDataEntry.FileEntry = files.getOrElse(key, throw new RuntimeException(s"Not found: $key in $this."))
-  def string(key: String): FormDataEntry.StringEntry = strings.getOrElse(key, throw new RuntimeException(s"Not found: $key in $this."))
-  def json(key: String): Json = jsons.getOrElse(key, throw new RuntimeException(s"Not found: $key in $this."))
+  def getFile(key: String): FormDataEntry.FileEntry = files.getOrElse(key, throw new RuntimeException(s"Not found: $key in $this."))
+  def getString(key: String): FormDataEntry.StringEntry = strings.getOrElse(key, throw new RuntimeException(s"Not found: $key in $this."))
+  def getJson(key: String): Json = jsons.getOrElse(key, throw new RuntimeException(s"Not found: $key in $this."))
 
   def withFile(key: String, fileName: String, file: File, headers: Headers = Headers.empty): FormDataContent = {
     assert(file.exists(), s"Unable to find file: ${file.getAbsolutePath}")
@@ -57,4 +59,10 @@ case class FormDataContent(entries: Map[String, FormDataEntry]) extends Content 
   override def asStream: fs2.Stream[IO, Byte] = throw new UnsupportedOperationException("FormDataContent cannot be represented as a stream!")
 }
 
-object FormDataContent extends FormDataContent(Map.empty)
+object FormDataContent extends FormDataContent(Map.empty) {
+  implicit val rw: RW[FormDataContent] = RW.from[FormDataContent](
+    r = _ => Null,
+    w = _ => this,
+    d = DefType.Null
+  )
+}

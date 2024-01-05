@@ -154,21 +154,23 @@ class ServerSpec extends AsyncWordSpec with AsyncIOSpec with Matchers {
     }
   }
 
-  object FileUploadService extends Restful[MultipartRequest[FileInfo], String] {
+  object FileUploadService extends Restful[FileInfo, String] {
     override def apply(exchange: HttpExchange,
-                       request: MultipartRequest[FileInfo])
+                       request: FileInfo)
                       (implicit mdc: MDC): IO[RestfulResponse[String]] = IO {
       request.content should not be None
-      val content = request.content.get
-      val fileEntry = content.file("image")
+      val content = request.content
+      val fileEntry = content.getFile("image")
       assert(fileEntry.file.length() == 33404)
-      ok(request.request.fileName)
+      ok(request.fileName)
     }
 
     override def error(errors: List[ValidationError], status: HttpStatus): RestfulResponse[String] = RestfulResponse("Failure!", HttpStatus.InternalServerError)
   }
 
-  case class FileInfo(fileName: String, description: String)
+  case class FileInfo(fileName: String, description: String, content: FormDataContent = FormDataContent) extends MultipartRequest {
+    override def withContent(content: FormDataContent): MultipartRequest = copy(content = content)
+  }
 
   object FileInfo {
     implicit val rw: RW[FileInfo] = RW.gen

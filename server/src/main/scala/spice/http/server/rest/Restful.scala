@@ -88,13 +88,16 @@ abstract class Restful[Request, Response](implicit val requestRW: RW[Request],
               val status = errors.map(_.status).max
               IO.pure(error(errors, status))
             case Right(request) => try {
-              val updatedRequest = request match {
-                case r: MultipartRequest[_] => exchange.request.content match {
-                  case Some(content: FormDataContent) => r.copy(content = Some(content)).asInstanceOf[Request]
+              var updatedRequest = request match {
+                case r: MultipartRequest => exchange.request.content match {
+                  case Some(content: FormDataContent) => r.withContent(content).asInstanceOf[Request]
                   case _ => request
                 }
-                case r: ExchangeRequest[_] => r.copy(exchange = exchange).asInstanceOf[Request]
                 case _ => request
+              }
+              updatedRequest = updatedRequest match {
+                case r: ExchangeRequest => r.withExchange(exchange).asInstanceOf[Request]
+                case _ => updatedRequest
               }
               apply(exchange, updatedRequest)
                 .timeout(timeout)
