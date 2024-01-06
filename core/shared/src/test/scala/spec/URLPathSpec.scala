@@ -29,7 +29,18 @@ class URLPathSpec extends AnyWordSpec with Matchers {
     }
     "verify partial path argument matching" in {
       val path = path"/one/two/part-{arg}"
-      path"/one/two/part-three" should be(path)
+      val literal = path"/one/two/part-three"
+      literal should be(path)
+      path.parts should be(List(
+        URLPathPart.Separator,
+        URLPathPart.Literal("one"),
+        URLPathPart.Separator,
+        URLPathPart.Literal("two"),
+        URLPathPart.Separator,
+        URLPathPart.Literal("part-"),
+        URLPathPart.Argument("arg")
+      ))
+      path.extractArguments(literal) should be(Map("arg" -> "three"))
     }
   }
 }

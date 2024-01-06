@@ -3,6 +3,8 @@ package spice.net
 import fabric.rw._
 import spice.net.URLPathPart._
 
+import java.util.regex.Pattern
+
 case class URLPath(parts: List[URLPathPart]) {
   lazy val absolute: URLPath = {
     var entries = Vector.empty[URLPathPart]
@@ -15,10 +17,11 @@ case class URLPath(parts: List[URLPathPart]) {
   }
   lazy val encoded: String = absolute.parts.map(Encoder.apply).mkString
   lazy val decoded: String = absolute.parts.map(_.value).mkString
-  lazy val asRegex: String = absolute.parts.map {
+  lazy val asRegexString: String = absolute.parts.map {
     case URLPathPart.Argument(_) => "(.+?)"
     case part => part.value
   }.mkString
+  private lazy val pattern = Pattern.compile(asRegexString)
 
   lazy val arguments: List[String] = parts.collect {
     case part: Argument => part.name
@@ -36,12 +39,15 @@ case class URLPath(parts: List[URLPathPart]) {
   }
 
   def extractArguments(literal: URLPath): Map[String, String] = {
-    assert(parts.length == literal.parts.length, s"Literal path ($literal) must have the same number of parts as the one being extracted for ($parts)")
-    parts.zip(literal.parts).flatMap {
-      case (p1, p2) => p1 match {
-        case ap: Argument => Some(ap.name -> p2.value)
-        case _ => None
-      }
+    val matcher = pattern.matcher(literal.decoded)
+    if (!matcher.matches()) {
+      throw new RuntimeException(s"Literal path: ${literal.decoded} was not a match to $asRegexString")
+    }
+    if (matcher.groupCount() != arguments.length) {
+      throw new RuntimeException(s"Arguments ${arguments.length} was not the same as the match groups: ${matcher.groupCount()}")
+    }
+    arguments.zipWithIndex.map {
+      case (name, index) => name -> matcher.group(index + 1)
     }.toMap
   }
 
@@ -59,10 +65,10 @@ case class URLPath(parts: List[URLPathPart]) {
     case that: URLPath => if (this.arguments.nonEmpty == that.arguments.nonEmpty) {
       this.toString == that.toString
     } else if (this.arguments.nonEmpty) {
-      val regex = this.asRegex
+      val regex = this.asRegexString
       that.decoded.matches(regex)
     } else {
-      val regex = that.asRegex
+      val regex = that.asRegexString
       this.decoded.matches(regex)
     }
     case _ => false
@@ -80,43 +86,12 @@ object URLPath {
   val empty: URLPath = URLPath(Nil)
 
   def parse(path: String, absolutize: Boolean = true): URLPath = {
-    val b = new StringBuilder
-    var openColon = false
-    var openBrace = false
-    var parts = List.empty[URLPathPart]
-    def finishPath(): Unit = {
-      val part = if (openColon) {
-        Option(URLPathPart.Argument(b.toString()))
-      } else {
-        URLPathPart(b.toString())
-      }
-      part.foreach { part =>
-        parts = part :: parts
-      }
-      b.clear()
-      openColon = false
-      openBrace = false
-    }
-    path.foreach {
-      case '/' =>
-        finishPath()
-        parts = URLPathPart.Separator :: parts
-      case ':' => openColon = true
-      case '{' => openBrace = true
-      case '}' if openBrace && b.nonEmpty =>
-        parts = URLPathPart.Argument(b.toString()) :: parts
-        b.clear()
-      case c => b.append(c)
-    }
-    finishPath()
+    val parts = path
+      .split("((?<=/)|(?=/))")
+      .toList
+      .flatMap(URLPathPart.apply)
 
-//    val updated = if (path.startsWith("/")) {
-//      path.substring(1)
-//    } else {
-//      path
-//    }
-//    val parts = updated.split('/').toList.map(Decoder.apply).flatMap(URLPathPart.apply)
-    URLPath(parts.reverse) match {
+    URLPath(parts) match {
       case p if absolutize => p.absolute
       case p => p
     }

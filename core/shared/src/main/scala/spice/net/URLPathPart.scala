@@ -1,5 +1,7 @@
 package spice.net
 
+import com.sun.org.apache.xalan.internal.xsltc.compiler.sym
+
 sealed trait URLPathPart extends Any {
   def value: String
 
@@ -28,14 +30,28 @@ object URLPathPart {
     override def value: String = s"{$name}"
   }
 
-  def apply(value: String): Option[URLPathPart] = value match {
-    case null | "" => None
-    case "/" => Some(Separator)
-    case ".." => Some(UpLevel)
-    case "." => Some(SameLevel)
-    case ArgumentPartRegex1(name) => Some(Argument(name))
-    case ArgumentPartRegex2(name) => Some(Argument(name))
-    case s => Some(Literal(s))
+  final def apply(value: String): List[URLPathPart] = value match {
+    case null | "" => Nil
+    case "/" => List(Separator)
+    case ".." => List(UpLevel)
+    case "." => List(SameLevel)
+    case ArgumentPartRegex1(name) => List(Argument(name))
+    case ArgumentPartRegex2(name) => List(Argument(name))
+    case s =>
+      val colonIndex = s.indexOf(':')
+      val openBraceIndex = s.indexOf('{')
+      val closeBraceIndex = s.indexOf('}', math.max(openBraceIndex, 0))
+      if (colonIndex != -1) {
+        val pre = s.substring(0, colonIndex)
+        apply(pre) ::: List(Argument(s.substring(colonIndex + 1)))
+      } else if (openBraceIndex != -1 && closeBraceIndex != -1) {
+        val pre = s.substring(0, openBraceIndex)
+        val post = s.substring(closeBraceIndex + 1)
+        val arg = Argument(s.substring(openBraceIndex + 1, closeBraceIndex))
+        apply(pre) ::: List(arg) ::: apply(post)
+      } else {
+        List(Literal(s))
+      }
   }
 
   def equals(p1: URLPathPart, p2: URLPathPart): Boolean = if (p1 == p2) {
