@@ -13,4 +13,9 @@ object Encoder {
     case c if unreservedCharacters.contains(c) => c
     case c => s"%${c.toLong.toHexString.toUpperCase}"
   }.mkString
+
+  def apply(part: URLPathPart): String = part match {
+    case URLPathPart.Separator => "/"
+    case _ => apply(part.value)
+  }
 }

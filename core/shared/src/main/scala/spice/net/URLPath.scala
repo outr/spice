@@ -7,14 +7,18 @@ case class URLPath(parts: List[URLPathPart]) {
   lazy val absolute: URLPath = {
     var entries = Vector.empty[URLPathPart]
     parts.foreach {
-      case UpLevel => entries = entries.dropRight(1)
-      case SameLevel => // Ignore
+      case UpLevel => entries = entries.dropRight(3)
+      case SameLevel => entries = entries.dropRight(1)
       case part => entries = entries :+ part
     }
     URLPath(entries.toList)
   }
-  lazy val encoded: String = absolute.parts.map(_.value).map(Encoder.apply).mkString("/", "/", "")
-  lazy val decoded: String = absolute.parts.map(_.value).mkString("/", "/", "")
+  lazy val encoded: String = absolute.parts.map(Encoder.apply).mkString
+  lazy val decoded: String = absolute.parts.map(_.value).mkString
+  lazy val asRegex: String = absolute.parts.map {
+    case URLPathPart.Argument(_) => "(.+?)"
+    case part => part.value
+  }.mkString
 
   lazy val arguments: List[String] = parts.collect {
     case part: Argument => part.name
@@ -52,10 +56,15 @@ case class URLPath(parts: List[URLPathPart]) {
   def merge(that: URLPath): URLPath = URLPath(this.parts ::: that.parts)
 
   override def equals(obj: Any): Boolean = obj match {
-    case that: URLPath if this.parts.length == that.parts.length =>
-      this.parts.zip(that.parts).forall {
-        case (thisPart, thatPart) => URLPathPart.equals(thisPart, thatPart)
-      }
+    case that: URLPath => if (this.arguments.nonEmpty == that.arguments.nonEmpty) {
+      this.toString == that.toString
+    } else if (this.arguments.nonEmpty) {
+      val regex = this.asRegex
+      that.decoded.matches(regex)
+    } else {
+      val regex = that.asRegex
+      this.decoded.matches(regex)
+    }
     case _ => false
   }
 
@@ -71,13 +80,43 @@ object URLPath {
   val empty: URLPath = URLPath(Nil)
 
   def parse(path: String, absolutize: Boolean = true): URLPath = {
-    val updated = if (path.startsWith("/")) {
-      path.substring(1)
-    } else {
-      path
+    val b = new StringBuilder
+    var openColon = false
+    var openBrace = false
+    var parts = List.empty[URLPathPart]
+    def finishPath(): Unit = {
+      val part = if (openColon) {
+        Option(URLPathPart.Argument(b.toString()))
+      } else {
+        URLPathPart(b.toString())
+      }
+      part.foreach { part =>
+        parts = part :: parts
+      }
+      b.clear()
+      openColon = false
+      openBrace = false
     }
-    val parts = updated.split('/').toList.map(Decoder.apply).flatMap(URLPathPart.apply)
-    URLPath(parts) match {
+    path.foreach {
+      case '/' =>
+        finishPath()
+        parts = URLPathPart.Separator :: parts
+      case ':' => openColon = true
+      case '{' => openBrace = true
+      case '}' if openBrace && b.nonEmpty =>
+        parts = URLPathPart.Argument(b.toString()) :: parts
+        b.clear()
+      case c => b.append(c)
+    }
+    finishPath()
+
+//    val updated = if (path.startsWith("/")) {
+//      path.substring(1)
+//    } else {
+//      path
+//    }
+//    val parts = updated.split('/').toList.map(Decoder.apply).flatMap(URLPathPart.apply)
+    URLPath(parts.reverse) match {
       case p if absolutize => p.absolute
       case p => p
     }

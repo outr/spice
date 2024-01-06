@@ -2,11 +2,17 @@ package spice.net
 
 sealed trait URLPathPart extends Any {
   def value: String
+
+  override def toString: String = value
 }
 
 object URLPathPart {
   private val ArgumentPartRegex1 = """:(.+)""".r
   private val ArgumentPartRegex2 = """[{](.+)[}]""".r
+
+  object Separator extends URLPathPart {
+    override def value: String = "/"
+  }
 
   object UpLevel extends URLPathPart {
     override def value: String = ".."
@@ -24,6 +30,7 @@ object URLPathPart {
 
   def apply(value: String): Option[URLPathPart] = value match {
     case null | "" => None
+    case "/" => Some(Separator)
     case ".." => Some(UpLevel)
     case "." => Some(SameLevel)
     case ArgumentPartRegex1(name) => Some(Argument(name))
