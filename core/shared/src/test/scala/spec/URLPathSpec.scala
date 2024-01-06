@@ -42,5 +42,21 @@ class URLPathSpec extends AnyWordSpec with Matchers {
       ))
       path.extractArguments(literal) should be(Map("arg" -> "three"))
     }
+    "verify a slightly more complex path with argument" in {
+      val path = path"/user/profile/icon-{userId}.png"
+      val literal = path"/user/profile/icon-test.png"
+      literal should be(path)
+      path.parts should be(List(
+        URLPathPart.Separator,
+        URLPathPart.Literal("user"),
+        URLPathPart.Separator,
+        URLPathPart.Literal("profile"),
+        URLPathPart.Separator,
+        URLPathPart.Literal("icon-"),
+        URLPathPart.Argument("userId"),
+        URLPathPart.Literal(".png")
+      ))
+      path.extractArguments(literal) should be(Map("userId" -> "test"))
+    }
   }
 }
