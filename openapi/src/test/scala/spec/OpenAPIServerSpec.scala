@@ -73,7 +73,7 @@ class OpenAPIServerSpec extends AsyncWordSpec with AsyncIOSpec with Matchers {
       )
     }
 
-    override val services: List[Service] = List(
+    override lazy val services: List[Service] = List(
       usersService
     )
   }

@@ -2,9 +2,9 @@ package spice.openapi.server
 
 import cats.effect.IO
 import scribe.mdc.MDC
-import spice.http.HttpExchange
+import spice.http.{HttpExchange, paths}
 import spice.http.content.Content
-import spice.http.server.HttpServer
+import spice.http.server.{HttpServer, MutableHttpServer}
 import spice.openapi._
 import spice.net._
 import spice.openapi.{OpenAPI, OpenAPIComponents, OpenAPIInfo, OpenAPIPath, OpenAPISchema, OpenAPIServer, OpenAPITag}
@@ -12,7 +12,7 @@ import spice.openapi.{OpenAPI, OpenAPIComponents, OpenAPIInfo, OpenAPIPath, Open
 import scala.annotation.tailrec
 import scala.collection.immutable.{SortedMap, VectorMap}
 
-trait OpenAPIHttpServer extends HttpServer {
+trait OpenAPIHttpServer extends MutableHttpServer {
   def openAPIVersion: String = "3.0.3"
 
   def title: String
@@ -47,19 +47,11 @@ trait OpenAPIHttpServer extends HttpServer {
 
   def services: List[Service]
 
-  override def apply(exchange: HttpExchange)(implicit mdc: MDC): IO[HttpExchange] = services
-    .to(LazyList)
-    .flatMap(_(exchange))
-    .headOption match {
-      case Some(sc) => sc.handle(exchange)
-      case None if exchange.request.url.path == path"/openapi.json" => exchange.withContent(
-        Content.json(api.asJson, compact = false)
-      )
-      case None if exchange.request.url.path == path"/openapi.yaml" => exchange.withContent(
-        Content.string(api.asYaml, ContentType.`text/yaml`)
-      )
-      case None => IO.pure(exchange)
-    }
+  services.foreach { service =>
+    handlers += service
+  }
+  handler.matcher(paths.exact("/openapi.json")).content(Content.json(api.asJson, compact = false))
+  handler.matcher(paths.exact("/openapi.yaml")).content(Content.string(api.asYaml, ContentType.`text/yaml`))
 }
 
 object OpenAPIHttpServer {
