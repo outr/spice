@@ -199,7 +199,7 @@ object Restful {
         case (key, entry) => key -> JsonParser(entry.value)
       }
       val fileValues = fdc.files.map {
-        case (key, entry) => key -> obj().withReference(FileEntry(
+        case (key, entry) => key -> obj().withReference(FileUpload(
           fileName = entry.fileName,
           file = entry.file,
           headers = entry.headers
