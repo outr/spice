@@ -3,9 +3,10 @@ package spice.http.server.rest
 import cats.effect.IO
 import fabric.io.JsonParser
 import fabric.rw._
-import fabric.{Json, Str, arr, obj, str}
+import fabric.{Json, Obj, Str, arr, obj, str}
 import profig.Profig
 import scribe.mdc.MDC
+import spice.http.content.FormDataEntry.FileEntry
 import spice.{UserException, ValidationError}
 import spice.http.content.{Content, FormDataContent}
 import spice.http.server.dsl.{ConnectionFilter, FilterResponse, PathFilter}
@@ -193,7 +194,19 @@ object Restful {
   }
 
   def jsonFromContent(content: Content): IO[Json] = content match {
-    case fdc: FormDataContent => IO(JsonParser(fdc.strings.head._2.value))
+    case fdc: FormDataContent => IO {
+      val jsonValues = fdc.strings.map {
+        case (key, entry) => key -> JsonParser(entry.value)
+      }
+      val fileValues = fdc.files.map {
+        case (key, entry) => key -> obj().withReference(FileEntry(
+          fileName = entry.fileName,
+          file = entry.file,
+          headers = entry.headers
+        ))
+      }
+      Obj(jsonValues ++ fileValues)
+    }
     case _ =>
       content.asString.map { contentString =>
         val firstChar = contentString.charAt(0)

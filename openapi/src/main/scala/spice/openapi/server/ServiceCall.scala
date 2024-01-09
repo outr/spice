@@ -57,15 +57,28 @@ trait ServiceCall extends HttpHandler {
     }
   }
 
+  private def hasFile(map: Map[String, DefType]): Boolean = {
+    map.values.exists(dt => dt.className.contains("spice.http.server.rest.FileUpload"))
+  }
+
   lazy val openAPI: Option[OpenAPIPathEntry] = {
+    val contentType = requestRW.definition match {
+      case DefType.Obj(map, _) if hasFile(map) => ContentType.`multipart/form-data`
+      case _ => ContentType.`application/json`
+    }
     val requestBody = if (requestRW.definition == DefType.Null || method == HttpMethod.Get) {
       None
     } else {
       Some(OpenAPIRequestBody(
         required = true,
         content = OpenAPIContent(
-          ContentType.`application/json` -> OpenAPIContentType(
-            schema = schemaFrom(requestRW.definition, requestSchema.getOrElse(Schema()), nullable = None)
+          contentType -> OpenAPIContentType(
+            schema = if (contentType == ContentType.`multipart/form-data`) {
+              val map = requestRW.definition.asInstanceOf[DefType.Obj].map
+              componentSchema(requestSchema.getOrElse(Schema()), map, nullable = None)
+            } else {
+              schemaFrom(requestRW.definition, requestSchema.getOrElse(Schema()), nullable = None)
+            }
           )
         )
       ))
@@ -101,7 +114,7 @@ trait ServiceCall extends HttpHandler {
       OpenAPISchema.Component(
         `type` = "object",
         properties = map.map {
-          case (key, t) => key -> schemaFrom(t, schema.properties.getOrElse(key, Schema()), nullable)
+          case (key, dt) => key -> schemaFrom(dt, schema.properties.getOrElse(key, Schema()), nullable)
         }
       )
     }
@@ -114,6 +127,10 @@ trait ServiceCall extends HttpHandler {
 
   private def schemaFrom(dt: DefType, schema: Schema, nullable: Option[Boolean]): OpenAPISchema = (dt match {
     case DefType.Obj(map, None) => componentSchema(schema, map, nullable)
+    case DefType.Obj(_, Some("spice.http.server.rest.FileUpload")) => OpenAPISchema.Component(
+      `type` = "string",
+      format = Some("binary")
+    )
     case DefType.Obj(map, Some(className)) =>
       val refName = OpenAPIHttpServer.register(className)(componentSchema(schema, map, None))
       OpenAPISchema.Ref(s"#/components/schemas/$refName", nullable)

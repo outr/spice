@@ -5,14 +5,18 @@ import cats.effect.testing.scalatest.AsyncIOSpec
 import fabric.rw._
 import org.scalatest.matchers.should.Matchers
 import org.scalatest.wordspec.AsyncWordSpec
+import spice.http.server.rest.FileUpload
 import spice.net._
 import spice.openapi.generator.OpenAPIGeneratorConfig
 import spice.openapi.generator.dart.OpenAPIDartGenerator
 import spice.openapi.server.{OpenAPIHttpServer, RestService, Service}
 
+import java.nio.file.{Files, Paths}
+
 class OpenAPIHttpServerSpec extends AsyncWordSpec with AsyncIOSpec with Matchers {
   "OpenAPIHttpServer" should {
     "verify the YAML generated is correct" in {
+//      Files.writeString(Paths.get("test.yaml"), Example.api.asYaml)
       val expected = TestUtils.loadString("openapi-server.yaml")
       Example.api.asYaml should be(expected)
     }
@@ -27,7 +31,7 @@ class OpenAPIHttpServerSpec extends AsyncWordSpec with AsyncIOSpec with Matchers
     override def title: String = "Example Server"
     override def version: String = "1.0"
     override lazy val services: List[Service] = List(
-      reverseService, combineService
+      reverseService, combineService, fileUploadService
     )
   }
 
@@ -44,6 +48,14 @@ class OpenAPIHttpServerSpec extends AsyncWordSpec with AsyncIOSpec with Matchers
       IO.pure(CombineResponse(request.map.values.toList.sortBy(_.getClass.getName), None))
     } else {
       IO.pure(CombineResponse(Nil, Some("Invalid username/password combination")))
+    }
+  }
+
+  private val fileUploadService = RestService[FileUploadRequest, FileUploadResponse](path"/upload", "Uploads a file") { request =>
+    IO {
+      val file = request.file
+      scribe.info(s"Headers: ${file.headers}")
+      FileUploadResponse(request.userId, file.file.length())
     }
   }
 
@@ -85,5 +97,17 @@ class OpenAPIHttpServerSpec extends AsyncWordSpec with AsyncIOSpec with Matchers
 
   object CombineResponse {
     implicit val rw: RW[CombineResponse] = RW.gen
+  }
+
+  case class FileUploadRequest(userId: String, file: FileUpload)
+
+  object FileUploadRequest {
+    implicit val rw: RW[FileUploadRequest] = RW.gen
+  }
+
+  case class FileUploadResponse(userId: String, length: Long)
+
+  object FileUploadResponse {
+    implicit val rw: RW[FileUploadResponse] = RW.gen
   }
 }

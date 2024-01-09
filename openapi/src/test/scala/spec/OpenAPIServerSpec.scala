@@ -32,10 +32,13 @@ class OpenAPIServerSpec extends AsyncWordSpec with AsyncIOSpec with Matchers {
     }
     "call the /users endpoint on staging-api.example.com" in {
       val request = HttpRequest(url = url"https://staging-api.example.com/users")
-      SimpleOpenAPIServer.handle(HttpExchange(request)).map { exchange =>
-        exchange.response.content.map(_.asInstanceOf[JsonContent].json) should be(Some(arr(
-          "root", "john.doe"
-        )))
+      SimpleOpenAPIServer.handle(HttpExchange(request)).flatMap { exchange =>
+        exchange.response.content.get.asString.map { jsonString =>
+          val json = JsonParser(jsonString)
+          json should be(Some(arr(
+            "root", "john.doe"
+          )))
+        }
       }
     }
   }

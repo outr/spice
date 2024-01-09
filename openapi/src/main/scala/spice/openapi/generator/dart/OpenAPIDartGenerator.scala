@@ -2,6 +2,7 @@ package spice.openapi.generator.dart
 
 import cats.effect.unsafe.implicits.global
 import spice.http.HttpMethod
+import spice.net.ContentType
 import spice.openapi.{OpenAPI, OpenAPIContent, OpenAPISchema}
 import spice.openapi.generator.{OpenAPIGenerator, OpenAPIGeneratorConfig, SourceFile}
 import spice.streamer._
@@ -203,25 +204,64 @@ object OpenAPIDartGenerator extends OpenAPIGenerator {
           m.group(1).toUpperCase
         })
         val entry = path.methods(HttpMethod.Post)
-        val requestType = entry
-          .requestBody
-          .get
-          .content
-          .refType
-        val responseType = entry
+        val requestContent = entry.requestBody.get.content
+        val (requestContentType, apiContentType) = requestContent.content.head
+        val successResponse = entry
           .responses("200")
           .content
+        val responseType = successResponse
           .refType
-        imports = imports + requestType.type2File
-        imports = imports + responseType.type2File
-        s"""  /// ${entry.description}
-           |  static Future<$responseType> $name($requestType request) async {
-           |    return await restful(
-           |      "$pathString",
-           |      request.toJson(),
-           |      $responseType.fromJson
-           |    );
-           |  }""".stripMargin
+        if (requestContentType == ContentType.`multipart/form-data`) {
+          apiContentType.schema match {
+            case c: OpenAPISchema.Component =>
+              val params = c.properties.toList.map {
+                case (key, schema) =>
+                  val paramType = schema match {
+                    case child: OpenAPISchema.Component if child.format.contains("binary") => "PlatformFile"
+                    case child: OpenAPISchema.Component => s"${child.`type`.dartType}"
+                    case ref: OpenAPISchema.Ref => ref.ref.ref2Type
+                    case _ => throw new UnsupportedOperationException(s"Unsupported schema for $key: $schema")
+                  }
+                  s"$paramType $key"
+              }.mkString(", ")
+              val ws = "        "
+              val conversions = c.properties.toList.map {
+                case (key, schema: OpenAPISchema.Component) =>
+                  if (schema.format.contains("binary")) {
+                    s"${ws}request.files.add(http.MultipartFile.fromBytes('$key', $key.bytes!));"
+                  } else {
+                    s"${ws}request.fields['$key'] = $key;"
+                  }
+                case (key, ref: OpenAPISchema.Ref) =>
+                  imports = imports + ref.ref.ref2Type.type2File
+                  s"${ws}request.fields['$key'] = json.encode($key.toJson());"
+                case (key, schema) => throw new UnsupportedOperationException(s"Unable to support $key: $schema")
+              }.mkString("\n")
+              s"""  /// ${entry.description}
+                 |  static Future<$responseType> $name($params) async {
+                 |    return await multiPart(
+                 |      "$pathString",
+                 |      (request) {
+                 |$conversions
+                 |      },
+                 |      $responseType.fromJson
+                 |    );
+                 |  }""".stripMargin
+            case _ => throw new UnsupportedOperationException(s"Unsupported schema: ${apiContentType.schema}")
+          }
+        } else {
+          val requestType = requestContent.refType
+          imports = imports + requestType.type2File
+          imports = imports + responseType.type2File
+          s"""  /// ${entry.description}
+             |  static Future<$responseType> $name($requestType request) async {
+             |    return await restful(
+             |      "$pathString",
+             |      request.toJson(),
+             |      $responseType.fromJson
+             |    );
+             |  }""".stripMargin
+        }
     }
     val importsTemplate = imports.toList.sorted.map(s => s"import 'model/$s.dart';").mkString("\n")
     val methodsTemplate = methods.mkString("\n\n")

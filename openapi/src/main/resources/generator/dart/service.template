@@ -1,7 +1,7 @@
 import 'dart:convert';
-import 'package:flutter/material.dart';
+import 'dart:typed_data';
 import 'package:http/http.dart' as http;
-import 'package:overlay_support/overlay_support.dart';
+import 'package:file_picker/file_picker.dart';
 
 %%IMPORTS%%
 
@@ -32,6 +32,19 @@ class Service {
       Map<String, dynamic> json = jsonDecode('{"error": {"message": "$message"} }');
       return convert(json);
     }
+  }
+
+  static Future<Response> multiPart<Response>(
+    String path,
+    Function(http.MultipartRequest request) build,
+    Response Function(Map<String, dynamic> json) convert
+  ) async {
+    final http.MultipartRequest request = http.MultipartRequest("POST", Service.host(path));
+    build(request);
+    final http.StreamedResponse response = await request.send();
+    final Uint8List responseData = await response.stream.toBytes();
+    final String jsonString = String.fromCharCodes(responseData);
+    return convert(jsonDecode(jsonString));
   }
 
 %%SERVICES%%

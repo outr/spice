@@ -19,6 +19,7 @@ object OpenAPISchema {
                        maximum: Option[Int] = None,
                        example: Option[Json] = None,
                        `enum`: List[Json] = Nil,
+                       format: Option[String] = None,
                        maxItems: Option[Int] = None,
                        minItems: Option[Int] = None,
                        items: Option[OpenAPISchema] = None,

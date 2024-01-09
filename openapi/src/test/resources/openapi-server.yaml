@@ -40,6 +40,29 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/CombineResponse'
+  /upload:
+    post:
+      summary: 'Uploads a file'
+      description: 'Uploads a file'
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: 'object'
+              properties:
+                userId:
+                  type: 'string'
+                file:
+                  type: 'string'
+                  format: 'binary'
+      responses:
+        200:
+          description: 'OK'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FileUploadResponse'
 components:
   schemas:
     Auth:
@@ -76,6 +99,13 @@ components:
         error:
           type: 'string'
           nullable: true
+    FileUploadResponse:
+      type: 'object'
+      properties:
+        userId:
+          type: 'string'
+        length:
+          type: 'integer'
     ReverseRequest:
       type: 'object'
       properties:
