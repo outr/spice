@@ -37,7 +37,8 @@ object URLPathPart {
     case "." => List(SameLevel)
     case ArgumentPartRegex1(name) => List(Argument(name))
     case ArgumentPartRegex2(name) => List(Argument(name))
-    case s =>
+    case encoded =>
+      val s = Decoder(encoded)
       val colonIndex = s.indexOf(':')
       val openBraceIndex = s.indexOf('{')
       val closeBraceIndex = s.indexOf('}', math.max(openBraceIndex, 0))

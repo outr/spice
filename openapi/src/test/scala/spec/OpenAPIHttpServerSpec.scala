@@ -11,12 +11,9 @@ import spice.openapi.generator.OpenAPIGeneratorConfig
 import spice.openapi.generator.dart.OpenAPIDartGenerator
 import spice.openapi.server.{OpenAPIHttpServer, RestService, Service}
 
-import java.nio.file.{Files, Paths}
-
 class OpenAPIHttpServerSpec extends AsyncWordSpec with AsyncIOSpec with Matchers {
   "OpenAPIHttpServer" should {
     "verify the YAML generated is correct" in {
-//      Files.writeString(Paths.get("test.yaml"), Example.api.asYaml)
       val expected = TestUtils.loadString("openapi-server.yaml")
       Example.api.asYaml should be(expected)
     }

@@ -13,10 +13,15 @@ case class URLPath(parts: List[URLPathPart]) {
       case SameLevel => entries = entries.dropRight(1)
       case part => entries = entries :+ part
     }
-    URLPath(entries.toList)
+    val fixed = if (entries.nonEmpty && entries.head != URLPathPart.Separator) {
+      URLPathPart.Separator :: entries.toList
+    } else {
+      entries.toList
+    }
+    URLPath(fixed)
   }
   lazy val encoded: String = absolute.parts.map(Encoder.apply).mkString
-  lazy val decoded: String = absolute.parts.map(_.value).mkString
+  lazy val decoded: String = absolute.parts.map(part => Decoder(part.value)).mkString
   lazy val asRegexString: String = absolute.parts.map {
     case URLPathPart.Argument(_) => "(.+?)"
     case part => part.value
@@ -57,6 +62,18 @@ case class URLPath(parts: List[URLPathPart]) {
     val left = parts.dropRight(1)
     val right = URLPath.parse(path, absolutize = false)
     URLPath(left ::: right.parts)
+  }
+
+  /**
+   * Attempts to match the prefix path against this path and return the remaining path if matched
+   */
+  def take(prefix: URLPath): Option[URLPath] = {
+    val prefixString = prefix.toString
+    if (toString.startsWith(prefixString)) {
+      Some(URLPath.parse(toString.substring(prefixString.length)))
+    } else {
+      None
+    }
   }
 
   def merge(that: URLPath): URLPath = URLPath(this.parts ::: that.parts)

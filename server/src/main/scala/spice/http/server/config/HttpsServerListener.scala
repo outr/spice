@@ -8,7 +8,7 @@ case class HttpsServerListener(host: String = "127.0.0.1",
                                port: Option[Int] = Some(443),
                                keyStore: KeyStore = KeyStore(),
                                enabled: Boolean = false,
-                               basePath: URLPath = path"/",
+                               basePath: URLPath = path"",
                                description: Option[String] = None) extends ServerSocketListener {
   override lazy val urls: List[URL] = if (host == "0.0.0.0") {
     ServerUtil.localIPs().map { ip =>

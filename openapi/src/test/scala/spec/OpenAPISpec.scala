@@ -8,6 +8,8 @@ import spice.http.HttpMethod
 import spice.net._
 import spice.openapi.{OpenAPI, OpenAPIComponents, OpenAPIContent, OpenAPIContentType, OpenAPIInfo, OpenAPIParameter, OpenAPIPath, OpenAPIPathEntry, OpenAPIRequestBody, OpenAPIResponse, OpenAPISchema, OpenAPIServer, OpenAPITag, OpenAPIValue}
 
+import java.nio.file.{Files, Paths}
+
 class OpenAPISpec extends AnyWordSpec with Matchers {
   "OpenAPI Generation" should {
     "create a minimal OpenAPI document manually" in {

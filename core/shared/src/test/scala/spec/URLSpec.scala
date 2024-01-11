@@ -11,14 +11,14 @@ class URLSpec extends AnyWordSpec with Matchers {
         val url = URL.parse("https://www.outr.com")
         url.host should be("www.outr.com")
         url.protocol should be(Protocol.Https)
-        url.path.encoded should be("/")
+        url.path.encoded should be("")
         url.port should be(443)
       }
       "properly parse a URL with GET params" in {
         val url = URL.parse("https://somewhere.com?foo.one=1&foo.two=2")
         url.host should be("somewhere.com")
         url.protocol should be(Protocol.Https)
-        url.path.encoded should be("/")
+        url.path.encoded should be("")
         url.port should be(443)
         url.parameters.value("foo.one") should be(Some("1"))
         url.parameters.value("foo.two") should be(Some("2"))
@@ -65,7 +65,7 @@ class URLSpec extends AnyWordSpec with Matchers {
       }
       "properly parse a URL with just the domain name" in {
         val url = URL.parse("outr.com")
-        url.toString should be("https://outr.com/")
+        url.toString should be("https://outr.com")
       }
       "properly parse a fairly long URL" in {
         val url = URL.parse("https://www.spice.io/testing/1/favicon-32x32.png?arg1=true&v=0.7.0-1586440828356")
@@ -93,7 +93,7 @@ class URLSpec extends AnyWordSpec with Matchers {
       }
       "properly encode a URL with a pipe" in {
         val url = URL.parse("http://spice.io").withParam("testing", "one|two")
-        url.encoded.toString should be("http://spice.io/?testing=one%7Ctwo")
+        url.encoded.toString should be("http://spice.io?testing=one%7Ctwo")
       }
       "properly parse a relative URL" in {
         val url = URL.parse("http://www.outr.com/examples/../images/test.png")
@@ -154,15 +154,15 @@ class URLSpec extends AnyWordSpec with Matchers {
       }
       "properly interpolate a URL" in {
         val url = url"http://www.spice.io"
-        url.encoded.toString should be("http://www.spice.io/")
+        url.encoded.toString should be("http://www.spice.io")
         url.protocol should be(Protocol.Http)
         url.host should be("www.spice.io")
-        url.path.toString should be("/")
+        url.path.toString should be("")
         url.parameters should be(Parameters.empty)
       }
       "properly parse a URL with IPv6" in {
         val url = URL.parse("https://0:0:0:0:0:0:0:0:8080")
-        url.toString should be("https://0:0:0:0:0:0:0:0:8080/")
+        url.toString should be("https://0:0:0:0:0:0:0:0:8080")
       }
       "properly parse a URL with a colon" in {
         val url = URL.parse("https://user1:detail@example.com/more/complex")

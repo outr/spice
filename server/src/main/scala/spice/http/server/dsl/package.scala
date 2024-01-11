@@ -50,7 +50,12 @@ package object dsl {
 
   implicit class StringFilter(val s: String) extends ConnectionFilter {
     override def apply(exchange: HttpExchange)(implicit mdc: MDC): IO[FilterResponse] = IO {
-      PathPart.take(exchange, s) match {
+      val path = if (s.startsWith("/")) {
+        s
+      } else {
+        s"/$s"
+      }
+      PathPart.take(exchange, URLPath.parse(path)) match {
         case Some(c) => FilterResponse.Continue(c)
         case None => FilterResponse.Stop(exchange)
       }

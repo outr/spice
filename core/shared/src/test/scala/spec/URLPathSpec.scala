@@ -58,5 +58,9 @@ class URLPathSpec extends AnyWordSpec with Matchers {
       ))
       path.extractArguments(literal) should be(Map("userId" -> "test"))
     }
+    "validate a complex encoded path" in {
+      val path = path"/styles/v1/mapbox/streets-v12/static/-122.256654%2C37.804077%2C13/500x300"
+      path.toString should be("/styles/v1/mapbox/streets-v12/static/-122.256654%2C37.804077%2C13/500x300")
+    }
   }
 }

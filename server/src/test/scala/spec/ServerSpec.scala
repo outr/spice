@@ -3,7 +3,7 @@ package spec
 import cats.effect.IO
 import cats.effect.testing.scalatest.AsyncIOSpec
 import fabric.io.JsonParser
-import fabric.obj
+import fabric.{Str, obj}
 import fabric.rw._
 import org.scalatest.matchers.should.Matchers
 import org.scalatest.wordspec.AsyncWordSpec
@@ -14,7 +14,7 @@ import spice.http.server.dsl._
 import spice.http.server.handler.HttpHandler
 import spice.http.{HttpExchange, HttpMethod, HttpRequest, HttpStatus, paths}
 import spice.http.server.{HttpServer, MutableHttpServer}
-import spice.http.server.rest.{MultipartRequest, Restful, RestfulResponse}
+import spice.http.server.rest.{FileUpload, MultipartRequest, Restful, RestfulResponse}
 import spice.net._
 
 import java.io.File
@@ -109,8 +109,9 @@ class ServerSpec extends AsyncWordSpec with AsyncIOSpec with Matchers {
         method = HttpMethod.Post,
         url = url"http://localhost/test/file",
         content = Some(FormDataContent
-          .withJson("request", FileInfo("test.png", "Test Image").json)
-          .withFile("image", "test.png", new File("test.png"))
+          .withJson("fileName", Str("test.png"))
+          .withJson("description", Str("Test Image"))
+          .withFile("file", "test.png", new File("test.png"))
         )
       ))).map { exchange =>
         exchange.response.status should be(HttpStatus.OK)
@@ -158,9 +159,7 @@ class ServerSpec extends AsyncWordSpec with AsyncIOSpec with Matchers {
     override def apply(exchange: HttpExchange,
                        request: FileInfo)
                       (implicit mdc: MDC): IO[RestfulResponse[String]] = IO {
-      request.content should not be None
-      val content = request.content
-      val fileEntry = content.getFile("image")
+      val fileEntry = request.file
       assert(fileEntry.file.length() == 33404)
       ok(request.fileName)
     }
@@ -168,9 +167,7 @@ class ServerSpec extends AsyncWordSpec with AsyncIOSpec with Matchers {
     override def error(errors: List[ValidationError], status: HttpStatus): RestfulResponse[String] = RestfulResponse("Failure!", HttpStatus.InternalServerError)
   }
 
-  case class FileInfo(fileName: String, description: String, content: FormDataContent = FormDataContent) extends MultipartRequest {
-    override def withContent(content: FormDataContent): MultipartRequest = copy(content = content)
-  }
+  case class FileInfo(fileName: String, description: String, file: FileUpload)
 
   object FileInfo {
     implicit val rw: RW[FileInfo] = RW.gen
