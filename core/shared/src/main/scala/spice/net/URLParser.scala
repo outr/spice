@@ -33,7 +33,7 @@ object URLParser {
           Left(URLParseFailure(s"Invalid host: ${url.host}", URLParseFailure.InvalidHost))
         } else if (validateTLD) {
           url.tld match {
-            case Some(tld) if !TopLevelDomains.isValid(tld) => Left(URLParseFailure(s"Invalid top-level domain: [$tld]", URLParseFailure.InvalidTopLevelDomain))
+            case Some(tld) if !TopLevelDomains.isValid(tld) => Left(URLParseFailure(s"Invalid top-level domain: [$tld] for supplied URL: [$s]", URLParseFailure.InvalidTopLevelDomain))
             case _ => Right(url)
           }
         } else {
