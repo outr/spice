@@ -117,6 +117,16 @@ object OpenAPIDartGenerator extends OpenAPIGenerator {
                   val arrayType = itemsSchema.ref.ref2Type
                   imports = imports + arrayType.type2File
                   field(s"List<$arrayType>", fieldName, schema.nullable.getOrElse(false))
+                case Some(OpenAPISchema.OneOf(schemas, discriminator, nullable)) =>
+                  val refs = schemas.map(_.asInstanceOf[OpenAPISchema.Ref].ref.ref2Type)
+                  val parents: List[String] = refs.map(r => config.baseForTypeMap.getOrElse(r, throw new RuntimeException(s"No mapping defined for $r"))).distinct
+                  val parentName = parents match {
+                    case parent :: Nil => parent
+                    case _ => throw new RuntimeException(s"Multiple parents found for ${refs.mkString(", ")}: ${parents.mkString(", ")}")
+                  }
+                  imports = imports + parentName.type2File
+                  addParent(parentName)
+                  field(s"List<$parentName>", fieldName, nullable.getOrElse(false))
                 case _ => throw new UnsupportedOperationException(s"Unsupported array schema for items: ${schema.items}")
               }
             case (fieldName, schema: OpenAPISchema.Component) if schema.`type` != "object" =>
