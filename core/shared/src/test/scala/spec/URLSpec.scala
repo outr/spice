@@ -73,7 +73,7 @@ class URLSpec extends AnyWordSpec with Matchers {
       }
       "properly detect an invalid TLD" in {
         val url = URL.get("event.which")
-        url should be(Left(URLParseFailure(s"Invalid top-level domain: [which]", URLParseFailure.InvalidTopLevelDomain)))
+        url should be(Left(URLParseFailure(s"Invalid top-level domain: [which] for supplied URL: [event.which]", URLParseFailure.InvalidTopLevelDomain)))
       }
       "properly unapply from a String" in {
         "http://spice.io" match {
