@@ -19,7 +19,7 @@ trait Service extends HttpHandler {
 
   def apply(exchange: HttpExchange): Option[ServiceCall] = {
     if (exchange.path == path) {
-      calls.find(_.method == exchange.request.method)
+      calls.find(sc => sc.method == exchange.request.method || exchange.request.method == HttpMethod.Get)
     } else {
       None
     }
