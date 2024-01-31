@@ -163,9 +163,25 @@ object OpenAPIDartGenerator extends OpenAPIGenerator {
             case "" => "// No fields defined"
             case s => s
           }
-          val params = schema.properties.toList.map {
-            case (fieldName, _) => fieldName.param
-          }.mkString(", ")
+          val paramsList = schema.properties.toList.map {
+            case (fieldName, schema) =>
+              val nullable = schema match {
+                case s: OpenAPISchema.Component => s.nullable.getOrElse(false)
+                case s: OpenAPISchema.Ref => s.nullable.getOrElse(false)
+                case s: OpenAPISchema.OneOf => s.nullable.getOrElse(false)
+                case _ => throw new RuntimeException(s"Unsupported OpenAPISchema: $schema")
+              }
+              if (nullable) {
+                fieldName.param
+              } else {
+                s"required ${fieldName.param}"
+              }
+          }
+          val params = if (paramsList.nonEmpty) {
+            paramsList.mkString("{", ", ", "}")
+          } else {
+            ""
+          }
           val parent = config.baseForTypeMap.get(typeName)
           val extending = parent match {
             case Some(parentName) =>
