@@ -2,11 +2,11 @@ import sbt.*
 
 object Dependencies {
   object version {
-    val profig: String = "3.4.12"
+    val profig: String = "3.4.13"
     
     val scribe: String = "3.13.0"
 
-    val fabric: String = "1.13.1"
+    val fabric: String = "1.14.0"
     
     val reactify: String = "4.1.0"
     
@@ -20,13 +20,13 @@ object Dependencies {
 
     val httpMime: String = "4.5.14"
     
-    val undertow: String = "2.3.10.Final"
+    val undertow: String = "2.3.11.Final"
     
     val moduload: String = "1.1.7"
 
     val scalaJSDOM: String = "2.8.0"
 
-    val scalaTest: String = "3.2.17"
+    val scalaTest: String = "3.2.18"
     
     val catsEffectTesting: String = "1.5.0"
   }
