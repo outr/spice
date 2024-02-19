@@ -11,6 +11,7 @@ import scala.collection.mutable
 
 object OpenAPIDartGenerator extends OpenAPIGenerator {
   private lazy val ModelTemplate: String = loadString("generator/dart/model.template")
+  private lazy val ModelWithParamsTemplate: String = loadString("generator/dart/model_with_params.template")
   private lazy val ParentTemplate: String = loadString("generator/dart/parent.template")
   private lazy val ServiceTemplate: String = loadString("generator/dart/service.template")
 
@@ -21,7 +22,7 @@ object OpenAPIDartGenerator extends OpenAPIGenerator {
       val suffix = "\\p{Lu}".r.replaceAllIn(s.substring(1), m => {
         s"_${m.group(0).toLowerCase}"
       })
-      s"$pre$suffix"
+      s"$pre$suffix".replace(" ", "")
     }
     def dartType: String = s match {
       case "string" => "String"
@@ -69,38 +70,42 @@ object OpenAPIDartGenerator extends OpenAPIGenerator {
 
   def generatePaths(api: OpenAPI, config: OpenAPIGeneratorConfig): List[SourceFile] = {
     var parentFiles = Map.empty[String, SourceFile]
-    def addParent(typeName: String): Unit = if (!parentFiles.contains(typeName)) {
-      val children = config.baseNames.find(_._1 == typeName).get._2.toList.sorted
-      val fileName = s"${typeName.type2File}.dart"
-      val imports = children.map { c =>
-        s"import '${c.type2File}.dart';"
-      }.mkString("\n")
-      val fromJson = children.map { c =>
-        s"""if (t == '$c') {
-           |      return $c.fromJson(json);
-           |    }""".stripMargin
-      }.mkString("    ", " else ",
-        """ else {
-          |      throw Exception("Unsupported type: $t");
-          |    }""".stripMargin)
-      val source = ParentTemplate
-        .replace("%%CLASSNAME%%", typeName)
-        .replace("%%IMPORTS%%", imports)
-        .replace("%%FROMJSON%%", fromJson)
-      parentFiles += typeName -> SourceFile(
-        language = "Dart",
-        name = typeName,
-        fileName = fileName,
-        path = "lib/model",
-        source = source
-      )
+    def addParent(tn: String): Unit = {
+      val typeName = tn.replace(" ", "")
+      if (!parentFiles.contains(typeName)) {
+        val children = config.baseNames.find(_._1 == typeName).get._2.toList.sorted
+        val fileName = s"${typeName.type2File}.dart"
+        val imports = children.map { c =>
+          s"import '${c.type2File}.dart';"
+        }.mkString("\n")
+        val fromJson = children.map { c =>
+          s"""if (t == '$c') {
+             |      return ${c.replace(" ", "")}.fromJson(json);
+             |    }""".stripMargin
+        }.mkString("    ", " else ",
+          """ else {
+            |      throw Exception("Unsupported type: $t");
+            |    }""".stripMargin)
+        val source = ParentTemplate
+          .replace("%%CLASSNAME%%", typeName)
+          .replace("%%IMPORTS%%", imports)
+          .replace("%%FROMJSON%%", fromJson)
+        parentFiles += typeName -> SourceFile(
+          language = "Dart",
+          name = typeName,
+          fileName = fileName,
+          path = "lib/model",
+          source = source
+        )
+      }
     }
     val sourceFiles = api
       .components
       .toList
       .flatMap(_.schemas.toList)
       .map {
-        case (typeName, schema: OpenAPISchema.Component) =>
+        case (tn, schema: OpenAPISchema.Component) =>
+          val typeName = tn.replace(" ", "")
           var imports = Set.empty[String]
           val fileName = s"${typeName.type2File}.dart"
           val fields = schema.properties.toList.map {
@@ -182,7 +187,7 @@ object OpenAPIDartGenerator extends OpenAPIGenerator {
           } else {
             ""
           }
-          val parent = config.baseForTypeMap.get(typeName)
+          val parent = config.baseForTypeMap.get(tn)
           val extending = parent match {
             case Some(parentName) =>
               imports = imports + parentName.type2File
@@ -197,12 +202,12 @@ object OpenAPIDartGenerator extends OpenAPIGenerator {
             case Some(_) =>
               s"""@override Map<String, dynamic> toJson() {
                  |    Map<String, dynamic> map = _$$${typeName}ToJson(this);
-                 |    map['type'] = '$typeName';
+                 |    map['type'] = '$tn';
                  |    return map;
                  |  }""".stripMargin
             case None => s"Map<String, dynamic> toJson() => _$$${typeName}ToJson(this);"
           }
-          val source = ModelTemplate
+          val source = (if (params.isEmpty) ModelTemplate else ModelWithParamsTemplate)
             .replace("%%IMPORTS%%", importsTemplate)
             .replace("%%FILENAME%%", typeName.type2File)
             .replace("%%CLASSNAME%%", typeName)
