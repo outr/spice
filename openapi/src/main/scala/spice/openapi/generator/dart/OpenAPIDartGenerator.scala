@@ -242,6 +242,7 @@ object OpenAPIDartGenerator extends OpenAPIGenerator {
           .content
         val responseType = successResponse
           .refType
+        imports = imports + responseType.type2File
         if (requestContentType == ContentType.`multipart/form-data`) {
           apiContentType.schema match {
             case c: OpenAPISchema.Component =>
@@ -261,7 +262,7 @@ object OpenAPIDartGenerator extends OpenAPIGenerator {
                   if (schema.format.contains("binary")) {
                     s"${ws}request.files.add(http.MultipartFile.fromBytes('$key', $key.bytes!));"
                   } else {
-                    s"${ws}request.fields['$key'] = $key;"
+                    s"${ws}request.fields['$key'] = json.encode($key);"
                   }
                 case (key, ref: OpenAPISchema.Ref) =>
                   imports = imports + ref.ref.ref2Type.type2File
@@ -283,7 +284,6 @@ object OpenAPIDartGenerator extends OpenAPIGenerator {
         } else {
           val requestType = requestContent.refType
           imports = imports + requestType.type2File
-          imports = imports + responseType.type2File
           s"""  /// ${entry.description}
              |  static Future<$responseType> $name($requestType request) async {
              |    return await restful(
