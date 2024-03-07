@@ -196,7 +196,11 @@ object Restful {
   def jsonFromContent(content: Content): IO[Json] = content match {
     case fdc: FormDataContent => IO {
       val jsonValues = fdc.strings.map {
-        case (key, entry) => key -> JsonParser(entry.value)
+        case (key, entry) => try {
+          key -> JsonParser(entry.value)
+        } catch {
+          case t: Throwable => throw new RuntimeException(s"Failed to convert key: $key, value: ${entry.value} to JSON (${entry.headers.map.map(t => s"${t._1} = ${t._2.mkString(",")}")})!", t)
+        }
       }
       val fileValues = fdc.files.map {
         case (key, entry) => key -> obj().withReference(FileUpload(

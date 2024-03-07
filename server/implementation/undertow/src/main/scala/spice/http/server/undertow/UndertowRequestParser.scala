@@ -9,6 +9,8 @@ import spice.http.content.{Content, FormDataContent, FormDataEntry, StreamConten
 import spice.http.content.FormDataEntry.{FileEntry, StringEntry}
 import spice.http.{Headers, HttpMethod, HttpRequest}
 import spice.net.{ContentType, IP, URL}
+
+import java.io.File
 import scala.jdk.CollectionConverters.IterableHasAsScala
 
 object UndertowRequestParser {
@@ -35,7 +37,9 @@ object UndertowRequestParser {
               val headers = parseHeaders(entry.getHeaders)
               if (entry.isFileItem) {
                 val path = entry.getFileItem.getFile
-                FileEntry(entry.getFileName, path.toFile, headers)
+                val file = File.createTempFile("spice", entry.getFileName)
+                path.toFile.renameTo(file)
+                FileEntry(entry.getFileName, file, headers)
               } else {
                 StringEntry(entry.getValue, headers)
               }

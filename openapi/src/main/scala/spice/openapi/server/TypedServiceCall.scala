@@ -4,9 +4,11 @@ import cats.effect.IO
 import fabric.rw._
 import scribe.mdc.MDC
 import spice.http.HttpMethod
+import spice.net.ContentType
 
 case class TypedServiceCall[Req, Res](call: ServiceRequest[Req] => IO[ServiceResponse[Res]],
                                       method: HttpMethod,
+                                      responseTypes: List[ResponseType] = List(ResponseType(ContentType.`application/json`)),
                                       summary: String,
                                       description: String,
                                       successDescription: String,

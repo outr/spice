@@ -229,7 +229,7 @@ object OpenAPIDartGenerator extends OpenAPIGenerator {
 
   def generateService(api: OpenAPI, config: OpenAPIGeneratorConfig): SourceFile = {
     var imports = Set.empty[String]
-    val methods = api.paths.toList.sortBy(_._1).map {
+    val methods: List[String] = api.paths.toList.sortBy(_._1).map {
       case (pathString, path) =>
         val name = "[^a-zA-Z0-9](\\S)".r.replaceAllIn(pathString.substring(1), m => {
           m.group(1).toUpperCase
@@ -240,58 +240,73 @@ object OpenAPIDartGenerator extends OpenAPIGenerator {
         val successResponse = entry
           .responses("200")
           .content
-        val responseType = successResponse
-          .refType
-        imports = imports + responseType.type2File
-        if (requestContentType == ContentType.`multipart/form-data`) {
-          apiContentType.schema match {
-            case c: OpenAPISchema.Component =>
-              val params = c.properties.toList.map {
-                case (key, schema) =>
-                  val paramType = schema match {
-                    case child: OpenAPISchema.Component if child.format.contains("binary") => "PlatformFile"
-                    case child: OpenAPISchema.Component => s"${child.`type`.dartType}"
-                    case ref: OpenAPISchema.Ref => ref.ref.ref2Type
-                    case _ => throw new UnsupportedOperationException(s"Unsupported schema for $key: $schema")
-                  }
-                  s"$paramType $key"
-              }.mkString(", ")
-              val ws = "        "
-              val conversions = c.properties.toList.map {
-                case (key, schema: OpenAPISchema.Component) =>
-                  if (schema.format.contains("binary")) {
-                    s"${ws}request.files.add(http.MultipartFile.fromBytes('$key', $key.bytes!));"
-                  } else {
-                    s"${ws}request.fields['$key'] = json.encode($key);"
-                  }
-                case (key, ref: OpenAPISchema.Ref) =>
-                  imports = imports + ref.ref.ref2Type.type2File
-                  s"${ws}request.fields['$key'] = json.encode($key.toJson());"
-                case (key, schema) => throw new UnsupportedOperationException(s"Unable to support $key: $schema")
-              }.mkString("\n")
+        val (_, apiPath) = successResponse.content.head
+        apiPath.schema match {
+          case c: OpenAPISchema.Component => c.format match {
+            case Some("binary") =>
+              val requestType = requestContent.refType
+              imports = imports + requestType.type2File
               s"""  /// ${entry.description}
-                 |  static Future<$responseType> $name($params) async {
-                 |    return await multiPart(
+                 |  static Future<void> $name($requestType request, String fileName) async {
+                 |    await restDownload(fileName, "$pathString", request.toJson());
+                 |  }""".stripMargin
+            case _ => throw new RuntimeException(s"Unsupported schema: $c")
+          }
+          case _: OpenAPISchema.Ref =>
+            val responseType = successResponse
+              .refType
+            imports = imports + responseType.type2File
+            if (requestContentType == ContentType.`multipart/form-data`) {
+              apiContentType.schema match {
+                case c: OpenAPISchema.Component =>
+                  val params = c.properties.toList.map {
+                    case (key, schema) =>
+                      val paramType = schema match {
+                        case child: OpenAPISchema.Component if child.format.contains("binary") => "PlatformFile"
+                        case child: OpenAPISchema.Component => s"${child.`type`.dartType}"
+                        case ref: OpenAPISchema.Ref => ref.ref.ref2Type
+                        case _ => throw new UnsupportedOperationException(s"Unsupported schema for $key: $schema")
+                      }
+                      s"$paramType $key"
+                  }.mkString(", ")
+                  val ws = "        "
+                  val conversions = c.properties.toList.map {
+                    case (key, schema: OpenAPISchema.Component) =>
+                      if (schema.format.contains("binary")) {
+                        s"${ws}request.files.add(http.MultipartFile.fromBytes('$key', $key.bytes!, filename: $key.name));"
+                      } else {
+                        s"${ws}request.fields['$key'] = json.encode($key);"
+                      }
+                    case (key, ref: OpenAPISchema.Ref) =>
+                      imports = imports + ref.ref.ref2Type.type2File
+                      s"${ws}request.fields['$key'] = json.encode($key.toJson());"
+                    case (key, schema) => throw new UnsupportedOperationException(s"Unable to support $key: $schema")
+                  }.mkString("\n")
+                  s"""  /// ${entry.description}
+                     |  static Future<$responseType> $name($params) async {
+                     |    return await multiPart(
+                     |      "$pathString",
+                     |      (request) {
+                     |$conversions
+                     |      },
+                     |      $responseType.fromJson
+                     |    );
+                     |  }""".stripMargin
+                case _ => throw new UnsupportedOperationException(s"Unsupported schema: ${apiContentType.schema}")
+              }
+            } else {
+              val requestType = requestContent.refType
+              imports = imports + requestType.type2File
+              s"""  /// ${entry.description}
+                 |  static Future<$responseType> $name($requestType request) async {
+                 |    return await restful(
                  |      "$pathString",
-                 |      (request) {
-                 |$conversions
-                 |      },
+                 |      request.toJson(),
                  |      $responseType.fromJson
                  |    );
                  |  }""".stripMargin
-            case _ => throw new UnsupportedOperationException(s"Unsupported schema: ${apiContentType.schema}")
-          }
-        } else {
-          val requestType = requestContent.refType
-          imports = imports + requestType.type2File
-          s"""  /// ${entry.description}
-             |  static Future<$responseType> $name($requestType request) async {
-             |    return await restful(
-             |      "$pathString",
-             |      request.toJson(),
-             |      $responseType.fromJson
-             |    );
-             |  }""".stripMargin
+            }
+          case schema => throw new RuntimeException(s"Unsupported schema: $schema")
         }
     }
     val importsTemplate = imports.toList.sorted.map(s => s"import 'model/$s.dart';").mkString("\n")

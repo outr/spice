@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:typed_data';
+import 'package:file_saver/file_saver.dart';
 import 'package:http/http.dart' as http;
 import 'package:file_picker/file_picker.dart';
 
@@ -45,6 +46,24 @@ class Service {
     final Uint8List responseData = await response.stream.toBytes();
     final String jsonString = String.fromCharCodes(responseData);
     return convert(jsonDecode(jsonString));
+  }
+
+  static Future<void> restDownload(
+    String fileName,
+    String path,
+    Map<String, dynamic> request,
+  ) async {
+    final String body = jsonEncode(request);
+    final http.Response response = await http.post(
+        Service.host(path),
+        headers: {
+          "Content-Type": "application/json; charset=UTF-8",
+          "Accept": "application/json"
+        },
+        body: body
+    );
+    Uint8List bytes = response.bodyBytes;
+    await FileSaver.instance.saveFile(name: fileName, bytes: bytes);
   }
 
 %%SERVICES%%

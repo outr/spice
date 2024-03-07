@@ -6,7 +6,7 @@ import scribe.mdc.MDC
 import spice.http.content.Content
 import spice.http.server.handler.HttpHandler
 import spice.http.{HttpExchange, HttpMethod}
-import spice.net.URLPath
+import spice.net.{ContentType, URLPath}
 
 trait Service extends HttpHandler {
   val path: URLPath
@@ -26,6 +26,7 @@ trait Service extends HttpHandler {
   }
 
   def serviceCall[Request, Response](method: HttpMethod,
+                                     responseTypes: List[ResponseType] = List(ResponseType(ContentType.`application/json`)),
                                      summary: String,
                                      description: String,
                                      successDescription: String,
@@ -38,6 +39,7 @@ trait Service extends HttpHandler {
     TypedServiceCall[Request, Response](
       call = call,
       method = method,
+      responseTypes = responseTypes,
       summary = summary,
       description = description,
       successDescription = successDescription,
