@@ -79,6 +79,6 @@ class HTMLStream(val streamable: StreamableHTML) {
       output.append(post)
     }
     output.append('\n')
-    output.toString()
+    output.toString
   }
 }

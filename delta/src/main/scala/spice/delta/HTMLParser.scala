@@ -147,7 +147,7 @@ class HTMLParser(input: InputStream) {
     position += 1
   }
 
-  private def parseTag(): Unit = b.toString() match {
+  private def parseTag(): Unit = b.toString match {
     case s if s.startsWith("<!--") || s.endsWith("-->") => // Ignore
     case CloseTagRegex(tagName) => {
       val closeTag = Tag.Close(tagName, tagStart, tagEnd)
@@ -175,7 +175,7 @@ class HTMLParser(input: InputStream) {
       case (c, index) => {
         if (c == '"') {
           if (quoted) {
-            map += key -> sb.toString()
+            map += key -> sb.toString
             quoted = false
             sb.clear()
           } else {
@@ -183,7 +183,7 @@ class HTMLParser(input: InputStream) {
           }
         } else if ((c == '=' || c == ' ') && !quoted) {
           if (sb.nonEmpty) {
-            key = sb.toString()
+            key = sb.toString
             sb.clear()
           }
         } else {

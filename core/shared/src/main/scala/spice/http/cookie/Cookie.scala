@@ -39,7 +39,7 @@ object Cookie {
         case SameSite.Lax => b.append("; SameSite=lax")
         case SameSite.Strict => b.append("; SameSite=strict")
       }
-      b.toString()
+      b.toString
     }
 
     override def hashCode(): Int = name.hashCode

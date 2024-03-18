@@ -86,7 +86,7 @@ case class URL(protocol: Protocol = Protocol.Http,
     if (!protocol.defaultPort.contains(port) && port != -1) {
       b.append(s":$port")       // Not using the default port for the protocol
     }
-    b.toString()
+    b.toString
   }
 
   lazy val encoded: URLParts = new URLParts(encoded = true)
@@ -127,7 +127,7 @@ case class URL(protocol: Protocol = Protocol.Http,
         b.append('#')
         b.append(f)
       }
-      b.toString()
+      b.toString
     }
     lazy val asString: String = s"$base$pathAndArgs"
 

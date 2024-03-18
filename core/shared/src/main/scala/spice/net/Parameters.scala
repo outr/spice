@@ -74,7 +74,7 @@ case class Parameters(entries: List[(String, Param)]) {
           }
       }.mkString("&")
       b.append(params)
-      b.toString()
+      b.toString
     } else {
       ""
     }
@@ -97,7 +97,7 @@ case class Parameters(entries: List[(String, Param)]) {
           }
       }.mkString("&")
       b.append(params)
-      b.toString()
+      b.toString
     } else {
       ""
     }

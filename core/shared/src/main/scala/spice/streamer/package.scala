@@ -110,6 +110,6 @@ package object streamer {
 
     override def complete(): Unit = {}
 
-    override def toString: String = sb.toString()
+    override def toString: String = sb.toString
   }
 }

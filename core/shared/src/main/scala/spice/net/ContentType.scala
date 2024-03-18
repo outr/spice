@@ -22,7 +22,7 @@ case class ContentType(`type`: String,
     extras.foreach {
       case (key, value) => b.append(s"; $key=$value")
     }
-    b.toString()
+    b.toString
   }
   lazy val extension: Option[String] = ContentType.mimeType2Extensions.getOrElse(mimeType, Nil).headOption
 
