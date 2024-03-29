@@ -12,7 +12,7 @@ object Dependencies {
     
     val cats: String = "3.5.3"
     
-    val fs2: String = "3.9.4"
+    val fs2: String = "3.10.2"
     
     val literally: String = "1.1.0"
     
