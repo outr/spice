@@ -6,7 +6,7 @@ object Dependencies {
     
     val scribe: String = "3.13.4"
 
-    val fabric: String = "1.14.1"
+    val fabric: String = "1.14.3"
     
     val reactify: String = "4.1.0"
     
