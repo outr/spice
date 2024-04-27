@@ -13,6 +13,7 @@ abstract class RestService extends Service {
   protected def responseTypes: List[ResponseType] = List(ResponseType(ContentType.`application/json`))
 
   implicit def requestRW: RW[Request]
+
   implicit def responseRW: RW[Response]
 
   override val calls: List[ServiceCall] = List(
@@ -45,17 +46,10 @@ object RestService {
                       serviceSummary: String,
                       types: List[ResponseType] = List(ResponseType(ContentType.`application/json`)))
                      (f: Req => IO[Res])
-                     (implicit reqRW: RW[Req], resRW: RW[Res]): RestService = new RestService {
-    override type Request = Req
-    override type Response = Res
-    override protected def responseTypes: List[ResponseType] = types
-
-    override implicit def requestRW: RW[Request] = reqRW
-    override implicit def responseRW: RW[Response] = resRW
-
-    override val path: URLPath = urlPath
-    override protected def summary: String = serviceSummary
-
-    override protected def apply(request: Request): IO[Response] = f(request)
-  }
+                     (implicit reqRW: RW[Req], resRW: RW[Res]): TypedRestService[Req, Res] = TypedRestService[Req, Res](
+    path = urlPath,
+    summary = serviceSummary,
+    responseTypes = types,
+    f = f
+  )
 }
