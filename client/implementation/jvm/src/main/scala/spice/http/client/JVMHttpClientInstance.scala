@@ -52,8 +52,9 @@ class JVMHttpClientInstance(client: HttpClient) extends HttpClientInstance {
           val builder = MultipartEntityBuilder.create()
           content.entries.foreach {
             case (key, entry: FileEntry) =>
-              val contentType = org.apache.http.entity.ContentType.parse(Headers.`Content-Type`.value(entry.headers).get.outputString)
-              builder.addBinaryBody(key, entry.file, contentType, entry.fileName)
+              val contentType = Headers.`Content-Type`.value(entry.headers).getOrElse(ContentType.`application/octet-stream`)
+              val apacheContentType = org.apache.http.entity.ContentType.parse(contentType.outputString)
+              builder.addBinaryBody(key, entry.file, apacheContentType, entry.fileName)
             case (key, entry: StringEntry) => builder.addTextBody(key, entry.value)
           }
           val httpEntity = builder.build()
