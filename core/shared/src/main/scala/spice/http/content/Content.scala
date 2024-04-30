@@ -1,6 +1,7 @@
 package spice.http.content
 
 import cats.effect.IO
+import fabric.define.DefType
 import fabric.rw.RW
 import spice.net.ContentType
 
@@ -16,9 +17,10 @@ trait Content {
 }
 
 object Content extends SharedContentHelpers with ContentHelpers {
-  implicit val rw: RW[Content] = RW.string[Content](
-    asString = _ => throw new UnsupportedOperationException("Content cannot be converted"),
-    fromString = _ => throw new UnsupportedOperationException("Content cannot be converted")
+  implicit val rw: RW[Content] = RW.from[Content](
+    r = _ => throw new UnsupportedOperationException("Content cannot be converted"),
+    w = _ => throw new UnsupportedOperationException("Content cannot be converted"),
+    d = DefType.Obj(Some("spice.http.content.Content"))
   )
 
   case object none extends Content {
