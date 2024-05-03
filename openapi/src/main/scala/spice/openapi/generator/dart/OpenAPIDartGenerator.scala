@@ -250,7 +250,7 @@ object OpenAPIDartGenerator extends OpenAPIGenerator {
                  |  static Future<void> $name($requestType request, String fileName) async {
                  |    await restDownload(fileName, "$pathString", request.toJson());
                  |  }""".stripMargin
-            case _ => throw new RuntimeException(s"Unsupported schema: $c")
+            case format => throw new RuntimeException(s"Unsupported schema format: $format (schema: $c, path: $pathString)")
           }
           case _: OpenAPISchema.Ref =>
             val responseType = successResponse
