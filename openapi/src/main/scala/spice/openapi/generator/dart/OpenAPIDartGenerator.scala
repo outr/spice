@@ -29,6 +29,7 @@ object OpenAPIDartGenerator extends OpenAPIGenerator {
       case "boolean" => "bool"
       case "integer" => "int"
       case "number" => "double"
+      case "json" => "Map<String, dynamic>"
     }
     def param: String = {
       val n = renameMap.getOrElse(s, s)
