@@ -14,7 +14,7 @@ object Dependencies {
     
     val fs2: String = "3.10.2"
     
-    val literally: String = "1.1.0"
+    val literally: String = "1.2.0"
     
     val okHttp: String = "4.12.0"
 
