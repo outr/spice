@@ -4,7 +4,7 @@ ThisBuild / version := "0.5.8"
 
 val scala213: String = "2.13.14"
 
-val scala3: String = "3.4.2"
+val scala3: String = "3.3.3"
 
 ThisBuild / scalaVersion := scala213
 ThisBuild / scalacOptions ++= Seq("-deprecation")
