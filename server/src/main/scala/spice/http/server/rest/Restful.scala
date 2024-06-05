@@ -212,14 +212,16 @@ object Restful {
       Obj(jsonValues ++ fileValues)
     }
     case _ =>
-      content.asString.map { contentString =>
-        val firstChar = contentString.charAt(0)
-        val json = if (Set('"', '{', '[').contains(firstChar)) {
-          JsonParser(contentString)
-        } else {
-          Str(contentString)
-        }
-        json
+      content.asString.map {
+        case "" => obj()
+        case contentString =>
+          val firstChar = contentString.charAt(0)
+          val json = if (Set('"', '{', '[').contains(firstChar)) {
+            JsonParser(contentString)
+          } else {
+            Str(contentString)
+          }
+          json
       }
   }
 

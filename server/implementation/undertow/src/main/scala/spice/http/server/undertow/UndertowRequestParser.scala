@@ -49,11 +49,15 @@ object UndertowRequestParser {
           }
           Some(FormDataContent(data.toMap))
         case ct =>
-          val stream = fs2.io.readInputStream[IO](
-            fis = IO(new ChannelInputStream(exchange.getRequestChannel)),
-            chunkSize = 1024
-          )
-          Some(StreamContent(stream, ct))
+          Option(exchange.getRequestChannel) match {
+            case Some(channel) =>
+              val stream = fs2.io.readInputStream[IO](
+                fis = IO(new ChannelInputStream(channel)),
+                chunkSize = 1024
+              )
+              Some(StreamContent(stream, ct))
+            case None => throw new NullPointerException(s"Channel is null for request channel. Probably already consumed.")
+          }
       }
     } else {
       None
