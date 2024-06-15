@@ -150,7 +150,27 @@ object OpenAPIDartGenerator extends OpenAPIGenerator {
               field(parentName, fieldName, nullable.getOrElse(false))
             case (fieldName, schema: OpenAPISchema.Component) if schema.additionalProperties.nonEmpty =>
               val (valueType, nullable) = schema.additionalProperties.get match {
-                case valueSchema: OpenAPISchema.Component => (valueSchema.`type`.dartType, valueSchema.nullable)
+                case valueSchema: OpenAPISchema.Component =>
+                  val dartType = if (valueSchema.`type` == "array") {
+                    valueSchema.items match {
+                      case Some(itemSchema) => itemSchema match {
+                        case c: OpenAPISchema.Component => c.`type`.dartType
+                        case r: OpenAPISchema.Ref =>
+                          val refType = r.ref.ref2Type
+                          imports = imports + refType.type2File
+                          s"List<$refType>"
+                        case s => throw new UnsupportedOperationException(s"Unsupported item schema: $s")
+                      }
+                      case None => "List<dynamic>"
+                    }
+                  } else {
+                    valueSchema.`type`.dartType
+                  }
+                  dartType -> valueSchema.nullable
+                case OpenAPISchema.Ref(ref, nullable) =>
+                  val refType = ref.ref2Type
+                  imports = imports + refType.type2File
+                  refType -> nullable
                 case OpenAPISchema.OneOf(schemas, discriminator, nullable) =>
                   val refs = schemas.map(_.asInstanceOf[OpenAPISchema.Ref].ref.ref2Type)
                   val parents: List[String] = refs.map(r => config.baseForTypeMap.getOrElse(r, throw new RuntimeException(s"No mapping defined for $r"))).distinct
