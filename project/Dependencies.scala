@@ -26,7 +26,7 @@ object Dependencies {
 
     val scalaJSDOM: String = "2.8.0"
 
-    val scalaTest: String = "3.2.18"
+    val scalaTest: String = "3.2.19"
     
     val catsEffectTesting: String = "1.5.0"
   }
