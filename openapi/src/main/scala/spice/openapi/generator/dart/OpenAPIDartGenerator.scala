@@ -30,6 +30,7 @@ object OpenAPIDartGenerator extends OpenAPIGenerator {
       case "integer" => "int"
       case "number" => "double"
       case "json" => "Map<String, dynamic>"
+      case _ => throw new RuntimeException(s"Unsupported dart type: [$s]")
     }
     def param: String = {
       val n = renameMap.getOrElse(s, s)
@@ -116,9 +117,12 @@ object OpenAPIDartGenerator extends OpenAPIGenerator {
               field(modelType, fieldName, nullable.getOrElse(false))
             case (fieldName, schema: OpenAPISchema.Component) if schema.`type` == "array" =>
               schema.items match {
-                case Some(itemsSchema: OpenAPISchema.Component) =>
+                case Some(itemsSchema: OpenAPISchema.Component) => try {
                   val arrayType = itemsSchema.`type`.dartType
                   field(s"List<$arrayType>", fieldName, schema.nullable.getOrElse(false))
+                } catch {
+                  case t: Throwable => throw new RuntimeException(s"Failure on $fieldName - $itemsSchema", t)
+                }
                 case Some(itemsSchema: OpenAPISchema.Ref) =>
                   val arrayType = itemsSchema.ref.ref2Type
                   imports = imports + arrayType.type2File
