@@ -10,6 +10,9 @@ import 'package:file_picker/file_picker.dart';
 class Service {
   static Uri base = Uri.base;
 
+  // Should be updated before a download call
+  static String downloadFileName = 'download';
+
   static Uri host(String path) => base.replace(path: path);
 
   static Future<Response> restful<Response>(

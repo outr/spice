@@ -15,6 +15,10 @@ object OpenAPIDartGenerator extends OpenAPIGenerator {
   private lazy val ParentTemplate: String = loadString("generator/dart/parent.template")
   private lazy val ServiceTemplate: String = loadString("generator/dart/service.template")
 
+  override protected def fileExtension: String = ".dart"
+
+  override protected def generatedComment: String = "/// GENERATED CODE: Do not edit!"
+
   private implicit class StringExtras(s: String) {
     def ref2Type: String = s.substring(s.lastIndexOf('/') + 1)
     def type2File: String = {
@@ -39,14 +43,19 @@ object OpenAPIDartGenerator extends OpenAPIGenerator {
   }
 
   private implicit class OpenAPIContentExtras(content: OpenAPIContent) {
-    def refType: String = content
+    def ref: OpenAPISchema.Ref = content
       .content
       .head
       ._2
       .schema
       .asInstanceOf[OpenAPISchema.Ref]
-      .ref
-      .ref2Type
+
+    def refType: String = ref.ref.ref2Type
+
+    def component(api: OpenAPI): OpenAPISchema.Component = {
+      val componentName = ref.ref.substring(ref.ref.lastIndexOf('/') + 1)
+      api.components.get.schemas(componentName).asInstanceOf[OpenAPISchema.Component]
+    }
   }
 
   private lazy val renameMap = Map(
@@ -162,10 +171,13 @@ object OpenAPIDartGenerator extends OpenAPIGenerator {
                         case r: OpenAPISchema.Ref =>
                           val refType = r.ref.ref2Type
                           imports = imports + refType.type2File
-                          s"List<$refType>"
+                          val nullable = valueSchema.nullable.getOrElse(false)
+                          s"List<$refType>${if (nullable) "?" else ""}"
                         case s => throw new UnsupportedOperationException(s"Unsupported item schema: $s")
                       }
-                      case None => "List<dynamic>"
+                      case None =>
+                        val nullable = valueSchema.nullable.getOrElse(false)
+                        s"List<dynamic>${if (nullable) "?" else ""}"
                     }
                   } else {
                     valueSchema.`type`.dartType
@@ -278,8 +290,9 @@ object OpenAPIDartGenerator extends OpenAPIGenerator {
             case format => throw new RuntimeException(s"Unsupported schema format: $format (schema: $c, path: $pathString)")
           }
           case _: OpenAPISchema.Ref =>
-            val responseType = successResponse
-              .refType
+            val responseType = successResponse.refType
+            val component = successResponse.component(api)
+            val binary = component.format.contains("binary")
             imports = imports + responseType.type2File
             if (requestContentType == ContentType.`multipart/form-data`) {
               apiContentType.schema match {
@@ -319,6 +332,17 @@ object OpenAPIDartGenerator extends OpenAPIGenerator {
                      |  }""".stripMargin
                 case _ => throw new UnsupportedOperationException(s"Unsupported schema: ${apiContentType.schema}")
               }
+            } else if (binary) {
+              val requestType = requestContent.refType
+              imports = imports + requestType.type2File
+              s"""  /// ${entry.description}
+                 |  static Future<void> $name($requestType request) async {
+                 |    return await restDownload(
+                 |      downloadFileName,
+                 |      "$pathString",
+                 |      request.toJson()
+                 |    );
+                 |  }""".stripMargin
             } else {
               val requestType = requestContent.refType
               imports = imports + requestType.type2File
