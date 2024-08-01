@@ -36,10 +36,8 @@ object OpenAPIDartGenerator extends OpenAPIGenerator {
       case "json" => "Map<String, dynamic>"
       case _ => throw new RuntimeException(s"Unsupported dart type: [$s]")
     }
-    def param: String = {
-      val n = renameMap.getOrElse(s, s)
-      s"this.$n"
-    }
+    def param: String = s"this.$prop"
+    def prop: String = renameMap.getOrElse(s, s)
   }
 
   private implicit class OpenAPIContentExtras(content: OpenAPIContent) {
@@ -85,8 +83,38 @@ object OpenAPIDartGenerator extends OpenAPIGenerator {
       val typeName = tn.replace(" ", "")
       if (!parentFiles.contains(typeName)) {
         val children = config.baseNames.find(_._1 == typeName).get._2.toList.sorted
+        var imports = children.toSet
+        val maps = children.map { child =>
+          val component = api.components.get.schemas(child).asInstanceOf[OpenAPISchema.Component]
+          component.properties.map {
+            case (key, schema) =>
+              val `type` = schema match {
+                case c: OpenAPISchema.Component if c.`type` == "array" => c.`type`    // TODO: Support
+                case c: OpenAPISchema.Component if c.nullable.contains(true) => s"${c.`type`.dartType}?"
+                case c: OpenAPISchema.Component => c.`type`.dartType
+                case r: OpenAPISchema.Ref =>
+                  val c = r.ref.substring(r.ref.lastIndexOf('/') + 1)
+                  imports += c
+                  if (r.nullable.contains(true)) {
+                    s"$c?"
+                  } else {
+                    c
+                  }
+              }
+              val k = key match {
+                case "_id" => "id"
+                case _ => key
+              }
+              k -> `type`
+          }
+        }
+        val commonKeys = maps.map(_.keySet).reduce(_ intersect _)
+        val baseParams = commonKeys.map(key => key -> maps.head(key)).toMap
+        val fields = baseParams.toList.map {
+          case (key, value) => s"$value get $key;";
+        }.mkString("\n  ")
         val fileName = s"${typeName.type2File}.dart"
-        val imports = children.map { c =>
+        val importString = imports.map { c =>
           s"import '${c.type2File}.dart';"
         }.mkString("\n")
         val fromJson = children.map { c =>
@@ -99,7 +127,8 @@ object OpenAPIDartGenerator extends OpenAPIGenerator {
             |    }""".stripMargin)
         val source = ParentTemplate
           .replace("%%CLASSNAME%%", typeName)
-          .replace("%%IMPORTS%%", imports)
+          .replace("%%FIELDS%%", fields)
+          .replace("%%IMPORTS%%", importString)
           .replace("%%FROMJSON%%", fromJson)
         parentFiles += typeName -> SourceFile(
           language = "Dart",
@@ -224,12 +253,13 @@ object OpenAPIDartGenerator extends OpenAPIGenerator {
           } else {
             ""
           }
+          val props = schema.properties.toList.map(_._1.prop).mkString(", ")
           val parent = config.baseForTypeMap.get(tn)
           val extending = parent match {
             case Some(parentName) =>
               imports = imports + parentName.type2File
-              s"extends $parentName "
-            case None => ""
+              s"extends $parentName with EquatableMixin "
+            case None => "extends Equatable "
           }
           val importsTemplate = imports.toList.sorted.map(s => s"import '$s.dart';").mkString("\n") match {
             case "" => "// No imports necessary"
@@ -251,6 +281,7 @@ object OpenAPIDartGenerator extends OpenAPIGenerator {
             .replace("%%EXTENDS%%", extending)
             .replace("%%FIELDS%%", fields)
             .replace("%%PARAMS%%", params)
+            .replace("%%PROPS%%", props)
             .replace("%%TOJSON%%", toJson)
           SourceFile(
             language = "Dart",

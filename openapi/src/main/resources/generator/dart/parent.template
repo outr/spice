@@ -2,6 +2,8 @@
 
 /// GENERATED CODE: Do not edit!
 abstract class %%CLASSNAME%% {
+  %%FIELDS%%
+
   %%CLASSNAME%%();
 
   factory %%CLASSNAME%%.fromJson(Map<String, dynamic> json) {
