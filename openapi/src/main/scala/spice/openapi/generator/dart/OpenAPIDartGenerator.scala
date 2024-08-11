@@ -89,7 +89,18 @@ object OpenAPIDartGenerator extends OpenAPIGenerator {
           component.properties.map {
             case (key, schema) =>
               val `type` = schema match {
-                case c: OpenAPISchema.Component if c.`type` == "array" => c.`type`    // TODO: Support
+                case c: OpenAPISchema.Component if c.`type` == "array" => c.items.get match {
+                  case r: OpenAPISchema.Ref =>
+                    val c = r.ref.substring(r.ref.lastIndexOf('/') + 1)
+                    imports += c
+                    val s = s"List<$c>"
+                    if (r.nullable.contains(true)) {
+                      s"$s?"
+                    } else {
+                      s
+                    }
+                  case s => throw new UnsupportedOperationException(s"Unsupported array schema: $s")
+                }
                 case c: OpenAPISchema.Component if c.nullable.contains(true) => s"${c.`type`.dartType}?"
                 case c: OpenAPISchema.Component => c.`type`.dartType
                 case r: OpenAPISchema.Ref =>
@@ -100,6 +111,7 @@ object OpenAPIDartGenerator extends OpenAPIGenerator {
                   } else {
                     c
                   }
+                case s => throw new RuntimeException(s"Unsupported schema: $s")
               }
               val k = key match {
                 case "_id" => "id"
@@ -174,7 +186,7 @@ object OpenAPIDartGenerator extends OpenAPIGenerator {
                   }
                   imports = imports + parentName.type2File
                   addParent(parentName)
-                  field(s"List<$parentName>", fieldName, nullable.getOrElse(false))
+                  field(s"List<$parentName>", fieldName, schema.nullable.getOrElse(false))
                 case _ => throw new UnsupportedOperationException(s"Unsupported array schema for items: ${schema.items}")
               }
             case (fieldName, schema: OpenAPISchema.Component) if schema.`type` != "object" =>
@@ -201,6 +213,7 @@ object OpenAPIDartGenerator extends OpenAPIGenerator {
                           val refType = r.ref.ref2Type
                           imports = imports + refType.type2File
                           val nullable = valueSchema.nullable.getOrElse(false)
+                          scribe.info(s"4: $refType, $nullable")
                           s"List<$refType>${if (nullable) "?" else ""}"
                         case s => throw new UnsupportedOperationException(s"Unsupported item schema: $s")
                       }
