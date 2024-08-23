@@ -23,6 +23,17 @@ class URLSpec extends AnyWordSpec with Matchers {
         url.parameters.value("foo.one") should be(Some("1"))
         url.parameters.value("foo.two") should be(Some("2"))
       }
+      "properly parse an IP address with a ? on the end" in {
+        val url = URL.parse("http://192.168.1.1:8080/?")
+        url.host should be("192.168.1.1")
+        url.port should be(8080)
+        url.parameters.map should be(Map.empty)
+      }
+      "property parse an IPv6 url" in {
+        val url = URL.parse("http://0:0:0:0:0:0:0:0:8080/")
+        url.host should be("0:0:0:0:0:0:0:0")
+        url.port should be(8080)
+      }
       "quick fail parsing a non-URL" in {
         URL.get("test") should be(Left(URLParseFailure("test is not a valid URL", URLParseFailure.QuickFail)))
       }
