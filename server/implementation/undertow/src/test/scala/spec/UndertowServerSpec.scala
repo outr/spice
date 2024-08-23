@@ -118,11 +118,11 @@ class UndertowServerSpec extends AsyncWordSpec with AsyncIOSpec with Matchers {
       testServer.config
         .clearListeners()
         .addListeners(HttpServerListener(port = None))
-        .addListeners(HttpServerListener(port = Some(8181)))
+        .addListeners(HttpServerListener(port = Some(8282)))
       testServer.start().flatMap { _ =>
         testServer.config.listeners().head.port should not be None
-        testServer.config.listeners().head.port should not be Some(8181)
-        testServer.config.listeners().last.port should be(Some(8181))
+        testServer.config.listeners().head.port should not be Some(8282)
+        testServer.config.listeners().last.port should be(Some(8282))
         testServer.stop()
       }
     }
