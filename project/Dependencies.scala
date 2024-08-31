@@ -8,7 +8,7 @@ object Dependencies {
 
     val fabric: String = "1.15.3"
     
-    val reactify: String = "4.1.1"
+    val reactify: String = "4.1.2"
     
     val cats: String = "3.5.4"
     
