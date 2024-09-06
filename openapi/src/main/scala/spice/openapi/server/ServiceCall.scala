@@ -150,8 +150,9 @@ trait ServiceCall extends HttpHandler {
       format = format,
       nullable = nullable
     )
-    case DefType.Enum(values) => OpenAPISchema.Component(
+    case DefType.Enum(values, cn) => OpenAPISchema.Component(
       `type` = "string",
+      description = cn,
       `enum` = values,
       format = format,
       nullable = nullable
@@ -176,7 +177,7 @@ trait ServiceCall extends HttpHandler {
       `type` = "null",
       format = format
     )
-    case DefType.Poly(values) => OpenAPISchema.OneOf(
+    case DefType.Poly(values, _) => OpenAPISchema.OneOf(
       schemas = values.values.map(dt => schemaFrom(dt, schema, format, nullable)).toList,
       nullable = nullable
     )
