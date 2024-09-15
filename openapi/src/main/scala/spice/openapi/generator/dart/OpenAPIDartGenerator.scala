@@ -85,16 +85,37 @@ object OpenAPIDartGenerator extends OpenAPIGenerator {
         val children = config.baseNames.find(_._1 == typeName).get._2.toList.sorted
         var imports = children.toSet
         val maps = children.map { child =>
-          val component = api.components.get.schemas(child).asInstanceOf[OpenAPISchema.Component]
+          val components = api.components.get
+          val component = components
+            .schemas.getOrElse(child, throw new NullPointerException(s"Unable to find $child in ${components.schemas.keys.mkString(", ")}"))
+            .asInstanceOf[OpenAPISchema.Component]
           component.properties.map {
             case (key, schema) =>
               val `type` = schema match {
                 case c: OpenAPISchema.Component if c.`type` == "array" => c.items.get match {
+                  case c: OpenAPISchema.Component if c.nullable.contains(true) => s"List<${c.`type`.dartType}>?"
+                  case c: OpenAPISchema.Component => s"List<${c.`type`.dartType}>"
                   case r: OpenAPISchema.Ref =>
                     val c = r.ref.substring(r.ref.lastIndexOf('/') + 1)
                     imports += c
                     val s = s"List<$c>"
                     if (r.nullable.contains(true)) {
+                      s"$s?"
+                    } else {
+                      s
+                    }
+                  case o: OpenAPISchema.OneOf =>
+                    val refs = o.schemas.map(_.asInstanceOf[OpenAPISchema.Ref].ref.ref2Type)
+                    val parents: List[String] = refs.map(r => config.baseForTypeMap.getOrElse(r, throw new RuntimeException(s"No mapping defined for $r"))).distinct
+                    val parentName = parents match {
+                      case parent :: Nil => parent
+                      case _ => throw new RuntimeException(s"Multiple parents found for ${refs.mkString(", ")}: ${parents.mkString(", ")}")
+                    }
+                    val c = parentName.type2File
+                    imports = imports + c
+                    addParent(parentName)
+                    val s = s"List<$c>"
+                    if (o.nullable.contains(true)) {
                       s"$s?"
                     } else {
                       s
