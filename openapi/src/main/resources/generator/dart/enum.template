@@ -1,0 +1,7 @@
+import 'package:json_annotation/json_annotation.dart';
+
+/// GENERATED CODE: Do not edit!
+@JsonEnum(alwaysCreate: true)
+enum %%CLASSNAME%% {
+  %%FIELDS%%
+}
