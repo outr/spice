@@ -2,7 +2,7 @@ package spice.http.content
 
 import cats.effect.IO
 import fabric.define.DefType
-import fabric.rw.RW
+import fabric.rw._
 import spice.net.ContentType
 
 trait Content {

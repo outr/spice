@@ -245,7 +245,7 @@ object OpenAPIDartGenerator extends OpenAPIGenerator {
                   case Str(s, _) => s
                   case json => throw new UnsupportedOperationException(s"Enum only supports Str: $json")
                 }
-                val baseType = config.baseForTypeMap.getOrElse(`enum`.head, throw new RuntimeException(s"No mapping defined for ${`enum`.head}"))
+                val baseType = config.baseForTypeMap.getOrElse(`enum`.head, throw new RuntimeException(s"No mapping defined for ${`enum`.head} ($fieldName)"))
                 imports = imports + baseType.type2File
                 addParent(baseType, `enum`)
                 baseType

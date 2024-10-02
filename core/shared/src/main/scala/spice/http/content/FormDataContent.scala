@@ -4,7 +4,7 @@ import cats.effect.IO
 import fabric.define.DefType
 import fabric.{Json, Null}
 import fabric.io.JsonParser
-import fabric.rw.RW
+import fabric.rw._
 
 import java.io.File
 import spice.http.Headers

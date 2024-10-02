@@ -1,7 +1,7 @@
 package spice.openapi.server
 
 import cats.effect.IO
-import fabric.rw.RW
+import fabric.rw._
 import spice.net.URLPath
 
 case class TypedRestService[Req, Res](path: URLPath,

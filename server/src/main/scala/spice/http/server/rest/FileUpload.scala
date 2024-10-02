@@ -2,7 +2,7 @@ package spice.http.server.rest
 
 import fabric.define.DefType
 import fabric.obj
-import fabric.rw.RW
+import fabric.rw._
 import spice.http.Headers
 
 import java.io.File
