@@ -91,6 +91,7 @@ object OpenAPIDartGenerator extends OpenAPIGenerator {
                |  $e,""".stripMargin
           }.mkString("\n  ")
           val source = EnumTemplate
+            .replace("%%FILENAME%%", typeName.type2File)
             .replace("%%CLASSNAME%%", typeName)
             .replace("%%FIELDS%%", fields)
           parentFiles += typeName -> SourceFile(

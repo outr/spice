@@ -4,7 +4,7 @@
 abstract class %%CLASSNAME%% {
   %%FIELDS%%
 
-  %%CLASSNAME%%();
+  const %%CLASSNAME%%();
 
   factory %%CLASSNAME%%.fromJson(Map<String, dynamic> json) {
     String t = json['type'];

@@ -10,7 +10,7 @@ part '%%FILENAME%%.g.dart';
 class %%CLASSNAME%% %%EXTENDS%%{
   %%FIELDS%%
 
-  %%CLASSNAME%%(%%PARAMS%%);
+  const %%CLASSNAME%%(%%PARAMS%%);
 
   static %%CLASSNAME%% fromJson(Map<String, dynamic> json) => _$%%CLASSNAME%%FromJson(json);
 
