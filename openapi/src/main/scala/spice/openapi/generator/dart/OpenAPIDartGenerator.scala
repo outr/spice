@@ -79,294 +79,280 @@ object OpenAPIDartGenerator extends OpenAPIGenerator {
     service :: modelObjects
   }
 
+  private var parentFiles = Map.empty[String, SourceFile]
+
   def generatePaths(api: OpenAPI, config: OpenAPIGeneratorConfig): List[SourceFile] = {
-    var parentFiles = Map.empty[String, SourceFile]
-    def addParent(tn: String, `enum`: List[String] = Nil): Unit = {
-      val typeName = tn.replace(" ", "")
-      if (!parentFiles.contains(typeName)) {
-        if (`enum`.nonEmpty) {
-          val fileName = s"${typeName.type2File}.dart"
-          val fields = `enum`.map { e =>
-            s"""@JsonValue('$e')
-               |  $e,""".stripMargin
-          }.mkString("\n  ")
-          val source = EnumTemplate
-            .replace("%%FILENAME%%", typeName.type2File)
-            .replace("%%CLASSNAME%%", typeName)
-            .replace("%%FIELDS%%", fields)
-          parentFiles += typeName -> SourceFile(
-            language = "Dart",
-            name = typeName,
-            fileName = fileName,
-            path = "lib/model",
-            source = source
-          )
+    parentFiles = Map.empty
+    val sourceFiles = api.components.toList.flatMap(_.schemas.toList).map {
+      case (typeName, schema: OpenAPISchema.Component) => parseComponent(typeName, schema, api, config)
+      case (typeName, schema) => throw new UnsupportedOperationException(s"$typeName has unsupported schema: $schema")
+    }
+    sourceFiles ::: parentFiles.values.toList
+  }
+
+  private def parseComponent(rawTypeName: String, schema: OpenAPISchema.Component, api: OpenAPI, config: OpenAPIGeneratorConfig): SourceFile = {
+    val imports = mutable.Set.empty[String]
+
+    val typeName: String = rawTypeName.replace(" ", "")
+    val fileName: String = s"${typeName.type2File}.dart"
+    val fields: List[String] = schema.properties.toList.map {
+      case (fieldName, schema) => parseField(fieldName, schema, api, config, imports).toString
+    }
+    val fieldsString = fields.mkString("\n  ") match {
+      case "" => "// No fields defined"
+      case s => s
+    }
+    val parent = config.baseForTypeMap.get(rawTypeName)
+    val extending = parent match {
+      case Some(parentName) =>
+        imports += parentName.type2File
+        s"extends $parentName with EquatableMixin "
+      case None => "extends Equatable "
+    }
+    val importsTemplate = imports.toList.sorted.map(s => s"import '$s.dart';").mkString("\n") match {
+      case "" => "// No imports necessary"
+      case s => s
+    }
+    val paramsList = schema.properties.toList.map {
+      case (fieldName, schema) =>
+        val nullable = schema match {
+          case s: OpenAPISchema.Component => s.nullable.getOrElse(false)
+          case s: OpenAPISchema.Ref => s.nullable.getOrElse(false)
+          case s: OpenAPISchema.OneOf => s.nullable.getOrElse(false)
+          case _ => throw new RuntimeException(s"Unsupported OpenAPISchema: $schema")
+        }
+        if (nullable) {
+          fieldName.param
         } else {
-          val children = config.baseNames.find(_._1 == typeName).get._2.toList.sorted
-          var imports = children.toSet
-          val maps = children.map { child =>
-            val components = api.components.get
-            val component = components
-              .schemas.getOrElse(child, throw new NullPointerException(s"Unable to find $child in ${components.schemas.keys.mkString(", ")}"))
-              .asInstanceOf[OpenAPISchema.Component]
-            component.properties.map {
-              case (key, schema) =>
-                val `type` = schema match {
-                  case c: OpenAPISchema.Component if c.`type` == "array" => c.items.get match {
-                    case c: OpenAPISchema.Component if c.nullable.contains(true) => s"List<${c.`type`.dartType}>?"
-                    case c: OpenAPISchema.Component => s"List<${c.`type`.dartType}>"
-                    case r: OpenAPISchema.Ref =>
-                      val c = r.ref.substring(r.ref.lastIndexOf('/') + 1)
-                      imports += c
-                      val s = s"List<$c>"
-                      if (r.nullable.contains(true)) {
-                        s"$s?"
-                      } else {
-                        s
-                      }
-                    case o: OpenAPISchema.OneOf =>
-                      val refs = o.schemas.map(_.asInstanceOf[OpenAPISchema.Ref].ref.ref2Type)
-                      val parents: List[String] = refs.map(r => config.baseForTypeMap.getOrElse(r, throw new RuntimeException(s"No mapping defined for $r"))).distinct
-                      val parentName = parents match {
-                        case parent :: Nil => parent
-                        case _ => throw new RuntimeException(s"Multiple parents found for ${refs.mkString(", ")}: ${parents.mkString(", ")}")
-                      }
-                      val c = parentName.type2File
-                      imports = imports + c
-                      addParent(parentName)
-                      val s = s"List<$c>"
-                      if (o.nullable.contains(true)) {
-                        s"$s?"
-                      } else {
-                        s
-                      }
-                    case s => throw new UnsupportedOperationException(s"Unsupported array schema: $s")
-                  }
+          s"required ${fieldName.param}"
+        }
+    }
+    val params = if (paramsList.nonEmpty) {
+      paramsList.mkString("{", ", ", "}")
+    } else {
+      ""
+    }
+    val props = schema.properties.toList.map(_._1.prop).mkString(", ")
+    val toJson = parent match {
+      case Some(_) =>
+        s"""@override Map<String, dynamic> toJson() {
+           |    Map<String, dynamic> map = _$$${typeName}ToJson(this);
+           |    map['type'] = '$rawTypeName';
+           |    return map;
+           |  }""".stripMargin
+      case None => s"Map<String, dynamic> toJson() => _$$${typeName}ToJson(this);"
+    }
+    val source = (if (params.isEmpty) ModelTemplate else ModelWithParamsTemplate)
+      .replace("%%IMPORTS%%", importsTemplate)
+      .replace("%%FILENAME%%", typeName.type2File)
+      .replace("%%CLASSNAME%%", typeName)
+      .replace("%%EXTENDS%%", extending)
+      .replace("%%FIELDS%%", fieldsString)
+      .replace("%%PARAMS%%", params)
+      .replace("%%PROPS%%", props)
+      .replace("%%TOJSON%%", toJson)
+    SourceFile(
+      language = "Dart",
+      name = typeName,
+      fileName = fileName,
+      path = "lib/model",
+      source = source
+    )
+  }
+
+  private def parseField(fieldName: String,
+                         schema: OpenAPISchema,
+                         api: OpenAPI,
+                         config: OpenAPIGeneratorConfig,
+                         imports: mutable.Set[String]): ParsedField = schema match {
+    case c: OpenAPISchema.Component if c.`enum`.nonEmpty =>
+      val parentName = config.baseForTypeMap.getOrElse(c.`enum`.head.asString, throw new NullPointerException(s"Unable to find enum entry ${c.`enum`.head} for $fieldName"))
+      val `enum` = c.`enum`.map {
+        case Str(s, _) => s
+        case json => throw new UnsupportedOperationException(s"Enum only supports Str: $json")
+      }
+      imports += parentName.type2File
+      addParent(api, config, parentName, `enum`)
+      ParsedField(parentName, fieldName, c.nullable.getOrElse(false))
+    case c: OpenAPISchema.Component if c.`type` == "array" =>
+      val item = parseField(fieldName, c.items.get, api, config, imports)
+      item.copy(
+        `type` = s"List<${item.`type`}>",
+        nullable = c.nullable.getOrElse(false)
+      )
+    case c: OpenAPISchema.Component if c.`type` == "object" =>
+      val fieldType = if (c.`enum`.nonEmpty) {
+        val `enum` = c.`enum`.map {
+          case Str(s, _) => s
+          case json => throw new UnsupportedOperationException(s"Enum only supports Str: $json")
+        }
+        val baseType = config.baseForTypeMap.getOrElse(`enum`.head, throw new RuntimeException(s"No mapping defined for ${`enum`.head} ($fieldName)"))
+        imports += baseType.type2File
+        addParent(api, config, baseType, `enum`)
+        baseType
+      } else {
+        c.`type`
+      }
+      ParsedField(fieldType.dartType, fieldName, c.nullable.getOrElse(false))
+    case c: OpenAPISchema.Component =>
+      ParsedField(c.`type`.dartType, fieldName, c.nullable.getOrElse(false))
+    case c: OpenAPISchema.Ref =>
+      val modelType = c.ref.ref2Type
+      imports += modelType.type2File
+      ParsedField(modelType, fieldName, c.nullable.getOrElse(false))
+    case c: OpenAPISchema.OneOf =>
+      val refs = c.schemas.map(_.asInstanceOf[OpenAPISchema.Ref].ref.ref2Type)
+      val parents: List[String] = refs.map(r => config.baseForTypeMap.getOrElse(r, throw new RuntimeException(s"No mapping defined for $r"))).distinct
+      val parentName = parents match {
+        case parent :: Nil => parent
+        case _ => throw new RuntimeException(s"Multiple parents found for ${refs.mkString(", ")}: ${parents.mkString(", ")}")
+      }
+      val parentType = parentName.type2File
+      imports += parentType
+      addParent(api, config, parentName)
+      ParsedField(parentName, fieldName, c.nullable.getOrElse(false))
+    case _ => throw new UnsupportedOperationException(s"Schema for '$fieldName' is unsupported: $schema")
+  }
+
+  private def addParent(api: OpenAPI, config: OpenAPIGeneratorConfig, tn: String, `enum`: List[String] = Nil): Unit = {
+    val typeName = tn.replace(" ", "")
+    if (!parentFiles.contains(typeName)) {
+      if (`enum`.nonEmpty) {
+        val fileName = s"${typeName.type2File}.dart"
+        val fields = `enum`.map { e =>
+          s"""@JsonValue('$e')
+             |  $e,""".stripMargin
+        }.mkString("\n  ")
+        val source = EnumTemplate
+          .replace("%%FILENAME%%", typeName.type2File)
+          .replace("%%CLASSNAME%%", typeName)
+          .replace("%%FIELDS%%", fields)
+        parentFiles += typeName -> SourceFile(
+          language = "Dart",
+          name = typeName,
+          fileName = fileName,
+          path = "lib/model",
+          source = source
+        )
+      } else {
+        val children = config.baseNames.find(_._1 == typeName).get._2.toList.sorted
+        var imports = children.toSet
+        val maps = children.map { child =>
+          val components = api.components.get
+          val component = components
+            .schemas.getOrElse(child, throw new NullPointerException(s"Unable to find $child in ${components.schemas.keys.mkString(", ")}"))
+            .asInstanceOf[OpenAPISchema.Component]
+          component.properties.map {
+            case (key, schema) =>
+              val `type` = schema match {
+                case c: OpenAPISchema.Component if c.`type` == "array" => c.items.get match {
                   case c: OpenAPISchema.Component if c.`enum`.nonEmpty =>
                     val parentName = config.baseForTypeMap(c.`enum`.head.asString)
-                    imports = imports + parentName.type2File
-                    if (c.nullable.contains(true)) {
-                      s"$parentName?"
-                    } else {
-                      parentName
+                    val `enum` = c.`enum`.map {
+                      case Str(s, _) => s
+                      case json => throw new UnsupportedOperationException(s"Enum only supports Str: $json")
                     }
-                  case c: OpenAPISchema.Component if c.nullable.contains(true) => s"${c.`type`.dartType}?"
-                  case c: OpenAPISchema.Component => c.`type`.dartType
+                    imports = imports + parentName.type2File
+                    addParent(api, config, parentName, `enum`)
+
+                    if (c.nullable.contains(true)) {
+                      s"List<$parentName>?"
+                    } else {
+                      s"List<$parentName>"
+                    }
+                  case c: OpenAPISchema.Component if c.nullable.contains(true) => s"List<${c.`type`.dartType}>?"
+                  case c: OpenAPISchema.Component => s"List<${c.`type`.dartType}>"
                   case r: OpenAPISchema.Ref =>
                     val c = r.ref.substring(r.ref.lastIndexOf('/') + 1)
                     imports += c
+                    val s = s"List<$c>"
                     if (r.nullable.contains(true)) {
-                      s"$c?"
+                      s"$s?"
                     } else {
-                      c
+                      s
                     }
-                  case s => throw new RuntimeException(s"Unsupported schema: $s")
+                  case o: OpenAPISchema.OneOf =>
+                    val refs = o.schemas.map(_.asInstanceOf[OpenAPISchema.Ref].ref.ref2Type)
+                    val parents: List[String] = refs.map(r => config.baseForTypeMap.getOrElse(r, throw new RuntimeException(s"No mapping defined for $r"))).distinct
+                    val parentName = parents match {
+                      case parent :: Nil => parent
+                      case _ => throw new RuntimeException(s"Multiple parents found for ${refs.mkString(", ")}: ${parents.mkString(", ")}")
+                    }
+                    val c = parentName.type2File
+                    imports = imports + c
+                    addParent(api, config, parentName)
+                    val s = s"List<$c>"
+                    if (o.nullable.contains(true)) {
+                      s"$s?"
+                    } else {
+                      s
+                    }
+                  case s => throw new UnsupportedOperationException(s"Unsupported array schema: $s")
                 }
-                val k = key match {
-                  case "_id" => "id"
-                  case _ => key
-                }
-                k -> `type`
-            }
+                case c: OpenAPISchema.Component if c.`enum`.nonEmpty =>
+                  val parentName = config.baseForTypeMap(c.`enum`.head.asString)
+                  val `enum` = c.`enum`.map {
+                    case Str(s, _) => s
+                    case json => throw new UnsupportedOperationException(s"Enum only supports Str: $json")
+                  }
+                  imports = imports + parentName.type2File
+                  addParent(api, config, parentName, `enum`)
+
+                  if (c.nullable.contains(true)) {
+                    s"$parentName?"
+                  } else {
+                    parentName
+                  }
+                case c: OpenAPISchema.Component if c.nullable.contains(true) => s"${c.`type`.dartType}?"
+                case c: OpenAPISchema.Component => c.`type`.dartType
+                case r: OpenAPISchema.Ref =>
+                  val c = r.ref.substring(r.ref.lastIndexOf('/') + 1)
+                  imports += c
+                  if (r.nullable.contains(true)) {
+                    s"$c?"
+                  } else {
+                    c
+                  }
+                case s => throw new RuntimeException(s"Unsupported schema: $s")
+              }
+              val k = key match {
+                case "_id" => "id"
+                case _ => key
+              }
+              k -> `type`
           }
-          val commonKeys = maps.map(_.keySet).reduce(_ intersect _)
-          val baseParams = commonKeys.map(key => key -> maps.head(key)).toMap
-          val fields = baseParams.toList.map {
-            case (key, value) => s"$value get $key;";
-          }.mkString("\n  ")
-          val fileName = s"${typeName.type2File}.dart"
-          val importString = imports.map { c =>
-            s"import '${c.type2File}.dart';"
-          }.mkString("\n")
-          val fromJson = children.map { c =>
-            s"""if (t == '$c') {
-               |      return ${c.replace(" ", "")}.fromJson(json);
-               |    }""".stripMargin
-          }.mkString("    ", " else ",
-            """ else {
-              |      throw Exception("Unsupported type: $t");
-              |    }""".stripMargin)
-          val source = ParentTemplate
-            .replace("%%CLASSNAME%%", typeName)
-            .replace("%%FIELDS%%", fields)
-            .replace("%%IMPORTS%%", importString)
-            .replace("%%FROMJSON%%", fromJson)
-          parentFiles += typeName -> SourceFile(
-            language = "Dart",
-            name = typeName,
-            fileName = fileName,
-            path = "lib/model",
-            source = source
-          )
         }
+        val commonKeys = maps.map(_.keySet).reduce(_ intersect _)
+        val baseParams = commonKeys.map(key => key -> maps.head(key)).toMap
+        val fields = baseParams.toList.map {
+          case (key, value) => s"$value get $key;";
+        }.mkString("\n  ")
+        val fileName = s"${typeName.type2File}.dart"
+        val importString = imports.map { c =>
+          s"import '${c.type2File}.dart';"
+        }.mkString("\n")
+        val fromJson = children.map { c =>
+          s"""if (t == '$c') {
+             |      return ${c.replace(" ", "")}.fromJson(json);
+             |    }""".stripMargin
+        }.mkString("    ", " else ",
+          """ else {
+            |      throw Exception("Unsupported type: $t");
+            |    }""".stripMargin)
+        val source = ParentTemplate
+          .replace("%%CLASSNAME%%", typeName)
+          .replace("%%FIELDS%%", fields)
+          .replace("%%IMPORTS%%", importString)
+          .replace("%%FROMJSON%%", fromJson)
+        parentFiles += typeName -> SourceFile(
+          language = "Dart",
+          name = typeName,
+          fileName = fileName,
+          path = "lib/model",
+          source = source
+        )
       }
     }
-    val sourceFiles = api
-      .components
-      .toList
-      .flatMap(_.schemas.toList)
-      .map {
-        case (tn, schema: OpenAPISchema.Component) =>
-          val typeName = tn.replace(" ", "")
-          var imports = Set.empty[String]
-          val fileName = s"${typeName.type2File}.dart"
-          val fields = schema.properties.toList.map {
-            case (fieldName, OpenAPISchema.Ref(ref, nullable)) =>
-              val modelType = ref.ref2Type
-              imports = imports + modelType.type2File
-              field(modelType, fieldName, nullable.getOrElse(false))
-            case (fieldName, schema: OpenAPISchema.Component) if schema.`type` == "array" =>
-              schema.items match {
-                case Some(itemsSchema: OpenAPISchema.Component) => try {
-                  val arrayType = itemsSchema.`type`.dartType
-                  field(s"List<$arrayType>", fieldName, schema.nullable.getOrElse(false))
-                } catch {
-                  case t: Throwable => throw new RuntimeException(s"Failure on $fieldName - $itemsSchema", t)
-                }
-                case Some(itemsSchema: OpenAPISchema.Ref) =>
-                  val arrayType = itemsSchema.ref.ref2Type
-                  imports = imports + arrayType.type2File
-                  field(s"List<$arrayType>", fieldName, schema.nullable.getOrElse(false))
-                case Some(OpenAPISchema.OneOf(schemas, discriminator, nullable)) =>
-                  val refs = schemas.map(_.asInstanceOf[OpenAPISchema.Ref].ref.ref2Type)
-                  val parents: List[String] = refs.map(r => config.baseForTypeMap.getOrElse(r, throw new RuntimeException(s"No mapping defined for $r"))).distinct
-                  val parentName = parents match {
-                    case parent :: Nil => parent
-                    case _ => throw new RuntimeException(s"Multiple parents found for ${refs.mkString(", ")}: ${parents.mkString(", ")}")
-                  }
-                  imports = imports + parentName.type2File
-                  addParent(parentName)
-                  field(s"List<$parentName>", fieldName, schema.nullable.getOrElse(false))
-                case _ => throw new UnsupportedOperationException(s"Unsupported array schema for items: ${schema.items}")
-              }
-            case (fieldName, schema: OpenAPISchema.Component) if schema.`type` != "object" =>
-              val fieldType = if (schema.`enum`.nonEmpty) {
-                val `enum` = schema.`enum`.map {
-                  case Str(s, _) => s
-                  case json => throw new UnsupportedOperationException(s"Enum only supports Str: $json")
-                }
-                val baseType = config.baseForTypeMap.getOrElse(`enum`.head, throw new RuntimeException(s"No mapping defined for ${`enum`.head} ($fieldName)"))
-                imports = imports + baseType.type2File
-                addParent(baseType, `enum`)
-                baseType
-              } else {
-                schema.`type`.dartType
-              }
-              field(fieldType, fieldName, schema.nullable.getOrElse(false))
-            case (fieldName, OpenAPISchema.OneOf(schemas, discriminator, nullable)) =>
-              val refs = schemas.map(_.asInstanceOf[OpenAPISchema.Ref].ref.ref2Type)
-              val parents: List[String] = refs.map(r => config.baseForTypeMap.getOrElse(r, throw new RuntimeException(s"No mapping defined for $r"))).distinct
-              val parentName = parents match {
-                case parent :: Nil => parent
-                case _ => throw new RuntimeException(s"Multiple parents found for ${refs.mkString(", ")}: ${parents.mkString(", ")}")
-              }
-              imports = imports + parentName.type2File
-              addParent(parentName)
-              field(parentName, fieldName, nullable.getOrElse(false))
-            case (fieldName, schema: OpenAPISchema.Component) if schema.additionalProperties.nonEmpty =>
-              val (valueType, nullable) = schema.additionalProperties.get match {
-                case valueSchema: OpenAPISchema.Component =>
-                  val dartType = if (valueSchema.`type` == "array") {
-                    valueSchema.items match {
-                      case Some(itemSchema) => itemSchema match {
-                        case c: OpenAPISchema.Component => c.`type`.dartType
-                        case r: OpenAPISchema.Ref =>
-                          val refType = r.ref.ref2Type
-                          imports = imports + refType.type2File
-                          val nullable = valueSchema.nullable.getOrElse(false)
-                          scribe.info(s"4: $refType, $nullable")
-                          s"List<$refType>${if (nullable) "?" else ""}"
-                        case s => throw new UnsupportedOperationException(s"Unsupported item schema: $s")
-                      }
-                      case None =>
-                        val nullable = valueSchema.nullable.getOrElse(false)
-                        s"List<dynamic>${if (nullable) "?" else ""}"
-                    }
-                  } else {
-                    valueSchema.`type`.dartType
-                  }
-                  dartType -> valueSchema.nullable
-                case OpenAPISchema.Ref(ref, nullable) =>
-                  val refType = ref.ref2Type
-                  imports = imports + refType.type2File
-                  refType -> nullable
-                case OpenAPISchema.OneOf(schemas, discriminator, nullable) =>
-                  val refs = schemas.map(_.asInstanceOf[OpenAPISchema.Ref].ref.ref2Type)
-                  val parents: List[String] = refs.map(r => config.baseForTypeMap.getOrElse(r, throw new RuntimeException(s"No mapping defined for $r"))).distinct
-                  val parentName = parents match {
-                    case parent :: Nil => parent
-                    case _ => throw new RuntimeException(s"Multiple parents found for ${refs.mkString(", ")}: ${parents.mkString(", ")}")
-                  }
-                  imports = imports + parentName.type2File
-                  addParent(parentName)
-                  (parentName, nullable)
-                case valueSchema => throw new UnsupportedOperationException(s"$fieldName has unsupported value schema: $valueSchema")
-              }
-              field(s"Map<String, $valueType>", fieldName, nullable.getOrElse(false))
-            case (fieldName, schema) => throw new UnsupportedOperationException(s"$fieldName has unsupported schema: $schema")
-          }.mkString("\n  ") match {
-            case "" => "// No fields defined"
-            case s => s
-          }
-          val paramsList = schema.properties.toList.map {
-            case (fieldName, schema) =>
-              val nullable = schema match {
-                case s: OpenAPISchema.Component => s.nullable.getOrElse(false)
-                case s: OpenAPISchema.Ref => s.nullable.getOrElse(false)
-                case s: OpenAPISchema.OneOf => s.nullable.getOrElse(false)
-                case _ => throw new RuntimeException(s"Unsupported OpenAPISchema: $schema")
-              }
-              if (nullable) {
-                fieldName.param
-              } else {
-                s"required ${fieldName.param}"
-              }
-          }
-          val params = if (paramsList.nonEmpty) {
-            paramsList.mkString("{", ", ", "}")
-          } else {
-            ""
-          }
-          val props = schema.properties.toList.map(_._1.prop).mkString(", ")
-          val parent = config.baseForTypeMap.get(tn)
-          val extending = parent match {
-            case Some(parentName) =>
-              imports = imports + parentName.type2File
-              s"extends $parentName with EquatableMixin "
-            case None => "extends Equatable "
-          }
-          val importsTemplate = imports.toList.sorted.map(s => s"import '$s.dart';").mkString("\n") match {
-            case "" => "// No imports necessary"
-            case s => s
-          }
-          val toJson = parent match {
-            case Some(_) =>
-              s"""@override Map<String, dynamic> toJson() {
-                 |    Map<String, dynamic> map = _$$${typeName}ToJson(this);
-                 |    map['type'] = '$tn';
-                 |    return map;
-                 |  }""".stripMargin
-            case None => s"Map<String, dynamic> toJson() => _$$${typeName}ToJson(this);"
-          }
-          val source = (if (params.isEmpty) ModelTemplate else ModelWithParamsTemplate)
-            .replace("%%IMPORTS%%", importsTemplate)
-            .replace("%%FILENAME%%", typeName.type2File)
-            .replace("%%CLASSNAME%%", typeName)
-            .replace("%%EXTENDS%%", extending)
-            .replace("%%FIELDS%%", fields)
-            .replace("%%PARAMS%%", params)
-            .replace("%%PROPS%%", props)
-            .replace("%%TOJSON%%", toJson)
-          SourceFile(
-            language = "Dart",
-            name = typeName,
-            fileName = fileName,
-            path = "lib/model",
-            source = source
-          )
-        case (typeName, schema) => throw new UnsupportedOperationException(s"$typeName has unsupported schema: $schema")
-      }
-    sourceFiles ::: parentFiles.values.toList
   }
 
   def generateService(api: OpenAPI, config: OpenAPIGeneratorConfig): SourceFile = {
@@ -484,5 +470,9 @@ object OpenAPIDartGenerator extends OpenAPIGenerator {
       stream,
       new mutable.StringBuilder
     ).unsafeRunSync().toString
+  }
+
+  case class ParsedField(`type`: String, name: String, nullable: Boolean) {
+    override def toString: String = field(`type`, name, nullable)
   }
 }

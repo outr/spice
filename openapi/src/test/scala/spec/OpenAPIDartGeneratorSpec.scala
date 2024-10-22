@@ -5,10 +5,12 @@ import fabric.rw._
 import org.scalatest.matchers.should.Matchers
 import org.scalatest.wordspec.AnyWordSpec
 import spice.net._
+import spice.openapi.generator.OpenAPIGeneratorConfig
+import spice.openapi.generator.dart.OpenAPIDartGenerator
 import spice.openapi.server.{OpenAPIHttpServer, RestService, Service}
 
 class OpenAPIDartGeneratorSpec extends AnyWordSpec with Matchers {
-  /*"OpenAPIDartGenerator" should {
+  "OpenAPIDartGenerator" should {
     "generate Dart code for the server" in {
       val sourceFiles = OpenAPIDartGenerator.generate(Server.api, OpenAPIGeneratorConfig(
         "SortDirection" -> Set(
@@ -27,7 +29,7 @@ class OpenAPIDartGeneratorSpec extends AnyWordSpec with Matchers {
       sortDirectionSource.source should include("@JsonValue('Ascending')")
       sortDirectionSource.source should include("@JsonValue('Descending')")
     }
-  }*/
+  }
 
   object Server extends OpenAPIHttpServer {
     override def title: String = "Example Server"
