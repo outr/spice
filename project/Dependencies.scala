@@ -4,7 +4,7 @@ object Dependencies {
   object version {
     val profig: String = "3.4.16"
     
-    val scribe: String = "3.15.0"
+    val scribe: String = "3.15.1"
 
     val fabric: String = "1.15.4"
     
@@ -20,7 +20,7 @@ object Dependencies {
 
     val httpMime: String = "4.5.14"
     
-    val undertow: String = "2.3.17.Final"
+    val undertow: String = "2.3.18.Final"
     
     val moduload: String = "1.1.7"
 

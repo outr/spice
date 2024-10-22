@@ -7,7 +7,7 @@ import 'package:copy_with_extension/copy_with_extension.dart';
 part '%%FILENAME%%.g.dart';
 
 /// GENERATED CODE: Do not edit!
-@JsonSerializable()
+@JsonSerializable(explicitToJson: true)
 @CopyWith()
 class %%CLASSNAME%% %%EXTENDS%%{
   %%FIELDS%%
@@ -20,4 +20,6 @@ class %%CLASSNAME%% %%EXTENDS%%{
 
   @override
   List<Object?> get props => [%%PROPS%%];
+
+  %%CLASSNAME%% deepClone() => fromJson(toJson());
 }

@@ -6,7 +6,7 @@ import 'package:json_annotation/json_annotation.dart';
 part '%%FILENAME%%.g.dart';
 
 /// GENERATED CODE: Do not edit!
-@JsonSerializable()
+@JsonSerializable(explicitToJson: true)
 class %%CLASSNAME%% %%EXTENDS%%{
   %%FIELDS%%
 
@@ -18,4 +18,6 @@ class %%CLASSNAME%% %%EXTENDS%%{
 
   @override
   List<Object?> get props => [%%PROPS%%];
+
+  %%CLASSNAME%% deepClone() => fromJson(toJson());
 }
