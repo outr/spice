@@ -36,6 +36,7 @@ object OpenAPIDartGenerator extends OpenAPIGenerator {
       case "integer" => "int"
       case "number" => "double"
       case "json" => "Map<String, dynamic>"
+//      case "object" => "FAILURE"    // TODO: Fix
       case _ => throw new RuntimeException(s"Unsupported dart type: [$s]")
     }
     def param: String = s"this.$prop"
@@ -189,11 +190,20 @@ object OpenAPIDartGenerator extends OpenAPIGenerator {
         val baseType = config.baseForTypeMap.getOrElse(`enum`.head, throw new RuntimeException(s"No mapping defined for ${`enum`.head} ($fieldName)"))
         imports += baseType.type2File
         addParent(api, config, baseType, `enum`)
-        baseType
+        baseType.dartType
+      } else if (c.`type` == "object" && c.additionalProperties.nonEmpty) {
+        val additionalField = parseField(
+          fieldName = fieldName,
+          schema = c.additionalProperties.get,
+          api = api,
+          config = config,
+          imports = imports
+        )
+        s"Map<String, ${additionalField.`type`}>"
       } else {
-        c.`type`
+        c.`type`.dartType
       }
-      ParsedField(fieldType.dartType, fieldName, c.nullable.getOrElse(false))
+      ParsedField(fieldType, fieldName, c.nullable.getOrElse(false))
     case c: OpenAPISchema.Component =>
       ParsedField(c.`type`.dartType, fieldName, c.nullable.getOrElse(false))
     case c: OpenAPISchema.Ref =>
@@ -380,6 +390,13 @@ object OpenAPIDartGenerator extends OpenAPIGenerator {
                  |  }""".stripMargin
             case format => throw new RuntimeException(s"Unsupported schema format: $format (schema: $c, path: $pathString)")
           }
+          case c: OpenAPISchema.Ref if c.ref == "#/components/schemas/Content" =>
+            val requestType = requestContent.refType
+            imports = imports + requestType.type2File
+            s"""  /// ${entry.description}
+               |  static Future<void> $name($requestType request, String fileName) async {
+               |    await restDownload(fileName, "$pathString", request.toJson());
+               |  }""".stripMargin
           case _: OpenAPISchema.Ref =>
             val responseType = successResponse.refType
             val component = successResponse.component(api)

@@ -18,8 +18,15 @@ class OpenAPIHttpServerSpec extends AsyncWordSpec with AsyncIOSpec with Matchers
       Example.api.asYaml should be(expected)
     }
     "generate Dart code for the server" in {
-      val sourceFiles = OpenAPIDartGenerator.generate(Example.api, OpenAPIGeneratorConfig())
+      val sourceFiles = OpenAPIDartGenerator.generate(Example.api, OpenAPIGeneratorConfig(
+        baseNames = "NumEnum" -> Set(
+          "One", "Two", "Three"
+        )
+      ))
       sourceFiles should not be Nil
+      /*sourceFiles.foreach { f =>
+        scribe.info(s"File: ${f.fileName}\n-----------------------\n${f.source}\n--------------------------")
+      }*/
       succeed
     }
   }

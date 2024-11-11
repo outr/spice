@@ -16,12 +16,15 @@ class OpenAPIDartGeneratorSpec extends AnyWordSpec with Matchers {
         "SortDirection" -> Set(
           "Ascending", "Descending"
         ),
+        "NumEnum" -> Set(
+          "One", "Two", "Three"
+        ),
         "Winner" -> Set(
           ".", "X", "O"
         )
       ))
       sourceFiles should not be Nil
-      sourceFiles.map(_.fileName).toSet should be(Set("service.dart", "list_request.dart", "list_response.dart", "sort_direction.dart"))
+      sourceFiles.map(_.fileName).toSet should be(Set("list_request.dart", "num_enum.dart", "file_upload_response.dart", "reverse_response.dart", "winner.dart", "reverse_request.dart", "list_response.dart", "combine_request.dart", "auth.dart", "sort_direction.dart", "combine_response.dart", "status.dart", "service.dart"))
       val listRequestSource = sourceFiles.find(_.fileName == "list_request.dart").get
       listRequestSource.source should include("import 'sort_direction.dart';")
       listRequestSource.source should include("final SortDirection direction;")
