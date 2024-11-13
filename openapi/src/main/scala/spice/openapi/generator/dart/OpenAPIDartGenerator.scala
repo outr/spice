@@ -231,7 +231,7 @@ object OpenAPIDartGenerator extends OpenAPIGenerator {
         val fileName = s"${typeName.type2File}.dart"
         val fields = `enum`.map { e =>
           s"""@JsonValue('$e')
-             |  $e,""".stripMargin
+             |  ${e.replace(" ", "")},""".stripMargin
         }.mkString("\n  ")
         val source = EnumTemplate
           .replace("%%FILENAME%%", typeName.type2File)
@@ -409,6 +409,10 @@ object OpenAPIDartGenerator extends OpenAPIGenerator {
                     case (key, schema) =>
                       val paramType = schema match {
                         case child: OpenAPISchema.Component if child.format.contains("binary") => "PlatformFile"
+                        case child: OpenAPISchema.Component if child.`enum`.nonEmpty =>
+                          val parentName = config.baseForTypeMap.getOrElse(child.`enum`.head.asString, throw new NullPointerException(s"Unable to find enum entry ${child.`enum`.head} for $key"))
+                          imports += parentName.type2File
+                          parentName
                         case child: OpenAPISchema.Component => s"${child.`type`.dartType}"
                         case ref: OpenAPISchema.Ref => ref.ref.ref2Type
                         case _ => throw new UnsupportedOperationException(s"Unsupported schema for $key: $schema")
