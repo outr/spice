@@ -35,7 +35,12 @@ class JVMHttpClientInstance(client: HttpClient) extends HttpClientInstance {
 
   override def send(request: HttpRequest): IO[Try[HttpResponse]] = for {
     jvmRequest <- request2JVM(request)
-    jvmResponse <- jvmClient.sendAsync(jvmRequest, BodyHandlers.ofByteArray()).toIO
+    jvmResponse <- IO.blocking(jvmClient.send(jvmRequest, BodyHandlers.ofByteArray()))
+      .attempt
+      .map {
+        case Left(t) => throw new RuntimeException(s"Error sending to ${request.url}", t)
+        case Right(response) => response
+      }
     response <- response2Spice(jvmResponse)
   } yield Success(response)
 
