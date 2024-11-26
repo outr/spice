@@ -11,6 +11,8 @@ import io.undertow.websockets.spi.WebSocketHttpExchange
 import spice.http.server.HttpServer
 import spice.http._
 
+import scala.util.Try
+
 object UndertowWebSocketHandler {
   def apply(undertow: HttpServerExchange,
             server: HttpServer,
@@ -27,7 +29,7 @@ object UndertowWebSocketHandler {
         }
         webSocketListener.send.close.attach { _ =>
           if (channel.isOpen) {
-            channel.sendClose()
+            Try(channel.sendClose())
           }
         }
 
