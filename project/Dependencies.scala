@@ -28,7 +28,7 @@ object Dependencies {
 
     val scalaTest: String = "3.2.19"
     
-    val catsEffectTesting: String = "1.5.0"
+    val catsEffectTesting: String = "1.6.0"
   }
 
   val profig: ModuleID = "com.outr" %% "profig" % version.profig
