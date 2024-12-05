@@ -39,13 +39,14 @@ object URLPathPart {
     case ArgumentPartRegex2(name) => List(Argument(name))
     case encoded =>
       val s = Decoder(encoded)
-      val colonIndex = s.indexOf(':')
+//      val colonIndex = s.indexOf(':')
       val openBraceIndex = s.indexOf('{')
       val closeBraceIndex = s.indexOf('}', math.max(openBraceIndex, 0))
-      if (colonIndex != -1) {
-        val pre = s.substring(0, colonIndex)
-        apply(pre) ::: List(Argument(s.substring(colonIndex + 1)))
-      } else if (openBraceIndex != -1 && closeBraceIndex != -1) {
+//      if (colonIndex != -1) {
+//        val pre = s.substring(0, colonIndex)
+//        apply(pre) ::: List(Argument(s.substring(colonIndex + 1)))
+//      } else
+      if (openBraceIndex != -1 && closeBraceIndex != -1) {
         val pre = s.substring(0, openBraceIndex)
         val post = s.substring(closeBraceIndex + 1)
         val arg = Argument(s.substring(openBraceIndex + 1, closeBraceIndex))

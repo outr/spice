@@ -233,6 +233,10 @@ class URLSpec extends AnyWordSpec with Matchers {
         val url = URL.parse("https://api.mapbox.com/styles/v1/mapbox/streets-v12/static/-122.256654%2C37.804077%2C13/500x300")
         url.toString should be("https://api.mapbox.com/styles/v1/mapbox/streets-v12/static/-122.256654%2C37.804077%2C13/500x300")
       }
+      "use a URL with a colon in the path" in {
+        val url = URL.parse("https://places.googleapis.com/v1/places:searchText")
+        url.toString should be("https://places.googleapis.com/v1/places:searchText")
+      }
     }
   }
 }
