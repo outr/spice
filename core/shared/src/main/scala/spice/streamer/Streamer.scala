@@ -1,18 +1,47 @@
 package spice.streamer
 
-import cats.effect.IO
+import rapid.Task
 
 import java.io.{File, FileOutputStream, IOException}
 import scala.annotation.tailrec
 import scala.concurrent.duration.{DurationInt, FiniteDuration}
 
 object Streamer {
+  /**
+   * Uses IO.stream, but supports recursive directory copying.
+   *
+   * @param source      file or directory
+   * @param destination file or directory
+   */
+  def copy(source: File, destination: File): Unit = if (source.isDirectory) {
+    destination.mkdirs()
+    assert(destination.isDirectory, s"Destination ${destination.getAbsolutePath} is a file, not a directory!")
+    source.listFiles().foreach { file =>
+      copy(file, new File(destination, file.getName))
+    }
+  } else if (source.isFile) {
+    if (destination.isDirectory) {
+      apply(source, new File(destination, source.getName))
+    } else {
+      apply(source, destination)
+    }
+  }
+
+  def merge(sources: List[File], destination: File): Unit = {
+    val outputStream = new FileOutputStream(destination)
+    sources.foreach { source =>
+      apply(source, outputStream, closeOnComplete = false)
+    }
+    outputStream.flush()
+    outputStream.close()
+  }
+
   final def apply(reader: Reader,
-                 writer: Writer,
-                 monitor: Monitor = Monitor.Ignore,
-                 monitorDelay: FiniteDuration = 15.millis,
-                 buffer: Array[Byte] = new Array[Byte](1024),
-                 closeOnComplete: Boolean = true): IO[Writer] = IO {
+                  writer: Writer,
+                  monitor: Monitor = Monitor.Ignore,
+                  monitorDelay: FiniteDuration = 15.millis,
+                  buffer: Array[Byte] = new Array[Byte](1024),
+                  closeOnComplete: Boolean = true): Task[Writer] = Task {
     val length = reader.length
     monitor.open(length)
     var total = 0L
@@ -56,35 +85,6 @@ object Streamer {
 
     recurse()
     writer
-  }
-
-  /**
-    * Uses IO.stream, but supports recursive directory copying.
-    *
-    * @param source file or directory
-    * @param destination file or directory
-    */
-  def copy(source: File, destination: File): Unit = if (source.isDirectory) {
-    destination.mkdirs()
-    assert(destination.isDirectory, s"Destination ${destination.getAbsolutePath} is a file, not a directory!")
-    source.listFiles().foreach { file =>
-      copy(file, new File(destination, file.getName))
-    }
-  } else if (source.isFile) {
-    if (destination.isDirectory) {
-      apply(source, new File(destination, source.getName))
-    } else {
-      apply(source, destination)
-    }
-  }
-
-  def merge(sources: List[File], destination: File): Unit = {
-    val outputStream = new FileOutputStream(destination)
-    sources.foreach { source =>
-      apply(source, outputStream, closeOnComplete = false)
-    }
-    outputStream.flush()
-    outputStream.close()
   }
 
   def delete(file: File): Boolean = {
