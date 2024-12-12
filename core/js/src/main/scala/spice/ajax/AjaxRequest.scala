@@ -1,8 +1,8 @@
 package spice.ajax
 
-import cats.effect.{Deferred, IO}
 import org.scalajs.dom
 import org.scalajs.dom.{ProgressEvent, XMLHttpRequest}
+import rapid.Task
 import reactify._
 import spice.UserException
 import spice.http.HttpMethod
@@ -19,7 +19,7 @@ class AjaxRequest(url: URL,
                   withCredentials: Boolean = true,
                   responseType: String = "") {
   val req = new dom.XMLHttpRequest()
-  val deferred: Deferred[IO, Try[XMLHttpRequest]] = Deferred.unsafe[IO, Try[XMLHttpRequest]]
+  val completable: Task.Completable[Try[XMLHttpRequest]] = Task.completable[Try[XMLHttpRequest]]
   val loaded: Val[Double] = Var(0.0)
   val total: Val[Double] = Var(0.0)
   val percentage: Val[Int] = Var(0)
@@ -28,9 +28,9 @@ class AjaxRequest(url: URL,
   req.onreadystatechange = { (_: dom.Event) =>
     if (req.readyState == 4) {
       if ((req.status >= 200 && req.status < 300) || req.status == 304) {
-        deferred.complete(Success(req))
+        completable.complete(Success(req))
       } else {
-        deferred.complete(Failure(UserException(s"AjaxRequest failed: ${req.readyState}")))
+        completable.complete(Failure(UserException(s"AjaxRequest failed: ${req.readyState}")))
       }
     }
   }
@@ -46,12 +46,12 @@ class AjaxRequest(url: URL,
   req.withCredentials = withCredentials
   headers.foreach(x => req.setRequestHeader(x._1, x._2))
 
-  def send(): IO[Try[XMLHttpRequest]] = {
+  def send(): Task[Try[XMLHttpRequest]] = {
     data match {
       case Some(formData) => req.send(formData.asInstanceOf[js.Any])
       case None => req.send()
     }
-    deferred.get
+    completable
   }
 
   def cancel(): Unit = if (percentage.get != 100) {

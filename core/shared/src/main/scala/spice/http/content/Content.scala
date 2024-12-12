@@ -1,8 +1,8 @@
 package spice.http.content
 
-import cats.effect.IO
 import fabric.define.DefType
 import fabric.rw._
+import rapid.Task
 import spice.net.ContentType
 
 trait Content {
@@ -12,8 +12,8 @@ trait Content {
 
   def withContentType(contentType: ContentType): Content
   def withLastModified(lastModified: Long): Content
-  def asString: IO[String]
-  def asStream: fs2.Stream[IO, Byte]
+  def asString: Task[String]
+  def asStream: rapid.Stream[Byte]
 }
 
 object Content extends SharedContentHelpers with ContentHelpers {
@@ -29,8 +29,8 @@ object Content extends SharedContentHelpers with ContentHelpers {
     override def contentType: ContentType = ContentType.`text/plain`
     override def withContentType(contentType: ContentType): Content = this
     override def withLastModified(lastModified: Long): Content = this
-    override def asString: IO[String] = IO.pure("none")
-    override def asStream: fs2.Stream[IO, Byte] = fs2.Stream.empty
+    override def asString: Task[String] = Task.pure("none")
+    override def asStream: rapid.Stream[Byte] = rapid.Stream.empty
   }
 }
 

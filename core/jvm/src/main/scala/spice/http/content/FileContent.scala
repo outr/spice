@@ -21,5 +21,5 @@ case class FileContent(file: File, contentType: ContentType, lastModifiedOverrid
 
   override def asString: Task[String] = Streamer(file, new mutable.StringBuilder).map(_.toString)
 
-  override def asStream: rapid.Stream[Byte] = Files[IO].readAll(Path.fromNioPath(file.toPath))
+  override def asStream: rapid.Stream[Byte] = rapid.Stream.fromFile(file)
 }
