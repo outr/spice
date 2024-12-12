@@ -34,14 +34,14 @@ case class BufferManager(checkEvery: FiniteDuration = 10.seconds,
       queues
         .filter(q => q.nonEmpty && (timeElapsed || q.ready))
         .map(q => q.process())
-        .parSequence
+        .tasks
         .map { _ =>
           if (timeElapsed) lastCheck.set(System.currentTimeMillis())
         }
         .flatMap(_ => recurse(0))
-        .whenA(keepAlive)
+        .when(keepAlive)
     }
-    .handleErrorWith { throwable =>
+    .handleError { throwable =>
       val message = s"An error occurred processing the buffer (failure count: $failures). Delaying before trying again."
       val log = if (failures < logErrorAfter) {
         logger.warn(message)
@@ -50,7 +50,7 @@ case class BufferManager(checkEvery: FiniteDuration = 10.seconds,
       }
       log
         .flatMap { _ =>
-          IO.sleep(checkEvery).flatMap(_ => recurse(failures + 1)).whenA(keepAlive)
+          Task.sleep(checkEvery).flatMap(_ => recurse(failures + 1)).whenA(keepAlive)
         }
     }
 }
