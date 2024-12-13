@@ -1,14 +1,14 @@
 package spice.http.server.handler
 
-import cats.effect.IO
+import rapid._
 import scribe.mdc.MDC
 import spice.http.{HttpExchange, HttpStatus}
 import spice.http.content.Content
 
 case class ContentHandler(content: Content, status: HttpStatus) extends HttpHandler {
-  override def handle(exchange: HttpExchange)(implicit mdc: MDC): IO[HttpExchange] = {
+  override def handle(exchange: HttpExchange)(implicit mdc: MDC): Task[HttpExchange] = {
     exchange.modify { response =>
-      IO(response.copy(status = status, content = Some(content)))
+      Task(response.copy(status = status, content = Some(content)))
     }
   }
 }

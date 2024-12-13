@@ -19,7 +19,7 @@ object Benchmark extends IOApp {
   private val concurrency = 16
   private val processed = new AtomicLong(0L)
 
-  override def run(args: List[String]): IO[ExitCode] = {
+  override def run(args: List[String]): Task[ExitCode] = {
     Profig.initConfiguration()
 
     for {
@@ -34,9 +34,9 @@ object Benchmark extends IOApp {
     } yield ExitCode.Success
   }
 
-  private def logPeriodically(): IO[Unit] = logRecursively().start.map(_ => ())
+  private def logPeriodically(): Task[Unit] = logRecursively().start.map(_ => ())
 
-  private def logRecursively(): IO[Unit] = IO.sleep(10.seconds).flatMap { _ =>
+  private def logRecursively(): Task[Unit] = IO.sleep(10.seconds).flatMap { _ =>
     logger.info(s"Threads: ${Thread.activeCount()}, Processed: ${processed.get()}")
   }.flatMap { _ =>
     logRecursively()
@@ -45,7 +45,7 @@ object Benchmark extends IOApp {
   private lazy val client = HttpClient
     .url(url"http://localhost:8080")
 
-  private def benchmark(): IO[Unit] = fs2.Stream
+  private def benchmark(): Task[Unit] = fs2.Stream
     .fromIterator[IO]((0 until count).iterator, 512)
     .parEvalMap(concurrency) { index =>
       client.path(URLPath.parse(s"/$index")).send().map { response =>
@@ -61,8 +61,8 @@ object Benchmark extends IOApp {
       private lazy val content = Content.string("Hello, World!", ContentType.`text/plain`)
 
       override def handle(exchange: HttpExchange)
-                         (implicit mdc: MDC): IO[HttpExchange] = exchange.modify { response =>
-        IO(response.withContent(content))
+                         (implicit mdc: MDC): Task[HttpExchange] = exchange.modify { response =>
+        Task(response.withContent(content))
       }
     }
   }

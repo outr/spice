@@ -1,8 +1,7 @@
 package spice.http.client
 
-import cats.effect.unsafe.implicits.global
-import cats.effect.IO
 import moduload.Moduload
+import rapid.Task
 import spice.http._
 import spice.http.content._
 import spice.streamer._
@@ -31,11 +30,11 @@ object OkHttpClientImplementation extends Moduload with HttpClientImplementation
     scribe.error("Error while attempting to register OkHttpClientImplementation", t)
   }
 
-  private[client] def process(io: IO[Try[HttpResponse]]): IO[Try[HttpResponse]] = {
+  private[client] def process(task: Task[Try[HttpResponse]]): Task[Try[HttpResponse]] = {
     _total.incrementAndGet()
     _active.incrementAndGet()
-    io.flatMap { t =>
-      IO {
+    task.flatMap { t =>
+      Task {
         t match {
           case Success(_) =>
             _successful.incrementAndGet()

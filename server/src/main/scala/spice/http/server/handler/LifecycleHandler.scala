@@ -1,9 +1,9 @@
 package spice.http.server.handler
 
-import cats.effect.IO
 import fabric._
 import fabric.rw._
-import scribe.cats.{io => logger}
+import rapid.Task
+import scribe.{rapid => logger}
 import scribe.mdc.MDC
 import spice.UserException
 import spice.http.{HttpExchange, HttpStatus}
@@ -11,15 +11,15 @@ import spice.http.content.Content
 import spice.net.ContentType
 
 trait LifecycleHandler extends HttpHandler {
-  protected def preHandle(exchange: HttpExchange): IO[HttpExchange]
+  protected def preHandle(exchange: HttpExchange): Task[HttpExchange]
 
-  protected def apply(exchange: HttpExchange)(implicit mdc: MDC): IO[HttpExchange]
+  protected def apply(exchange: HttpExchange)(implicit mdc: MDC): Task[HttpExchange]
 
-  protected def postHandle(exchange: HttpExchange): IO[HttpExchange]
+  protected def postHandle(exchange: HttpExchange): Task[HttpExchange]
 
   protected def errorHandler(exchange: HttpExchange,
                              state: LifecycleState,
-                             throwable: Throwable): IO[HttpExchange] = for {
+                             throwable: Throwable): Task[HttpExchange] = for {
     _ <- errorLogger(throwable, Some(exchange), Some(state))
     modified <- errorResponse(exchange, state, throwable)
   } yield {
@@ -28,13 +28,13 @@ trait LifecycleHandler extends HttpHandler {
 
   def errorLogger(throwable: Throwable,
                             exchange: Option[HttpExchange],
-                            state: Option[LifecycleState]): IO[Unit] =
+                            state: Option[LifecycleState]): Task[Unit] =
     logger.error(s"Error occurred while handling ${exchange.map(_.request.url)} ($state): ", throwable)
 
   protected def errorResponse(exchange: HttpExchange,
                               state: LifecycleState,
-                              throwable: Throwable): IO[HttpExchange] = exchange.modify { response =>
-    IO {
+                              throwable: Throwable): Task[HttpExchange] = exchange.modify { response =>
+    Task {
       val content = throwable match {
         case UserException(message, code) => errorMessageToContent(message, code)
         case _ => errorMessageToContent(s"An internal error occurred: ${throwable.getClass.getSimpleName}", None)
@@ -64,9 +64,9 @@ trait LifecycleHandler extends HttpHandler {
     ))
   }
 
-  protected def notFoundContent: IO[Content] = IO.pure(LifecycleHandler.DefaultNotFound)
+  protected def notFoundContent: Task[Content] = Task.pure(LifecycleHandler.DefaultNotFound)
 
-  override final def handle(exchange: HttpExchange)(implicit mdc: MDC): IO[HttpExchange] = {
+  override final def handle(exchange: HttpExchange)(implicit mdc: MDC): Task[HttpExchange] = {
     var currentExchange = exchange
     var state: LifecycleState = LifecycleState.Pre
     preHandle(exchange).flatMap { e =>
@@ -85,9 +85,9 @@ trait LifecycleHandler extends HttpHandler {
           }
         }
       } else {
-        IO.pure(e)
+        Task.pure(e)
       }
-    }.handleErrorWith { throwable =>
+    }.handleError { throwable =>
       errorHandler(currentExchange, state, throwable)
     }
   }

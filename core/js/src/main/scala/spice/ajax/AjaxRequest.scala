@@ -28,9 +28,9 @@ class AjaxRequest(url: URL,
   req.onreadystatechange = { (_: dom.Event) =>
     if (req.readyState == 4) {
       if ((req.status >= 200 && req.status < 300) || req.status == 304) {
-        completable.complete(Success(req))
+        completable.success(Success(req))
       } else {
-        completable.complete(Failure(UserException(s"AjaxRequest failed: ${req.readyState}")))
+        completable.success(Failure(UserException(s"AjaxRequest failed: ${req.readyState}")))
       }
     }
   }

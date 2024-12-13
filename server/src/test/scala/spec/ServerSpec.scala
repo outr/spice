@@ -1,6 +1,6 @@
 package spec
 
-import cats.effect.IO
+import rapid._
 import cats.effect.testing.scalatest.AsyncIOSpec
 import fabric.io.JsonParser
 import fabric.{Str, obj}
@@ -25,9 +25,9 @@ class ServerSpec extends AsyncWordSpec with AsyncIOSpec with Matchers {
   "TestHttpApplication" should {
     "configure the TestServer" in {
       server.handler.matcher(paths.exact("/test.html")).wrap(new HttpHandler {
-        override def handle(exchange: HttpExchange)(implicit mdc: MDC): IO[HttpExchange] = {
+        override def handle(exchange: HttpExchange)(implicit mdc: MDC): Task[HttpExchange] = {
           exchange.modify { response =>
-            IO(response.withContent(Content.string("test!", ContentType.`text/plain`)))
+            Task(response.withContent(Content.string("test!", ContentType.`text/plain`)))
           }
         }
       })
@@ -136,8 +136,8 @@ class ServerSpec extends AsyncWordSpec with AsyncIOSpec with Matchers {
 
   object ReverseService extends Restful[ReverseRequest, ReverseResponse] {
     override def apply(exchange: HttpExchange, request: ReverseRequest)
-                      (implicit mdc: MDC): IO[RestfulResponse[ReverseResponse]] = {
-      IO.pure(RestfulResponse(ReverseResponse(Some(request.value.reverse), Nil), HttpStatus.OK))
+                      (implicit mdc: MDC): Task[RestfulResponse[ReverseResponse]] = {
+      Task.pure(RestfulResponse(ReverseResponse(Some(request.value.reverse), Nil), HttpStatus.OK))
     }
 
     override def error(errors: List[ValidationError], status: HttpStatus): RestfulResponse[ReverseResponse] = {
@@ -146,8 +146,8 @@ class ServerSpec extends AsyncWordSpec with AsyncIOSpec with Matchers {
   }
 
   object ServerTimeService extends Restful[Unit, Long] {
-    override def apply(exchange: HttpExchange, request: Unit)(implicit mdc: MDC): IO[RestfulResponse[Long]] = {
-      IO.pure(RestfulResponse(System.currentTimeMillis(), HttpStatus.OK))
+    override def apply(exchange: HttpExchange, request: Unit)(implicit mdc: MDC): Task[RestfulResponse[Long]] = {
+      Task.pure(RestfulResponse(System.currentTimeMillis(), HttpStatus.OK))
     }
 
     override def error(errors: List[ValidationError], status: HttpStatus): RestfulResponse[Long] = {
@@ -158,7 +158,7 @@ class ServerSpec extends AsyncWordSpec with AsyncIOSpec with Matchers {
   object FileUploadService extends Restful[FileInfo, String] {
     override def apply(exchange: HttpExchange,
                        request: FileInfo)
-                      (implicit mdc: MDC): IO[RestfulResponse[String]] = IO {
+                      (implicit mdc: MDC): Task[RestfulResponse[String]] = Task {
       val fileEntry = request.file
       assert(fileEntry.file.length() == 33404)
       ok(request.fileName)

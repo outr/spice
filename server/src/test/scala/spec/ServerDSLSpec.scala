@@ -1,6 +1,6 @@
 package spec
 
-import cats.effect.IO
+import rapid._
 import cats.effect.testing.scalatest.AsyncIOSpec
 import org.scalatest.matchers.should.Matchers
 import org.scalatest.wordspec.AsyncWordSpec
@@ -109,11 +109,11 @@ class ServerDSLSpec extends AsyncWordSpec with AsyncIOSpec with Matchers {
 
       val r1 = Restful[String, String]({ request =>
         triggered = triggered ::: List("r1")
-        IO(request.reverse)
+        Task(request.reverse)
       }, Some(path"/r1"))
       val r2 = Restful[String, String]({ request =>
         triggered = triggered ::: List("r2")
-        IO(request.capitalize)
+        Task(request.capitalize)
       }, Some(path"/r2"))
       val f: ConnectionFilter = filters(
         r1,

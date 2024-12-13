@@ -1,8 +1,8 @@
 package spice.http.client
 
-import cats.effect.IO
 import okhttp3.{OkHttpClient, Request, Response, WebSocketListener}
 import okio.ByteString
+import rapid.Task
 import spice.http._
 import spice.net.URL
 
@@ -15,7 +15,7 @@ class OkHttpWebSocket(url: URL, instance: OkHttpClient) extends WebSocketListene
     instance.newWebSocket(request, this)
   }
 
-  override def connect(): IO[ConnectionStatus] = IO {
+  override def connect(): Task[ConnectionStatus] = Task {
     _status @= ConnectionStatus.Connecting
     ws
     send.text.attach { text =>
@@ -30,9 +30,9 @@ class OkHttpWebSocket(url: URL, instance: OkHttpClient) extends WebSocketListene
     }
   }.flatMap(_ => waitForConnected())
 
-  private def waitForConnected(): IO[ConnectionStatus] = status() match {
-    case ConnectionStatus.Connecting => IO.sleep(100.millis).flatMap(_ => waitForConnected())
-    case s => IO.pure(s)
+  private def waitForConnected(): Task[ConnectionStatus] = status() match {
+    case ConnectionStatus.Connecting => Task.sleep(100.millis).flatMap(_ => waitForConnected())
+    case s => Task.pure(s)
   }
 
   override def disconnect(): Unit = ws.close(1000, "disconnect requested")

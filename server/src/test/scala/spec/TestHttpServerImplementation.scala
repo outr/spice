@@ -1,6 +1,6 @@
 package spec
 
-import cats.effect.IO
+import rapid._
 import moduload.Moduload
 import spice.http.server.{HttpServer, HttpServerImplementation, HttpServerImplementationManager}
 
@@ -9,12 +9,12 @@ class TestHttpServerImplementation(server: HttpServer) extends HttpServerImpleme
 
   override def isRunning: Boolean = running
 
-  override def start(server: HttpServer): IO[Unit] = {
+  override def start(server: HttpServer): Task[Unit] = {
     running = true
     IO.unit
   }
 
-  override def stop(server: HttpServer): IO[Unit] = {
+  override def stop(server: HttpServer): Task[Unit] = {
     running = false
     IO.unit
   }

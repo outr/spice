@@ -1,6 +1,6 @@
 package spice.http.server.undertow
 
-import cats.effect.IO
+import rapid._
 import io.undertow.server.HttpServerExchange
 import io.undertow.server.handlers.form.{FormDataParser, FormParserFactory}
 import io.undertow.util.HeaderMap
@@ -16,7 +16,7 @@ import scala.jdk.CollectionConverters.IterableHasAsScala
 object UndertowRequestParser {
   private val formParserBuilder = FormParserFactory.builder()
 
-  def apply(exchange: HttpServerExchange, url: URL): IO[HttpRequest] = IO {
+  def apply(exchange: HttpServerExchange, url: URL): Task[HttpRequest] = Task {
     val source = IP
       .fromString(exchange.getSourceAddress.getAddress.getHostAddress)
       .getOrElse {
@@ -52,7 +52,7 @@ object UndertowRequestParser {
           Option(exchange.getRequestChannel) match {
             case Some(channel) =>
               val stream = fs2.io.readInputStream[IO](
-                fis = IO(new ChannelInputStream(channel)),
+                fis = Task(new ChannelInputStream(channel)),
                 chunkSize = 1024
               )
               Some(StreamContent(stream, ct))

@@ -1,6 +1,6 @@
 package spec
 
-import cats.effect.IO
+import rapid._
 import cats.effect.testing.scalatest.AsyncIOSpec
 import fabric.rw._
 import org.scalatest.matchers.should.Matchers
@@ -41,22 +41,22 @@ class OpenAPIHttpServerSpec extends AsyncWordSpec with AsyncIOSpec with Matchers
 
   private val reverseService = RestService[ReverseRequest, ReverseResponse](path"/reverse", "Reverses text") { request =>
     if (request.auth.username == "admin" && request.auth.password == "password") {
-      IO.pure(ReverseResponse(Some(request.text.reverse), None))
+      Task.pure(ReverseResponse(Some(request.text.reverse), None))
     } else {
-      IO.pure(ReverseResponse(None, Some("Invalid username/password combination")))
+      Task.pure(ReverseResponse(None, Some("Invalid username/password combination")))
     }
   }
 
   private val combineService = RestService[CombineRequest, CombineResponse](path"/combine", "Combines the values of an enum") { request =>
     if (request.auth.username == "admin" && request.auth.password == "password") {
-      IO.pure(CombineResponse(request.map.values.toList.sortBy(_.getClass.getName), None))
+      Task.pure(CombineResponse(request.map.values.toList.sortBy(_.getClass.getName), None))
     } else {
-      IO.pure(CombineResponse(Nil, Some("Invalid username/password combination")))
+      Task.pure(CombineResponse(Nil, Some("Invalid username/password combination")))
     }
   }
 
   private val fileUploadService = RestService[FileUploadRequest, FileUploadResponse](path"/upload", "Uploads a file") { request =>
-    IO {
+    Task {
       val file = request.file
       scribe.info(s"Headers: ${file.headers}")
       FileUploadResponse(request.userId, file.file.length())

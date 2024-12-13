@@ -4,7 +4,7 @@ object Dependencies {
   object version {
     val profig: String = "3.4.16"
     
-    val scribe: String = "3.15.2"
+    val scribe: String = "3.15.3-SNAPSHOT"
 
     val fabric: String = "1.15.4"
     
@@ -29,6 +29,7 @@ object Dependencies {
 
   val profig: ModuleID = "com.outr" %% "profig" % version.profig
 	val scribe: ModuleID = "com.outr" %% "scribe" % version.scribe
+	val scribeRapid: ModuleID = "com.outr" %% "scribe-rapid" % version.scribe
   val scribeSlf4j: ModuleID = "com.outr" %% "scribe-slf4j" % version.scribe
 	val fabricParse: ModuleID = "org.typelevel" %% "fabric-io" % version.fabric
 	val reactify: ModuleID = "com.outr" %% "reactify" % version.reactify

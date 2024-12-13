@@ -1,7 +1,7 @@
 package spice.http.client
 
-import cats.effect.IO
 import moduload.Moduload
+import rapid.Task
 import spice.ajax.{AjaxAction, AjaxRequest}
 import spice.http.content.{Content, StringContent}
 import spice.http.{Headers, HttpRequest, HttpResponse, HttpStatus, WebSocket}
@@ -15,11 +15,11 @@ class JSHttpClientInstance(client: HttpClient) extends HttpClientInstance {
 
   private val HeaderRegex = """(.+)[:](.+)""".r
 
-  override def send(request: HttpRequest): IO[Try[HttpResponse]] = {
+  override def send(request: HttpRequest): Task[Try[HttpResponse]] = {
     val manager = client.connectionPool.asInstanceOf[JSConnectionPool].manager
     val contentString = request.content match {
       case Some(content) => content.asString.map(Some.apply)
-      case None => IO.pure(None)
+      case None => Task.pure(None)
     }
     contentString.flatMap { data =>
       val ajaxRequest = new AjaxRequest(
@@ -57,5 +57,5 @@ class JSHttpClientInstance(client: HttpClient) extends HttpClientInstance {
 
   override def webSocket(url: URL): WebSocket = new JSWebSocketClient(url)
 
-  override def dispose(): IO[Unit] = IO.unit
+  override def dispose(): Task[Unit] = Task.unit
 }

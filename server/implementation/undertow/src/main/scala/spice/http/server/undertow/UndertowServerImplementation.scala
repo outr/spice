@@ -1,6 +1,6 @@
 package spice.http.server.undertow
 
-import cats.effect.IO
+import rapid._
 import io.undertow.{Undertow, UndertowOptions}
 import io.undertow.predicate.Predicates
 import io.undertow.server.{HttpServerExchange, HttpHandler => UndertowHttpHandler}
@@ -22,7 +22,7 @@ import scala.jdk.CollectionConverters.ListHasAsScala
 class UndertowServerImplementation(server: HttpServer) extends HttpServerImplementation with UndertowHttpHandler {
   private val instance: Var[Option[Undertow]] = Var(None)
 
-  override def start(server: HttpServer): IO[Unit] = IO {
+  override def start(server: HttpServer): Task[Unit] = Task {
     val contentEncodingRepository = new ContentEncodingRepository()
       .addEncodingHandler("gzip", new GzipEncodingProvider, 100, Predicates.requestLargerThan(5L))
       .addEncodingHandler("deflate", new DeflateEncodingProvider, 50, Predicates.requestLargerThan(5L))
@@ -90,7 +90,7 @@ class UndertowServerImplementation(server: HttpServer) extends HttpServerImpleme
 
   override def isRunning: Boolean = instance().nonEmpty
 
-  override def stop(server: HttpServer): IO[Unit] = IO {
+  override def stop(server: HttpServer): Task[Unit] = Task {
     instance() match {
       case Some(u) =>
         u.stop()
@@ -113,7 +113,7 @@ class UndertowServerImplementation(server: HttpServer) extends HttpServerImpleme
             val io = UndertowRequestParser(undertow, url).flatMap { request =>
               val exchange = HttpExchange(request)
               server.handle(exchange)
-                .redeemWith(server.errorRecovery(exchange, _), IO.pure)
+                .redeemWith(server.errorRecovery(exchange, _), Task.pure)
             }.flatMap { exchange =>
               exchange.webSocketListener match {
                 case Some(webSocketListener) => UndertowWebSocketHandler(undertow, server, exchange, webSocketListener)
@@ -122,7 +122,7 @@ class UndertowServerImplementation(server: HttpServer) extends HttpServerImpleme
             }.redeemWith({ throwable =>
               scribe.error("Unrecoverable error parsing request!", throwable)
               throw throwable
-            }, IO.pure)
+            }, Task.pure)
             io.unsafeRunAndForget()(server.ioRuntime)
           }
         }

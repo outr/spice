@@ -1,6 +1,6 @@
 package spec
 
-import cats.effect.IO
+import rapid._
 import cats.effect.testing.scalatest.AsyncIOSpec
 import org.scalatest.concurrent.Eventually._
 import org.scalatest.matchers.should.Matchers
@@ -64,7 +64,7 @@ class UndertowWebSocketSpec extends AsyncWordSpec with AsyncIOSpec with Matchers
   }
 
   object EchoWebSocketHandler extends WebSocketHandler {
-    override def connect(exchange: HttpExchange, listener: WebSocketListener): IO[Unit] = {
+    override def connect(exchange: HttpExchange, listener: WebSocketListener): Task[Unit] = {
       listener.receive.text.attach { text =>
         scribe.info(s"Received: $text from client! Echoing back...")
         listener.send.text @= text

@@ -45,9 +45,9 @@ object Maintenance {
             Task.sleep(nextRun).flatMap { _ =>
               val task = action(stat).handleError { throwable =>
                 scribe.error(s"$name maintenance task failed, will $onFail", throwable)
-                onFail
+                Task.pure(onFail)
               }
-              io.flatMap { result =>
+              task.flatMap { result =>
                 scheduleNext(Some(result))
               }
             }

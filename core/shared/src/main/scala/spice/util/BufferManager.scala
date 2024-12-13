@@ -4,6 +4,7 @@ import rapid.{Fiber, Task}
 
 import java.util.concurrent.atomic.AtomicLong
 import scala.concurrent.duration._
+import scribe.{rapid => logger}
 
 case class BufferManager(checkEvery: FiniteDuration = 10.seconds,
                          triggerAfter: Int = 100,
@@ -15,7 +16,7 @@ case class BufferManager(checkEvery: FiniteDuration = 10.seconds,
   private val lastCheck = new AtomicLong(System.currentTimeMillis())
   private var keepAlive = true
 
-  def start: Fiber[Unit] = recurse(0).start
+  def start: Fiber[Unit] = recurse(0).start()
 
   def stop(): Task[Unit] = Task {
     keepAlive = false
@@ -50,7 +51,7 @@ case class BufferManager(checkEvery: FiniteDuration = 10.seconds,
       }
       log
         .flatMap { _ =>
-          Task.sleep(checkEvery).flatMap(_ => recurse(failures + 1)).whenA(keepAlive)
+          Task.sleep(checkEvery).flatMap(_ => recurse(failures + 1)).when(keepAlive)
         }
     }
 }

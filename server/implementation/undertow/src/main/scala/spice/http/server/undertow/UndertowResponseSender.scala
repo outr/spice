@@ -1,6 +1,6 @@
 package spice.http.server.undertow
 
-import cats.effect.IO
+import rapid._
 import io.undertow.io.{IoCallback, Sender}
 import io.undertow.server.HttpServerExchange
 import io.undertow.server.handlers.resource.URLResource
@@ -18,9 +18,9 @@ import cats.effect.unsafe.implicits.global
 object UndertowResponseSender {
   def apply(undertow: HttpServerExchange,
             server: HttpServer,
-            exchange: HttpExchange): IO[Unit] = {
+            exchange: HttpExchange): Task[Unit] = {
     finalResponse(server, exchange).flatMap { response =>
-      IO[Option[Content]] {
+      Task[Option[Content]] {
         undertow.setStatusCode(response.status.code)
         response.headers.map.foreach {
           case (key, values) => undertow.getResponseHeaders.putAll(new HttpString(key), values.asJava)
@@ -32,7 +32,7 @@ object UndertowResponseSender {
     }
   }
 
-  private def sendContent(contentOption: Option[Content], undertow: HttpServerExchange, server: HttpServer): IO[Unit] = {
+  private def sendContent(contentOption: Option[Content], undertow: HttpServerExchange, server: HttpServer): Task[Unit] = {
     contentOption match {
       case Some(content) => content match {
         case fc: FileContent => IO.blocking(ResourceServer.serve(undertow, fc))
@@ -126,7 +126,7 @@ object UndertowResponseSender {
     }
   }
 
-  private def finalResponse(server: HttpServer, exchange: HttpExchange): IO[HttpResponse] = IO {
+  private def finalResponse(server: HttpServer, exchange: HttpExchange): Task[HttpResponse] = Task {
     var response = exchange.response
 
     // Add the Server header if not already set

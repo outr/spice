@@ -1,6 +1,6 @@
 package spice.http.server
 
-import cats.effect.IO
+import rapid.Task
 import spice.http.{CacheControl, HttpExchange, HttpStatus}
 import spice.http.content.Content
 import spice.http.server.dsl.string2Content
@@ -18,8 +18,8 @@ object DefaultErrorHandler extends ErrorHandler {
     </body>
   </html>""".withContentType(ContentType.`text/html`).withLastModified(lastModified)
 
-  override def handle(exchange: HttpExchange, t: Option[Throwable]): IO[HttpExchange] = {
-    exchange.modify { response => IO {
+  override def handle(exchange: HttpExchange, t: Option[Throwable]): Task[HttpExchange] = {
+    exchange.modify { response => Task {
       val status = if (response.status.isError) {
         response.status
       } else {

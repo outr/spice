@@ -1,12 +1,12 @@
 package spice.openapi.server
 
-import cats.effect.IO
+import rapid._
 import fabric.rw._
 import scribe.mdc.MDC
 import spice.http.HttpMethod
 import spice.net.ContentType
 
-case class TypedServiceCall[Req, Res](call: ServiceRequest[Req] => IO[ServiceResponse[Res]],
+case class TypedServiceCall[Req, Res](call: ServiceRequest[Req] => Task[ServiceResponse[Res]],
                                       method: HttpMethod,
                                       responseTypes: List[ResponseType] = List(ResponseType(ContentType.`application/json`)),
                                       summary: String,
@@ -23,5 +23,5 @@ case class TypedServiceCall[Req, Res](call: ServiceRequest[Req] => IO[ServiceRes
   override type Response = Res
 
   override def apply(request: ServiceRequest[Request])
-                    (implicit mdc: MDC): IO[ServiceResponse[Response]] = call(request)
+                    (implicit mdc: MDC): Task[ServiceResponse[Response]] = call(request)
 }

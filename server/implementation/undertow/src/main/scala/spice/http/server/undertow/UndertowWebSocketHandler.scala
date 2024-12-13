@@ -1,6 +1,6 @@
 package spice.http.server.undertow
 
-import cats.effect.IO
+import rapid._
 import cats.effect.unsafe.implicits.global
 import io.undertow.Handlers
 import io.undertow.server.HttpServerExchange
@@ -17,7 +17,7 @@ object UndertowWebSocketHandler {
   def apply(undertow: HttpServerExchange,
             server: HttpServer,
             exchange: HttpExchange,
-            webSocketListener: WebSocketListener): IO[Unit] = IO {
+            webSocketListener: WebSocketListener): Task[Unit] = Task {
     val handler = Handlers.websocket(new WebSocketConnectionCallback {
       override def onConnect(exchange: WebSocketHttpExchange, channel: WebSocketChannel): Unit = {
         // Handle sending messages

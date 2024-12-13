@@ -1,6 +1,6 @@
 package spec
 
-import cats.effect.IO
+import rapid._
 import cats.effect.testing.scalatest.AsyncIOSpec
 import fabric.rw._
 import org.scalatest.matchers.should.Matchers
@@ -147,8 +147,8 @@ class UndertowServerSpec extends AsyncWordSpec with AsyncIOSpec with Matchers {
 
   object ReverseService extends Restful[ReverseRequest, ReverseResponse] {
     override def apply(exchange: HttpExchange, request: ReverseRequest)
-                      (implicit mdc: MDC): IO[RestfulResponse[ReverseResponse]] = {
-      IO.pure(RestfulResponse(ReverseResponse(Some(request.value.reverse), Nil), HttpStatus.OK))
+                      (implicit mdc: MDC): Task[RestfulResponse[ReverseResponse]] = {
+      Task.pure(RestfulResponse(ReverseResponse(Some(request.value.reverse), Nil), HttpStatus.OK))
     }
 
     override def error(errors: List[ValidationError], status: HttpStatus): RestfulResponse[ReverseResponse] = {
@@ -158,8 +158,8 @@ class UndertowServerSpec extends AsyncWordSpec with AsyncIOSpec with Matchers {
 
   object LettersOnlyService extends Restful[String, String] {
     override def apply(exchange: HttpExchange, text: String)
-                      (implicit mdc: MDC): IO[RestfulResponse[String]] = {
-      IO.pure(RestfulResponse[String](text.filter((c: Char) => c.isLetter), HttpStatus.OK))
+                      (implicit mdc: MDC): Task[RestfulResponse[String]] = {
+      Task.pure(RestfulResponse[String](text.filter((c: Char) => c.isLetter), HttpStatus.OK))
     }
 
     override def error(errors: List[ValidationError], status: HttpStatus): RestfulResponse[String] =
@@ -168,8 +168,8 @@ class UndertowServerSpec extends AsyncWordSpec with AsyncIOSpec with Matchers {
 
   object ServerTimeService extends Restful[Unit, Long] {
     override def apply(exchange: HttpExchange, request: Unit)
-                      (implicit mdc: MDC): IO[RestfulResponse[Long]] = {
-      IO.pure(RestfulResponse(System.currentTimeMillis(), HttpStatus.OK))
+                      (implicit mdc: MDC): Task[RestfulResponse[Long]] = {
+      Task.pure(RestfulResponse(System.currentTimeMillis(), HttpStatus.OK))
     }
 
     override def error(errors: List[ValidationError], status: HttpStatus): RestfulResponse[Long] = {
