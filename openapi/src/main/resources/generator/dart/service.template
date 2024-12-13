@@ -3,6 +3,7 @@ import 'dart:typed_data';
 import 'package:file_saver/file_saver.dart';
 import 'package:http/http.dart' as http;
 import 'package:file_picker/file_picker.dart';
+import 'package:outr_flutter/application.dart';
 
 %%IMPORTS%%
 
@@ -31,8 +32,9 @@ class Service {
           body: body
       );
       return convert(jsonDecode(response.body));
-    } on Exception catch(exc) {
+    } catch(exc) {
       String message = exc.toString();
+      Application.logger.e('Error occurred handling response for $path: $message');
       Map<String, dynamic> json = jsonDecode('{"error": {"message": "$message"} }');
       return convert(json);
     }
