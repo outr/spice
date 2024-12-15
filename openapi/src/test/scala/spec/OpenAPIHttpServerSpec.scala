@@ -1,17 +1,16 @@
 package spec
 
 import rapid._
-import cats.effect.testing.scalatest.AsyncIOSpec
 import fabric.rw._
 import org.scalatest.matchers.should.Matchers
-import org.scalatest.wordspec.AsyncWordSpec
+import org.scalatest.wordspec.{AnyWordSpec, AsyncWordSpec}
 import spice.http.server.rest.FileUpload
 import spice.net._
 import spice.openapi.generator.OpenAPIGeneratorConfig
 import spice.openapi.generator.dart.OpenAPIDartGenerator
 import spice.openapi.server.{OpenAPIHttpServer, RestService, Service}
 
-class OpenAPIHttpServerSpec extends AsyncWordSpec with AsyncIOSpec with Matchers {
+class OpenAPIHttpServerSpec extends AnyWordSpec with Matchers {
   "OpenAPIHttpServer" should {
     "verify the YAML generated is correct" in {
       val expected = TestUtils.loadString("openapi-server.yaml")

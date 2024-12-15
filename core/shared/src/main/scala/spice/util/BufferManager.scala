@@ -1,6 +1,6 @@
 package spice.util
 
-import rapid.{Fiber, Task}
+import rapid._
 
 import java.util.concurrent.atomic.AtomicLong
 import scala.concurrent.duration._

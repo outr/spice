@@ -1,12 +1,10 @@
 package spec
 
 import rapid._
-import cats.effect.testing.scalatest.AsyncIOSpec
-import fabric.io.JsonParser
 import fabric.{Str, obj}
 import fabric.rw._
 import org.scalatest.matchers.should.Matchers
-import org.scalatest.wordspec.AsyncWordSpec
+import org.scalatest.wordspec.{AnyWordSpec, AsyncWordSpec}
 import scribe.mdc.MDC
 import spice.ValidationError
 import spice.http.content.{Content, FormDataContent, JsonContent, StringContent}
@@ -19,7 +17,7 @@ import spice.net._
 
 import java.io.File
 
-class ServerSpec extends AsyncWordSpec with AsyncIOSpec with Matchers {
+class ServerSpec extends AnyWordSpec with Matchers {
   object server extends MutableHttpServer
 
   "TestHttpApplication" should {
@@ -47,12 +45,12 @@ class ServerSpec extends AsyncWordSpec with AsyncIOSpec with Matchers {
     "receive OK for test.html" in {
       server.handle(HttpExchange(HttpRequest(url = url"http://localhost/test.html"))).map { exchange =>
         exchange.response.status should be(HttpStatus.OK)
-      }
+      }.sync()
     }
     "receive NotFound for other.html" in {
       server.handle(HttpExchange(HttpRequest(url = url"http://localhost/other.html"))).map { exchange =>
         exchange.response.status should be(HttpStatus.NotFound)
-      }
+      }.sync()
     }
     "reverse a String with the Restful endpoint via POST" in {
       val content = Content.json(ReverseRequest("Testing").json)
@@ -66,7 +64,7 @@ class ServerSpec extends AsyncWordSpec with AsyncIOSpec with Matchers {
         val response = json.as[ReverseResponse]
         response.errors should be(Nil)
         response.reversed should be(Some("gnitseT"))
-      }
+      }.sync()
     }
     "reverse a String with the Restful endpoint via GET" in {
       server.handle(HttpExchange(HttpRequest(
@@ -78,7 +76,7 @@ class ServerSpec extends AsyncWordSpec with AsyncIOSpec with Matchers {
         val response = json.as[ReverseResponse]
         response.errors should be(Nil)
         response.reversed should be(Some("gnitseT"))
-      }
+      }.sync()
     }
     "reverse a String with the Restful endpoint via GET with path-based arg" in {
       server.handle(HttpExchange(HttpRequest(
@@ -90,7 +88,7 @@ class ServerSpec extends AsyncWordSpec with AsyncIOSpec with Matchers {
         val response = json.as[ReverseResponse]
         response.errors should be(Nil)
         response.reversed should be(Some("gnitseT"))
-      }
+      }.sync()
     }
     "call a Restful endpoint that takes Unit as the request" in {
       val begin = System.currentTimeMillis()
@@ -102,7 +100,7 @@ class ServerSpec extends AsyncWordSpec with AsyncIOSpec with Matchers {
         val json = exchange.response.content.get.asInstanceOf[JsonContent].json
         val response = json.as[Long]
         response should be >= begin
-      }
+      }.sync()
     }
     "call a Restful endpoint that takes multipart content" in {
       server.handle(HttpExchange(HttpRequest(
@@ -118,7 +116,7 @@ class ServerSpec extends AsyncWordSpec with AsyncIOSpec with Matchers {
         val json = exchange.response.content.get.asInstanceOf[JsonContent].json
         val fileName = json.as[String]
         fileName should be("test.png")
-      }
+      }.sync()
     }
   }
 

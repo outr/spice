@@ -39,7 +39,7 @@ class JVMHttpClientSpec extends AnyWordSpec with Matchers {
           if (counter > 0) {
             callMultiple(counter - 1)
           } else {
-            IO.unit
+            Task.unit
           }
         }
       }

@@ -4,13 +4,13 @@ object Dependencies {
   object version {
     val profig: String = "3.4.16"
     
-    val scribe: String = "3.15.3-SNAPSHOT"
+    val scribe: String = "3.15.3"
 
     val fabric: String = "1.15.4"
     
     val reactify: String = "4.1.3"
 
-    val rapid: String = "0.2.0-SNAPSHOT"
+    val rapid: String = "0.2.2"
     
     val literally: String = "1.2.0"
     

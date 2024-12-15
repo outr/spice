@@ -1,7 +1,6 @@
 package spice.http.server.undertow
 
 import rapid._
-import cats.effect.unsafe.implicits.global
 import io.undertow.Handlers
 import io.undertow.server.HttpServerExchange
 import io.undertow.websockets.WebSocketConnectionCallback
@@ -62,7 +61,7 @@ object UndertowWebSocketHandler {
           }
         })
         channel.resumeReceives()
-        webSocketListener.connect().unsafeRunSync()
+        webSocketListener.connect().sync()
       }
     })
     if (server.config.webSocketCompression()) {

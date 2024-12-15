@@ -51,10 +51,7 @@ object UndertowRequestParser {
         case ct =>
           Option(exchange.getRequestChannel) match {
             case Some(channel) =>
-              val stream = fs2.io.readInputStream[IO](
-                fis = Task(new ChannelInputStream(channel)),
-                chunkSize = 1024
-              )
+              val stream = rapid.Stream.fromInputStream(Task(new ChannelInputStream(channel)))
               Some(StreamContent(stream, ct))
             case None => throw new NullPointerException(s"Channel is null for request channel. Probably already consumed.")
           }

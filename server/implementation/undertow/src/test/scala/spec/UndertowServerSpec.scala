@@ -1,10 +1,9 @@
 package spec
 
 import rapid._
-import cats.effect.testing.scalatest.AsyncIOSpec
 import fabric.rw._
 import org.scalatest.matchers.should.Matchers
-import org.scalatest.wordspec.AsyncWordSpec
+import org.scalatest.wordspec.{AnyWordSpec, AsyncWordSpec}
 import profig.Profig
 import scribe.mdc.MDC
 import spice.ValidationError
@@ -17,7 +16,7 @@ import spice.http.server.dsl._
 import spice.http.server.rest.{Restful, RestfulResponse}
 import spice.net._
 
-class UndertowServerSpec extends AsyncWordSpec with AsyncIOSpec with Matchers {
+class UndertowServerSpec extends AnyWordSpec with Matchers {
   "UndertowServerSpec" should {
     object server extends MutableHttpServer
     def serverPort: Int = server.config.listeners().head.port.getOrElse(0)
@@ -42,7 +41,7 @@ class UndertowServerSpec extends AsyncWordSpec with AsyncIOSpec with Matchers {
     "start the server" in {
       server.start().map { _ =>
         server.isRunning should be(true)
-      }
+      }.sync()
     }
     "receive OK for test.txt" in {
       client
@@ -53,7 +52,7 @@ class UndertowServerSpec extends AsyncWordSpec with AsyncIOSpec with Matchers {
           response.content.get.asString.map { content =>
             content should be("test!")
           }
-        }
+        }.sync()
     }
     "receive NotFound for test.html" in {
       client
@@ -61,7 +60,7 @@ class UndertowServerSpec extends AsyncWordSpec with AsyncIOSpec with Matchers {
         .send()
         .map { response =>
           response.status should be(HttpStatus.NotFound)
-        }
+        }.sync()
     }
     "reverse a String with the Restful endpoint via POST" in {
       client
@@ -71,7 +70,7 @@ class UndertowServerSpec extends AsyncWordSpec with AsyncIOSpec with Matchers {
           val response = attempt.getOrElse(fail("Response failure!"))
           response.errors should be(Nil)
           response.reversed should be(Some("gnitset"))
-        }
+        }.sync()
     }
     "reverse a String with the Restful endpoint via GET" in {
       client
@@ -82,7 +81,7 @@ class UndertowServerSpec extends AsyncWordSpec with AsyncIOSpec with Matchers {
           val response = attempt.getOrElse(fail("Response failure!"))
           response.errors should be(Nil)
           response.reversed should be(Some("gnitset"))
-        }
+        }.sync()
     }
     "reverse a String with the Restful endpoint via GET with path-based arg" in {
       client
@@ -92,7 +91,7 @@ class UndertowServerSpec extends AsyncWordSpec with AsyncIOSpec with Matchers {
           val response = attempt.getOrElse(fail("Response failure!"))
           response.errors should be(Nil)
           response.reversed should be(Some("gnitset"))
-        }
+        }.sync()
     }
     "call a Restful endpoint that takes Unit as the request" in {
       val begin = System.currentTimeMillis()
@@ -102,7 +101,7 @@ class UndertowServerSpec extends AsyncWordSpec with AsyncIOSpec with Matchers {
         .map(_.getOrElse(throw new RuntimeException("Failure!")))
         .map { time =>
           time should be >= begin
-        }
+        }.sync()
     }
     "call a Restful endpoint that takes a String as the request" in {
       client
@@ -111,7 +110,7 @@ class UndertowServerSpec extends AsyncWordSpec with AsyncIOSpec with Matchers {
         .map(_.getOrElse(throw new RuntimeException("Failure!")))
         .map { result =>
           result should be("testtesttest")
-        }
+        }.sync()
     }
     "start an adhoc server on any available port and make sure it propagates back" in {
       val testServer = new MutableHttpServer
@@ -124,12 +123,12 @@ class UndertowServerSpec extends AsyncWordSpec with AsyncIOSpec with Matchers {
         testServer.config.listeners().head.port should not be Some(8282)
         testServer.config.listeners().last.port should be(Some(8282))
         testServer.stop()
-      }
+      }.sync()
     }
     "stop the server" in {
       server.stop().map { _ =>
         server.isRunning should be(false)
-      }
+      }.sync()
     }
   }
 

@@ -14,7 +14,7 @@ import spice.http.{HttpExchange, HttpMethod, HttpStatus}
 import spice.net.{URL, URLPath}
 
 import scala.collection.mutable.ListBuffer
-import scala.concurrent.duration.Duration
+import scala.concurrent.duration.{Duration, DurationInt, FiniteDuration}
 import scala.language.experimental.macros
 
 abstract class Restful[Request, Response](implicit val requestRW: RW[Request],
@@ -37,7 +37,7 @@ abstract class Restful[Request, Response](implicit val requestRW: RW[Request],
 
   def error(errors: List[ValidationError], status: HttpStatus): RestfulResponse[Response]
 
-  def timeout: Duration = Duration.Inf
+  def timeout: FiniteDuration = 24.hours
 
   protected def ok(response: Response): RestfulResponse[Response] = this.response(response, HttpStatus.OK)
 
@@ -103,7 +103,7 @@ abstract class Restful[Request, Response](implicit val requestRW: RW[Request],
               apply(exchange, updatedRequest)
                 .timeout(timeout)
                 .handleError { throwable =>
-                  error(throwable)
+                  Task(error(throwable))
                 }
             } catch {
               case t: Throwable => Task.pure(error(t))
@@ -126,7 +126,7 @@ abstract class Restful[Request, Response](implicit val requestRW: RW[Request],
 
   protected def responseToContent(response: Response): Task[Content] = response match {
     case content: Content => Task.pure(content)
-    case _ => IO.blocking {
+    case _ => Task {
       val json = response.json
       Content.json(json, compact = false)
     }
@@ -175,7 +175,7 @@ object Restful {
 
   def jsonFromExchange(exchange: HttpExchange): Task[Json] = {
     val request = exchange.request
-    val content = request.content match {
+    val content: Task[Json] = request.content match {
       case Some(content) => jsonFromContent(content)
       case None => Task.pure(obj())
     }

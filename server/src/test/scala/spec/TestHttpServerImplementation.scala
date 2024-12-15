@@ -11,12 +11,12 @@ class TestHttpServerImplementation(server: HttpServer) extends HttpServerImpleme
 
   override def start(server: HttpServer): Task[Unit] = {
     running = true
-    IO.unit
+    Task.unit
   }
 
   override def stop(server: HttpServer): Task[Unit] = {
     running = false
-    IO.unit
+    Task.unit
   }
 }
 
