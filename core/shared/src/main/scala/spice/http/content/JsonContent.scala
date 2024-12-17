@@ -1,9 +1,9 @@
 package spice.http.content
 
-import cats.effect.IO
 import fabric.Json
 import fabric.io.JsonFormatter
 import fabric.rw._
+import rapid.Task
 import spice.net.ContentType
 
 case class JsonContent(json: Json,
@@ -17,10 +17,10 @@ case class JsonContent(json: Json,
   override def withContentType(contentType: ContentType): Content = copy(contentType = contentType)
   override def withLastModified(lastModified: Long): Content = copy(lastModified = lastModified)
 
-  override def asString: IO[String] = IO.pure(value)
+  override def asString: Task[String] = Task.pure(value)
 
-  override def asStream: fs2.Stream[IO, Byte] =
-    fs2.Stream.fromIterator[IO](value.getBytes("UTF-8").iterator, 1024)
+  override def asStream: rapid.Stream[Byte] =
+    new rapid.Stream(Task(value.getBytes("UTF-8").iterator))
 }
 
 object JsonContent {

@@ -1,6 +1,6 @@
 package spec
 
-import cats.effect.IO
+import rapid._
 import fabric.rw._
 import moduload.Moduload
 import org.scalatest.matchers.should.Matchers
@@ -32,14 +32,14 @@ class OkHttpClientSpec extends AnyWordSpec with Matchers {
       var calls = 0
       val limiter = Interceptor.rateLimited(1.seconds)
 
-      def callMultiple(counter: Int): IO[Unit] = {
+      def callMultiple(counter: Int): Task[Unit] = {
         HttpClient.interceptor(limiter).url(url"https://httpbin.org/user-agent").get.send().flatMap { response =>
           response.status should be(HttpStatus.OK)
           calls += 1
           if (counter > 0) {
             callMultiple(counter - 1)
           } else {
-            IO.unit
+            Task.unit
           }
         }
       }

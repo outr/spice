@@ -1,6 +1,6 @@
 package spice.http
 
-import cats.effect.IO
+import rapid.Task
 import spice.UserException
 import spice.http.content.Content
 import spice.net.URLPath
@@ -11,24 +11,24 @@ case class HttpExchange(request: HttpRequest,
                         path: URLPath,
                         store: Store,
                         finished: Boolean) {
-  def modify(f: HttpResponse => IO[HttpResponse]): IO[HttpExchange] = {
+  def modify(f: HttpResponse => Task[HttpResponse]): Task[HttpExchange] = {
     f(response).map(r => copy(response = r))
   }
 
-  def withContent(content: Content): IO[HttpExchange] = modify { response =>
-    IO.pure(response.withContent(content))
+  def withContent(content: Content): Task[HttpExchange] = modify { response =>
+    Task.pure(response.withContent(content))
   }
 
   def isWebSocketUpgradeRequest: Boolean = Headers.`Connection`.all(request.headers).exists(_.equalsIgnoreCase("Upgrade"))
 
   def webSocketListener: Option[WebSocketListener] = store.get[WebSocketListener](WebSocketListener.key)
 
-  def withWebSocketListener(): IO[(HttpExchange, WebSocketListener)] = {
+  def withWebSocketListener(): Task[(HttpExchange, WebSocketListener)] = {
     if (isWebSocketUpgradeRequest) {
       val listener = new WebSocketListener
       store.update(WebSocketListener.key, listener)
       modify { response =>
-        IO(response.withStatus(HttpStatus.SwitchingProtocols))
+        Task(response.withStatus(HttpStatus.SwitchingProtocols))
       }.map(exchange => (exchange, listener))
     } else {
       throw UserException(s"Not a WebSocket upgrade request! Expected 'Connection' set to 'Upgrade'. Headers: ${request.headers}")

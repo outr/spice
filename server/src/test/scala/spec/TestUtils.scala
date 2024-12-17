@@ -1,6 +1,5 @@
 package spec
 
-import cats.effect.unsafe.implicits.global
 import fabric.Json
 import fabric.io.{JsonParser, YamlParser}
 import spice.streamer._
@@ -14,7 +13,7 @@ object TestUtils {
     Streamer(
       stream,
       new mutable.StringBuilder
-    ).unsafeRunSync().toString
+    ).sync().toString
   }
 
   def loadJson(name: String): Json = JsonParser(loadString(name))

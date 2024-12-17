@@ -1,6 +1,6 @@
 package spice.openapi.server
 
-import cats.effect.IO
+import rapid._
 import fabric.rw._
 import spice.http.HttpMethod
 import spice.http.content.Content
@@ -30,9 +30,9 @@ abstract class RestService extends Service {
 
   protected def description: String = summary
 
-  protected def apply(request: Request): IO[Response]
+  protected def apply(request: Request): Task[Response]
 
-  def call(request: ServiceRequest[Request]): IO[ServiceResponse[Response]] = apply(request.request).flatMap { response =>
+  def call(request: ServiceRequest[Request]): Task[ServiceResponse[Response]] = apply(request.request).flatMap { response =>
     val content = response match {
       case content: Content => content
       case _ => Content.jsonFrom(response)
@@ -45,7 +45,7 @@ object RestService {
   def apply[Req, Res](urlPath: URLPath,
                       serviceSummary: String,
                       types: List[ResponseType] = List(ResponseType(ContentType.`application/json`)))
-                     (f: Req => IO[Res])
+                     (f: Req => Task[Res])
                      (implicit reqRW: RW[Req], resRW: RW[Res]): TypedRestService[Req, Res] = TypedRestService[Req, Res](
     path = urlPath,
     summary = serviceSummary,

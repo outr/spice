@@ -1,6 +1,6 @@
 package spice.http.server.undertow
 
-import cats.effect.IO
+import rapid._
 import io.undertow.{Undertow, UndertowOptions}
 import io.undertow.predicate.Predicates
 import io.undertow.server.{HttpServerExchange, HttpHandler => UndertowHttpHandler}
@@ -14,7 +14,6 @@ import spice.http.server.{HttpServer, HttpServerImplementation, HttpServerImplem
 import spice.net.{MalformedURLException, URL}
 
 import java.util.logging.LogManager
-import cats.effect.unsafe.implicits.global
 import scribe.mdc.MDC
 
 import scala.jdk.CollectionConverters.ListHasAsScala
@@ -22,7 +21,7 @@ import scala.jdk.CollectionConverters.ListHasAsScala
 class UndertowServerImplementation(server: HttpServer) extends HttpServerImplementation with UndertowHttpHandler {
   private val instance: Var[Option[Undertow]] = Var(None)
 
-  override def start(server: HttpServer): IO[Unit] = IO {
+  override def start(server: HttpServer): Task[Unit] = Task {
     val contentEncodingRepository = new ContentEncodingRepository()
       .addEncodingHandler("gzip", new GzipEncodingProvider, 100, Predicates.requestLargerThan(5L))
       .addEncodingHandler("deflate", new DeflateEncodingProvider, 50, Predicates.requestLargerThan(5L))
@@ -90,7 +89,7 @@ class UndertowServerImplementation(server: HttpServer) extends HttpServerImpleme
 
   override def isRunning: Boolean = instance().nonEmpty
 
-  override def stop(server: HttpServer): IO[Unit] = IO {
+  override def stop(server: HttpServer): Task[Unit] = Task {
     instance() match {
       case Some(u) =>
         u.stop()
@@ -112,24 +111,25 @@ class UndertowServerImplementation(server: HttpServer) extends HttpServerImpleme
             mdc("url") = url
             val io = UndertowRequestParser(undertow, url).flatMap { request =>
               val exchange = HttpExchange(request)
-              server.handle(exchange)
-                .redeemWith(server.errorRecovery(exchange, _), IO.pure)
+              server.handle(exchange).handleError { throwable =>
+                server.errorRecovery(exchange, throwable)
+              }
             }.flatMap { exchange =>
               exchange.webSocketListener match {
                 case Some(webSocketListener) => UndertowWebSocketHandler(undertow, server, exchange, webSocketListener)
                 case None => UndertowResponseSender(undertow, server, exchange)
               }
-            }.redeemWith({ throwable =>
+            }.handleError { throwable =>
               scribe.error("Unrecoverable error parsing request!", throwable)
               throw throwable
-            }, IO.pure)
-            io.unsafeRunAndForget()(server.ioRuntime)
+            }
+            io.start()
           }
         }
       })
     } catch {
       case exc: MalformedURLException => scribe.warn(exc.message)
-      case throwable: Throwable => server.errorLogger(throwable, None, None).unsafeRunAndForget()
+      case throwable: Throwable => server.errorLogger(throwable, None, None).start()
     }
   }
 }

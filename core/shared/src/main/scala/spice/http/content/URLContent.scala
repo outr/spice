@@ -1,7 +1,6 @@
 package spice.http.content
 
-import cats.effect.IO
-import cats.effect.unsafe.implicits.global
+import rapid.Task
 import spice.net.ContentType
 import spice.streamer._
 
@@ -30,7 +29,7 @@ case class URLContent(url: URL, contentType: ContentType, lastModifiedOverride: 
 
   override def toString: String = s"URLContent(url: $url, contentType: $contentType)"
 
-  override def asString: IO[String] = Streamer(url, new mutable.StringBuilder).map(_.toString)
+  override def asString: Task[String] = Streamer(url, new mutable.StringBuilder).map(_.toString)
 
-  override def asStream: fs2.Stream[IO, Byte] = fs2.io.readInputStream[IO](IO(url.openStream()), 1024)
+  override def asStream: rapid.Stream[Byte] = rapid.Stream.fromInputStream(Task(url.openStream()))
 }

@@ -1,6 +1,6 @@
 package spice.openapi.server
 
-import cats.effect.IO
+import rapid._
 import scribe.mdc.MDC
 import spice.http.{HttpExchange, paths}
 import spice.http.content.Content

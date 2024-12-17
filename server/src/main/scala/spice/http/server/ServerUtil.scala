@@ -1,19 +1,19 @@
 package spice.http.server
 
-import cats.effect.IO
+import rapid.Task
 
 import java.net.{BindException, InetAddress, ServerSocket}
-import scribe.cats.{io => logger}
+import scribe.{rapid => logger}
 import spice.net.IP
 
 object ServerUtil {
-  def isPortAvailable(port: Int, host: String = "127.0.0.1"): IO[Boolean] = findAvailablePort(List(port), host)
+  def isPortAvailable(port: Int, host: String = "127.0.0.1"): Task[Boolean] = findAvailablePort(List(port), host)
     .map(_.isDefined)
 
-  def findAvailablePort(ports: Seq[Int] = List(0), host: String = "127.0.0.1"): IO[Option[Int]] = if (ports.isEmpty) {
-    IO.pure(None)
+  def findAvailablePort(ports: Seq[Int] = List(0), host: String = "127.0.0.1"): Task[Option[Int]] = if (ports.isEmpty) {
+    Task.pure(None)
   } else {
-    val io = IO {
+    val task = Task[Option[Int]] {
       val port = ports.head
       scribe.info(s"Attempting port: $port")
       val ss = new ServerSocket(port, 50, InetAddress.getByName(host))
@@ -23,12 +23,11 @@ object ServerUtil {
         ss.close()
       }
     }
-    io.redeemWith({
+    task.handleError {
       case exc: BindException if exc.getMessage.startsWith("Address already in use") =>
         findAvailablePort(ports.tail, host)
-      case exc =>
-        logger.error(s"Error occurred attempting to bind to $host:${ports.head}", exc).map(_ => None)
-    }, IO.pure)
+      case exc => logger.error(s"Error occurred attempting to bind to $host:${ports.head}", exc).map(_ => None)
+    }
   }
 
   def localIPs(): List[IP] = {

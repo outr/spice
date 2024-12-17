@@ -1,6 +1,5 @@
 package spice.openapi.generator.dart
 
-import cats.effect.unsafe.implicits.global
 import fabric.{Json, Str}
 import spice.http.HttpMethod
 import spice.net.ContentType
@@ -490,7 +489,7 @@ object OpenAPIDartGenerator extends OpenAPIGenerator {
     Streamer(
       stream,
       new mutable.StringBuilder
-    ).unsafeRunSync().toString
+    ).sync().toString
   }
 
   case class ParsedField(`type`: String, name: String, nullable: Boolean) {

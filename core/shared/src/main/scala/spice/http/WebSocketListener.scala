@@ -1,11 +1,11 @@
 package spice.http
 
-import cats.effect.IO
+import rapid.Task
 
 class WebSocketListener extends WebSocket {
-  override def connect(): IO[ConnectionStatus] = {
+  override def connect(): Task[ConnectionStatus] = {
     _status @= ConnectionStatus.Open
-    IO.pure(ConnectionStatus.Open)
+    Task.pure(ConnectionStatus.Open)
   }
 
   override def disconnect(): Unit = {

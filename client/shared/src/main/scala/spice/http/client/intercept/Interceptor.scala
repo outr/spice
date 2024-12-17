@@ -1,15 +1,15 @@
 package spice.http.client.intercept
 
-import cats.effect.IO
+import rapid.Task
 import spice.http.{HttpRequest, HttpResponse}
 
 import scala.concurrent.duration.FiniteDuration
 import scala.util.Try
 
 trait Interceptor {
-  def before(request: HttpRequest): IO[HttpRequest]
+  def before(request: HttpRequest): Task[HttpRequest]
 
-  def after(request: HttpRequest, result: Try[HttpResponse]): IO[Try[HttpResponse]]
+  def after(request: HttpRequest, result: Try[HttpResponse]): Task[Try[HttpResponse]]
 }
 
 object Interceptor {

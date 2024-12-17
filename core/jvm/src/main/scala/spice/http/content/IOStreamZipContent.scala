@@ -1,7 +1,6 @@
 package spice.http.content
 
-import cats.effect.IO
-import cats.effect.unsafe.implicits.global
+import rapid.Task
 import spice.net.ContentType
 import spice.streamer._
 
@@ -25,12 +24,12 @@ class IOStreamZipContent(entries: List[ZipFileEntry],
     entries.foreach { e =>
       val entry = new ZipEntry(e.path)
       zos.putNextEntry(entry)
-      Streamer(e.file, zos, closeOnComplete = false).unsafeRunSync()
+      Streamer(e.file, zos, closeOnComplete = false).sync()
       zos.closeEntry()
     }
     zos.flush()
     zos.close()
   }
 
-  override def asString: IO[String] = IO(entries.mkString(", "))
+  override def asString: Task[String] = Task(entries.mkString(", "))
 }

@@ -1,10 +1,10 @@
 package spice.http.content
 
-import cats.effect.IO
 import fabric.define.DefType
 import fabric.{Json, Null}
 import fabric.io.JsonParser
 import fabric.rw._
+import rapid.Task
 
 import java.io.File
 import spice.http.Headers
@@ -54,9 +54,9 @@ case class FormDataContent(entries: Map[String, FormDataEntry]) extends Content 
 
   override def toString: String = s"FormDataContent(${entries.map(t => s"${t._1}: ${t._2}")})"
 
-  override def asString: IO[String] = IO.pure(toString)
+  override def asString: Task[String] = Task.pure(toString)
 
-  override def asStream: fs2.Stream[IO, Byte] = throw new UnsupportedOperationException("FormDataContent cannot be represented as a stream!")
+  override def asStream: rapid.Stream[Byte] = throw new UnsupportedOperationException("FormDataContent cannot be represented as a stream!")
 }
 
 object FormDataContent extends FormDataContent(Map.empty) {

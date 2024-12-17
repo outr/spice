@@ -1,12 +1,10 @@
 package spec
 
-import cats.effect.IO
-import cats.effect.testing.scalatest.AsyncIOSpec
-import fabric.io.JsonParser
+import rapid._
 import fabric.{Str, obj}
 import fabric.rw._
 import org.scalatest.matchers.should.Matchers
-import org.scalatest.wordspec.AsyncWordSpec
+import org.scalatest.wordspec.{AnyWordSpec, AsyncWordSpec}
 import scribe.mdc.MDC
 import spice.ValidationError
 import spice.http.content.{Content, FormDataContent, JsonContent, StringContent}
@@ -19,15 +17,15 @@ import spice.net._
 
 import java.io.File
 
-class ServerSpec extends AsyncWordSpec with AsyncIOSpec with Matchers {
+class ServerSpec extends AnyWordSpec with Matchers {
   object server extends MutableHttpServer
 
   "TestHttpApplication" should {
     "configure the TestServer" in {
       server.handler.matcher(paths.exact("/test.html")).wrap(new HttpHandler {
-        override def handle(exchange: HttpExchange)(implicit mdc: MDC): IO[HttpExchange] = {
+        override def handle(exchange: HttpExchange)(implicit mdc: MDC): Task[HttpExchange] = {
           exchange.modify { response =>
-            IO(response.withContent(Content.string("test!", ContentType.`text/plain`)))
+            Task(response.withContent(Content.string("test!", ContentType.`text/plain`)))
           }
         }
       })
@@ -47,12 +45,12 @@ class ServerSpec extends AsyncWordSpec with AsyncIOSpec with Matchers {
     "receive OK for test.html" in {
       server.handle(HttpExchange(HttpRequest(url = url"http://localhost/test.html"))).map { exchange =>
         exchange.response.status should be(HttpStatus.OK)
-      }
+      }.sync()
     }
     "receive NotFound for other.html" in {
       server.handle(HttpExchange(HttpRequest(url = url"http://localhost/other.html"))).map { exchange =>
         exchange.response.status should be(HttpStatus.NotFound)
-      }
+      }.sync()
     }
     "reverse a String with the Restful endpoint via POST" in {
       val content = Content.json(ReverseRequest("Testing").json)
@@ -66,7 +64,7 @@ class ServerSpec extends AsyncWordSpec with AsyncIOSpec with Matchers {
         val response = json.as[ReverseResponse]
         response.errors should be(Nil)
         response.reversed should be(Some("gnitseT"))
-      }
+      }.sync()
     }
     "reverse a String with the Restful endpoint via GET" in {
       server.handle(HttpExchange(HttpRequest(
@@ -78,7 +76,7 @@ class ServerSpec extends AsyncWordSpec with AsyncIOSpec with Matchers {
         val response = json.as[ReverseResponse]
         response.errors should be(Nil)
         response.reversed should be(Some("gnitseT"))
-      }
+      }.sync()
     }
     "reverse a String with the Restful endpoint via GET with path-based arg" in {
       server.handle(HttpExchange(HttpRequest(
@@ -90,7 +88,7 @@ class ServerSpec extends AsyncWordSpec with AsyncIOSpec with Matchers {
         val response = json.as[ReverseResponse]
         response.errors should be(Nil)
         response.reversed should be(Some("gnitseT"))
-      }
+      }.sync()
     }
     "call a Restful endpoint that takes Unit as the request" in {
       val begin = System.currentTimeMillis()
@@ -102,7 +100,7 @@ class ServerSpec extends AsyncWordSpec with AsyncIOSpec with Matchers {
         val json = exchange.response.content.get.asInstanceOf[JsonContent].json
         val response = json.as[Long]
         response should be >= begin
-      }
+      }.sync()
     }
     "call a Restful endpoint that takes multipart content" in {
       server.handle(HttpExchange(HttpRequest(
@@ -118,7 +116,7 @@ class ServerSpec extends AsyncWordSpec with AsyncIOSpec with Matchers {
         val json = exchange.response.content.get.asInstanceOf[JsonContent].json
         val fileName = json.as[String]
         fileName should be("test.png")
-      }
+      }.sync()
     }
   }
 
@@ -136,8 +134,8 @@ class ServerSpec extends AsyncWordSpec with AsyncIOSpec with Matchers {
 
   object ReverseService extends Restful[ReverseRequest, ReverseResponse] {
     override def apply(exchange: HttpExchange, request: ReverseRequest)
-                      (implicit mdc: MDC): IO[RestfulResponse[ReverseResponse]] = {
-      IO.pure(RestfulResponse(ReverseResponse(Some(request.value.reverse), Nil), HttpStatus.OK))
+                      (implicit mdc: MDC): Task[RestfulResponse[ReverseResponse]] = {
+      Task.pure(RestfulResponse(ReverseResponse(Some(request.value.reverse), Nil), HttpStatus.OK))
     }
 
     override def error(errors: List[ValidationError], status: HttpStatus): RestfulResponse[ReverseResponse] = {
@@ -146,8 +144,8 @@ class ServerSpec extends AsyncWordSpec with AsyncIOSpec with Matchers {
   }
 
   object ServerTimeService extends Restful[Unit, Long] {
-    override def apply(exchange: HttpExchange, request: Unit)(implicit mdc: MDC): IO[RestfulResponse[Long]] = {
-      IO.pure(RestfulResponse(System.currentTimeMillis(), HttpStatus.OK))
+    override def apply(exchange: HttpExchange, request: Unit)(implicit mdc: MDC): Task[RestfulResponse[Long]] = {
+      Task.pure(RestfulResponse(System.currentTimeMillis(), HttpStatus.OK))
     }
 
     override def error(errors: List[ValidationError], status: HttpStatus): RestfulResponse[Long] = {
@@ -158,7 +156,7 @@ class ServerSpec extends AsyncWordSpec with AsyncIOSpec with Matchers {
   object FileUploadService extends Restful[FileInfo, String] {
     override def apply(exchange: HttpExchange,
                        request: FileInfo)
-                      (implicit mdc: MDC): IO[RestfulResponse[String]] = IO {
+                      (implicit mdc: MDC): Task[RestfulResponse[String]] = Task {
       val fileEntry = request.file
       assert(fileEntry.file.length() == 33404)
       ok(request.fileName)

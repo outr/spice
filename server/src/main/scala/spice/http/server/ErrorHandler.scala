@@ -1,8 +1,8 @@
 package spice.http.server
 
-import cats.effect.IO
+import rapid.Task
 import spice.http.HttpExchange
 
 trait ErrorHandler {
-  def handle(exchange: HttpExchange, t: Option[Throwable]): IO[HttpExchange]
+  def handle(exchange: HttpExchange, t: Option[Throwable]): Task[HttpExchange]
 }

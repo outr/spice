@@ -1,6 +1,6 @@
 package spice.http.client.intercept
 
-import cats.effect.IO
+import rapid.Task
 import spice.http.HttpRequest
 
 import scala.concurrent.duration._
@@ -9,15 +9,15 @@ case class RateLimiter(perRequestDelay: FiniteDuration) extends InterceptorAdapt
   private val maxDelay = perRequestDelay.toMillis
   @volatile private var lastTime: Long = 0L
 
-  override def before(request: HttpRequest): IO[HttpRequest] = IO.unit.flatMap { _ =>
+  override def before(request: HttpRequest): Task[HttpRequest] = Task.unit.flatMap { _ =>
     self.synchronized {
       val now = System.currentTimeMillis()
       val delay = (lastTime + maxDelay) - now
       if (delay > 0L) {
         lastTime = now
-        IO.sleep(delay.millis).map(_ => request)
+        Task.sleep(delay.millis).map(_ => request)
       } else {
-        IO.pure(request)
+        Task.pure(request)
       }
     }
   }

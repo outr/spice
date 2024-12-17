@@ -1,6 +1,5 @@
 package spice.http.server.config
 
-import cats.effect.unsafe.IORuntimeConfig
 import fabric.rw._
 import profig._
 import reactify._
@@ -22,8 +21,6 @@ class ServerConfig(server: HttpServer) {
    */
   val persistentConnections: Var[Boolean] = Var(Profig("server.persistentConnections").asOr(true))
   val webSocketCompression: Var[Boolean] = Var(Profig("server.webSocketCompression").asOr(true))
-
-  val ioRuntimeConfig: Var[IORuntimeConfig] = Var(IORuntimeConfig())
 
   object session {
     private val config = Profig("session").as[SessionConfig]

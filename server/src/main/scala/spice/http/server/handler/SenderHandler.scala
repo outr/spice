@@ -1,6 +1,6 @@
 package spice.http.server.handler
 
-import cats.effect.IO
+import rapid.Task
 import scribe.mdc.MDC
 import spice.http.content.Content
 import spice.http.{Headers, HttpExchange}
@@ -9,7 +9,7 @@ case class SenderHandler(content: Content,
                          length: Option[Long] = None,
                          caching: CachingManager = CachingManager.Default,
                          replace: Boolean = false) extends HttpHandler {
-  override def handle(exchange: HttpExchange)(implicit mdc: MDC): IO[HttpExchange] =
+  override def handle(exchange: HttpExchange)(implicit mdc: MDC): Task[HttpExchange] =
     SenderHandler.handle(exchange, content, length, caching, replace)
 }
 
@@ -18,13 +18,13 @@ object SenderHandler {
              content: Content,
              length: Option[Long] = None,
              caching: CachingManager = CachingManager.Default,
-             replace: Boolean = false): IO[HttpExchange] = {
+             replace: Boolean = false): Task[HttpExchange] = {
     if (exchange.response.content.nonEmpty && !replace) {
       throw new RuntimeException(s"Content already set (${exchange.response.content.get}) for HttpResponse in ${exchange.request.url} when attempting to set $content.")
     }
     val contentLength = length.getOrElse(content.length)
     exchange.modify { response =>
-      IO(response.withContent(content).withHeader(Headers.`Content-Length`(contentLength)))
+      Task(response.withContent(content).withHeader(Headers.`Content-Length`(contentLength)))
     }.flatMap(caching.handle)
   }
 }

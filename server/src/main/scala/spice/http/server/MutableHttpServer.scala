@@ -1,6 +1,6 @@
 package spice.http.server
 
-import cats.effect.IO
+import rapid.Task
 import reactify.Var
 import scribe.mdc.MDC
 import spice.ItemContainer
@@ -21,27 +21,27 @@ class MutableHttpServer extends HttpServer {
 
   object handlers extends ItemContainer[HttpHandler]
 
-  override final def apply(exchange: HttpExchange)(implicit mdc: MDC): IO[HttpExchange] = handleInternal(exchange)
+  override final def apply(exchange: HttpExchange)(implicit mdc: MDC): Task[HttpExchange] = handleInternal(exchange)
 
-  protected def handleInternal(exchange: HttpExchange)(implicit mdc: MDC): IO[HttpExchange] = {
+  protected def handleInternal(exchange: HttpExchange)(implicit mdc: MDC): Task[HttpExchange] = {
     handleRecursive(exchange, handlers()).flatMap { updated =>
       // NotFound handling
       if (updated.response.content.isEmpty && updated.response.status == HttpStatus.OK) {
         updated.modify { response =>
-          IO(response.copy(status = HttpStatus.NotFound))
+          Task(response.copy(status = HttpStatus.NotFound))
         }.flatMap { notFound =>
           errorHandler.get.handle(notFound, None)
         }
       } else {
-        IO.pure(updated)
+        Task.pure(updated)
       }
     }
   }
 
   private def handleRecursive(exchange: HttpExchange, handlers: List[HttpHandler])
-                             (implicit mdc: MDC): IO[HttpExchange] = {
+                             (implicit mdc: MDC): Task[HttpExchange] = {
     if (exchange.finished || handlers.isEmpty) {
-      IO.pure(exchange) // Finished
+      Task.pure(exchange) // Finished
     } else {
       val handler = handlers.head
       handler.handle(exchange).flatMap { updated =>

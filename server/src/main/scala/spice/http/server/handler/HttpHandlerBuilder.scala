@@ -1,6 +1,6 @@
 package spice.http.server.handler
 
-import cats.effect.IO
+import rapid._
 import fabric._
 import fabric.io.{JsonFormatter, JsonParser}
 import fabric.rw._
@@ -41,7 +41,7 @@ case class HttpHandlerBuilder(server: MutableHttpServer,
     handle { exchange =>
       f(exchange.request.url).map { content =>
         SenderHandler(content, caching = cachingManager).handle(exchange)
-      }.getOrElse(IO.pure(exchange))
+      }.getOrElse(Task.pure(exchange))
     }
   }
 
@@ -52,7 +52,7 @@ case class HttpHandlerBuilder(server: MutableHttpServer,
       if (file.isFile) {
         SenderHandler(Content.file(file), caching = cachingManager).handle(exchange)
       } else {
-        IO.pure(exchange)
+        Task.pure(exchange)
       }
     }
   }
@@ -75,19 +75,19 @@ case class HttpHandlerBuilder(server: MutableHttpServer,
         val handler = SenderHandler(content, caching = cachingManager)
         handler.handle(exchange)
       } else {
-        IO.pure(exchange)
+        Task.pure(exchange)
       }
     } else {
-      IO.pure(exchange)
+      Task.pure(exchange)
     }
   }*/
 
-  def handle(f: HttpExchange => IO[HttpExchange]): HttpHandler = wrap(new HttpHandler {
-    override def handle(exchange: HttpExchange)(implicit mdc: MDC): IO[HttpExchange] = f(exchange)
+  def handle(f: HttpExchange => Task[HttpExchange]): HttpHandler = wrap(new HttpHandler {
+    override def handle(exchange: HttpExchange)(implicit mdc: MDC): Task[HttpExchange] = f(exchange)
   })
 
-  def validation(validator: HttpExchange => IO[ValidationResult]): HttpHandler = validation(new Validator {
-    override def validate(exchange: HttpExchange): IO[ValidationResult] = validator(exchange)
+  def validation(validator: HttpExchange => Task[ValidationResult]): HttpHandler = validation(new Validator {
+    override def validate(exchange: HttpExchange): Task[ValidationResult] = validator(exchange)
   })
 
   def validation(validators: Validator*): HttpHandler = wrap(new ValidatorHttpHandler(validators.toList))
@@ -98,7 +98,7 @@ case class HttpHandlerBuilder(server: MutableHttpServer,
 
   def content(content: => Content): HttpHandler = handle { exchange =>
     exchange.modify { response =>
-      IO(response.withContent(content))
+      Task(response.withContent(content))
     }
   }
 
@@ -126,9 +126,9 @@ case class HttpHandlerBuilder(server: MutableHttpServer,
         val response: Response = handler(request)
         val responseJsonString = JsonFormatter.Default(response.json)
         exchange.modify { httpResponse =>
-          IO(httpResponse.withContent(Content.string(responseJsonString, ContentType.`application/json`)))
+          Task(httpResponse.withContent(Content.string(responseJsonString, ContentType.`application/json`)))
         }
-      }.getOrElse(IO.pure(exchange))
+      }.getOrElse(Task.pure(exchange))
     }
   }
 
@@ -139,14 +139,14 @@ case class HttpHandlerBuilder(server: MutableHttpServer,
     val wrapper = new HttpHandler {
       override def priority: Priority = p
 
-      override def handle(exchange: HttpExchange)(implicit mdc: MDC): IO[HttpExchange] = {
+      override def handle(exchange: HttpExchange)(implicit mdc: MDC): Task[HttpExchange] = {
         if (urlMatcher.forall(_.matches(exchange.request.url)) && requestMatchers.forall(_(exchange.request))) {
           ValidatorHttpHandler.validate(exchange, validators).flatMap {
             case ValidationResult.Continue(c) => handler.handle(c)
-            case vr => IO.pure(vr.exchange) // Validation failed, handled by ValidatorHttpHandler
+            case vr => Task.pure(vr.exchange) // Validation failed, handled by ValidatorHttpHandler
           }
         } else {
-          IO.pure(exchange)
+          Task.pure(exchange)
         }
       }
     }

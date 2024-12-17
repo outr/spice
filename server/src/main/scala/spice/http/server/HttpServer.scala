@@ -1,8 +1,7 @@
 package spice.http.server
 
-import cats.effect.IO
-import cats.effect.unsafe.{IORuntime, IORuntimeConfig, Scheduler}
-import scribe.cats.{io => logger}
+import rapid.Task
+import scribe.{rapid => logger}
 import spice.http.HttpExchange
 import spice.http.server.config.{ServerConfig, ServerSocketListener}
 import spice.http.server.handler.{HttpHandler, LifecycleHandler}
@@ -18,27 +17,6 @@ import scala.concurrent.duration.{DurationInt, FiniteDuration}
 trait HttpServer extends LifecycleHandler with Initializable {
   val config = new ServerConfig(this)
 
-  protected val defaultExecutionContext: ExecutionContext = ExecutionContext.fromExecutor(Executors.newCachedThreadPool(new ThreadFactory {
-    private val counter = new AtomicLong(0L)
-
-    override def newThread(r: Runnable): Thread = {
-      val t = new Thread(r)
-      t.setName(s"${config.name()}-${counter.incrementAndGet()}")
-      t.setDaemon(true)
-      t
-    }
-  }))
-  protected def computeExecutionContext: ExecutionContext = defaultExecutionContext
-  protected def blockingExecutionContext: ExecutionContext = defaultExecutionContext
-  protected val (scheduler, shutdownScheduler) = IORuntime.createDefaultScheduler(s"${config.name}-scheduler")
-  lazy val ioRuntime: IORuntime = IORuntime(
-    compute = computeExecutionContext,
-    blocking = blockingExecutionContext,
-    scheduler = scheduler,
-    shutdown = shutdownScheduler,
-    config = IORuntimeConfig()
-  )
-
   private val implementation = HttpServerImplementationManager(this)
 
   def isRunning: Boolean = isInitialized && implementation.isRunning
@@ -46,9 +24,9 @@ trait HttpServer extends LifecycleHandler with Initializable {
   /**
    * Init is called on start(), but only the first time. If the server is restarted it is not invoked again.
    */
-  override protected def initialize(): IO[Unit] = IO.unit
+  override protected def initialize(): Task[Unit] = Task.unit
 
-  def start(): IO[Unit] = for {
+  def start(): Task[Unit] = for {
     _ <- init()
     _ <- implementation.start(this)
     _ <- logger.info(s"Server started on ${config.enabledListeners.mkString(", ")}")
@@ -56,18 +34,18 @@ trait HttpServer extends LifecycleHandler with Initializable {
     ()
   }
 
-  def errorRecovery(exchange: HttpExchange, throwable: Throwable): IO[HttpExchange] = logger
+  def errorRecovery(exchange: HttpExchange, throwable: Throwable): Task[HttpExchange] = logger
     .error(throwable)
     .map(_ => exchange)
 
-  def stop(): IO[Unit] = implementation.stop(this)
+  def stop(): Task[Unit] = implementation.stop(this)
 
   def restart(): Unit = synchronized {
     stop()
     start()
   }
 
-  override protected def preHandle(exchange: HttpExchange): IO[HttpExchange] = IO {
+  override protected def preHandle(exchange: HttpExchange): Task[HttpExchange] = Task {
     val listener = config.listeners().find(l => l.matches(exchange.request.url))
     listener.map { l =>
       ServerSocketListener.set(exchange, l)
@@ -79,13 +57,13 @@ trait HttpServer extends LifecycleHandler with Initializable {
     }.getOrElse(exchange)
   }
 
-  override protected def postHandle(exchange: HttpExchange): IO[HttpExchange] = IO.pure(exchange)
+  override protected def postHandle(exchange: HttpExchange): Task[HttpExchange] = Task.pure(exchange)
 
-  def whileRunning(delay: FiniteDuration = 1.second): IO[Unit] = if (isRunning) {
-    IO.sleep(delay).flatMap(_ => whileRunning(delay))
+  def whileRunning(delay: FiniteDuration = 1.second): Task[Unit] = if (isRunning) {
+    Task.sleep(delay).flatMap(_ => whileRunning(delay))
   } else {
-    IO.unit
+    Task.unit
   }
 
-  def dispose(): IO[Unit] = stop()
+  def dispose(): Task[Unit] = stop()
 }

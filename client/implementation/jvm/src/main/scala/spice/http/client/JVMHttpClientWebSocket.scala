@@ -1,6 +1,6 @@
 package spice.http.client
 
-import cats.effect.IO
+import rapid.{Fiber, Task}
 import reactify.Var
 import spice.UserException
 import spice.http.{ByteBufferData, ConnectionStatus, WebSocket}
@@ -15,7 +15,7 @@ import scala.util.Try
 class JVMHttpClientWebSocket(url: URL, instance: JVMHttpClientInstance) extends jvm.WebSocket.Listener with WebSocket {
   private val jvmWebSocket = Var[Option[jvm.WebSocket]](None)
 
-  override def connect(): IO[ConnectionStatus] = {
+  override def connect(): Task[ConnectionStatus] = {
     _status @= ConnectionStatus.Connecting
     send.text.attach { text =>
       jvmWebSocket().foreach(ws => ws.sendText(text, true))
@@ -28,19 +28,16 @@ class JVMHttpClientWebSocket(url: URL, instance: JVMHttpClientInstance) extends 
       disconnect()
     }
 
-    instance.jvmClient
-      .newWebSocketBuilder()
-      .buildAsync(URI.create(url.toString), this)
-      .toIO
+    Fiber.fromFuture(instance.jvmClient.newWebSocketBuilder().buildAsync(URI.create(url.toString), this))
       .map { ws =>
         jvmWebSocket @= Some(ws)
       }
       .flatMap(_ => waitForConnected())
   }
 
-  private def waitForConnected(): IO[ConnectionStatus] = status() match {
-    case ConnectionStatus.Connecting => IO.sleep(100.millis).flatMap(_ => waitForConnected())
-    case s => IO.pure(s)
+  private def waitForConnected(): Task[ConnectionStatus] = status() match {
+    case ConnectionStatus.Connecting => Task.sleep(100.millis).flatMap(_ => waitForConnected())
+    case s => Task.pure(s)
   }
 
   override def disconnect(): Unit = jvmWebSocket().foreach { ws =>

@@ -1,9 +1,8 @@
 package spice.http.client
 
-import cats.effect.unsafe.implicits.global
-import cats.effect.{Deferred, IO}
 import fabric.io.JsonFormatter
 import okhttp3.{Authenticator, Request, Response, Route}
+import rapid.Task
 import spice.http.content.FormDataEntry.{FileEntry, StringEntry}
 import spice.http.content._
 import spice.http._
@@ -92,7 +91,7 @@ class OkHttpClientInstance(client: HttpClient) extends HttpClientInstance {
     b.writeTimeout(client.timeout.toMillis, TimeUnit.MILLISECONDS)
     b.dns((hostname: String) => {
       val list = new util.ArrayList[InetAddress]()
-      client.dns.lookup(hostname).unsafeRunSync() match {
+      client.dns.lookup(hostname).sync() match {
         case Some(ip) => list.add(InetAddress.getByAddress(ip.address.map(_.toByte).toArray))
         case None => // None
       }
@@ -137,19 +136,20 @@ class OkHttpClientInstance(client: HttpClient) extends HttpClientInstance {
     HttpsURLConnection.setDefaultHostnameVerifier(allHostsValid)
   }*/
 
-  override def send(request: HttpRequest): IO[Try[HttpResponse]] = Deferred[IO, Try[HttpResponse]].flatMap { deferred =>
+  override def send(request: HttpRequest): Task[Try[HttpResponse]] = {
+    val completable = Task.completable[HttpResponse]
     val req = requestToOk(request)
     instance.newCall(req).enqueue(new okhttp3.Callback {
       override def onResponse(call: okhttp3.Call, res: okhttp3.Response): Unit = {
         val response = responseFromOk(res)
-        deferred.complete(Success(response)).unsafeRunAndForget()
+        completable.success(response)
       }
 
       override def onFailure(call: okhttp3.Call, exc: IOException): Unit = {
-        deferred.complete(Failure(exc)).unsafeRunAndForget()
+        completable.failure(exc)
       }
     })
-    OkHttpClientImplementation.process(deferred.get)
+    OkHttpClientImplementation.process(completable.attempt())
   }
 
   private def requestToOk(request: HttpRequest): okhttp3.Request = {
@@ -230,7 +230,7 @@ class OkHttpClientInstance(client: HttpClient) extends HttpClientInstance {
       } else {
         val suffix = contentType.extension.getOrElse("client")
         val file = File.createTempFile("spice", s".$suffix", new File(client.saveDirectory))
-        Streamer(responseBody.byteStream(), file).unsafeRunSync()
+        Streamer(responseBody.byteStream(), file).sync()
         Content.file(file, contentType)
       }
     }
@@ -252,10 +252,10 @@ class OkHttpClientInstance(client: HttpClient) extends HttpClientInstance {
 
   override def webSocket(url: URL): WebSocket = new OkHttpWebSocket(url, instance)
 
-  override def dispose(): IO[Unit] = for {
-    _ <- IO(Try(instance.dispatcher().executorService().shutdown()))
-    _ <- IO(Try(instance.connectionPool().evictAll()))
-    _ <- IO(Try(instance.cache().close()))
+  override def dispose(): Task[Unit] = for {
+    _ <- Task(Try(instance.dispatcher().executorService().shutdown()))
+    _ <- Task(Try(instance.connectionPool().evictAll()))
+    _ <- Task(Try(instance.cache().close()))
   } yield {
     ()
   }

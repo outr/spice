@@ -1,17 +1,17 @@
 package spice.http.client
 
-import cats.effect.IO
+import rapid.Task
 import spice.http.{HttpRequest, HttpResponse}
 
 import scala.concurrent.duration.FiniteDuration
 import scala.util.{Failure, Try}
-import scribe.cats.{io => logger}
+import scribe.{rapid => logger}
 
 trait RetryManager {
   def retry(request: HttpRequest,
-            retry: IO[Try[HttpResponse]],
+            retry: Task[Try[HttpResponse]],
             failures: Int,
-            throwable: Throwable): IO[Try[HttpResponse]]
+            throwable: Throwable): Task[Try[HttpResponse]]
 }
 
 object RetryManager {
@@ -40,21 +40,17 @@ object RetryManager {
 
   case class Standard(delay: Int => Option[FiniteDuration], warnRetries: Boolean) extends RetryManager {
     override def retry(request: HttpRequest,
-                       retry: IO[Try[HttpResponse]],
+                       retry: Task[Try[HttpResponse]],
                        failures: Int,
-                       throwable: Throwable): IO[Try[HttpResponse]] = delay(failures) match {
+                       throwable: Throwable): Task[Try[HttpResponse]] = delay(failures) match {
       case Some(d) => for {
-        _ <- if (warnRetries) {
-          logger.warn(s"Request to ${request.url} failed (${throwable.getMessage}, failures: $failures). Retrying after $d...")
-        } else {
-          IO.unit
-        }
-        _ <- IO.sleep(d)
+        _ <- logger.warn(s"Request to ${request.url} failed (${throwable.getMessage}, failures: $failures). Retrying after $d...").when(warnRetries)
+        _ <- Task.sleep(d)
         response <- retry
       } yield response
       case None =>
         logger.error(s"Request to ${request.url} permanently failed (${throwable.getMessage}, failures: $failures).")
-        IO.pure(Failure(throwable))
+        Task.pure(Failure(throwable))
     }
   }
 }

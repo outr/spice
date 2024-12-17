@@ -1,6 +1,6 @@
 package spice
 
-import cats.effect.IO
+import rapid.Task
 
 import java.util.concurrent.atomic.AtomicInteger
 
@@ -9,14 +9,14 @@ trait Initializable {
 
   def isInitialized: Boolean = status.get() == 2
 
-  final def init(): IO[Boolean] = if (status.compareAndSet(0, 1)) {
+  final def init(): Task[Boolean] = if (status.compareAndSet(0, 1)) {
     initialize().map { _ =>
       status.set(2)
       true
     }
   } else {
-    IO.pure(false)
+    Task.pure(false)
   }
 
-  protected def initialize(): IO[Unit]
+  protected def initialize(): Task[Unit]
 }

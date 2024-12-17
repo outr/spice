@@ -1,6 +1,6 @@
 package spice.util
 
-import cats.effect.IO
+import rapid.Task
 
 import java.util.concurrent.ConcurrentLinkedQueue
 import java.util.concurrent.atomic.AtomicInteger
@@ -17,15 +17,15 @@ trait ObjectPool[T] {
 
   private val queue = new ConcurrentLinkedQueue[T]
 
-  protected def create(): IO[T]
+  protected def create(): Task[T]
 
-  protected def prepareForUse(value: T): IO[T] = IO.pure(value)
+  protected def prepareForUse(value: T): Task[T] = Task.pure(value)
 
-  protected def resetForPool(value: T): IO[Option[T]] = IO.pure(Some(value))
+  protected def resetForPool(value: T): Task[Option[T]] = Task.pure(Some(value))
 
-  protected def dispose(value: T): IO[Unit] = IO.unit
+  protected def dispose(value: T): Task[Unit] = Task.unit
 
-  private def get(): IO[T] = IO {
+  private def get(): Task[T] = Task {
     Option(queue.poll())
   }.flatMap {
     case Some(value) =>
@@ -39,7 +39,7 @@ trait ObjectPool[T] {
     }
   }
 
-  private def restore(value: T): IO[Unit] = resetForPool(value).map {
+  private def restore(value: T): Task[Unit] = resetForPool(value).map {
     case Some(value) =>
       queue.add(value)
       _active.decrementAndGet()
@@ -48,11 +48,11 @@ trait ObjectPool[T] {
       _active.decrementAndGet()
   }
 
-  def use[Return](f: T => IO[Return]): IO[Return] = get().flatMap { value =>
+  def use[Return](f: T => Task[Return]): Task[Return] = get().flatMap { value =>
     f(value).guarantee(restore(value))
   }
 
-  def ensureAvailable(size: Int): IO[Unit] = if (_queued.get() < size) {
+  def ensureAvailable(size: Int): Task[Unit] = if (_queued.get() < size) {
     create().flatMap { value =>
       _created.incrementAndGet()
       _queued.incrementAndGet()
@@ -61,23 +61,23 @@ trait ObjectPool[T] {
       ensureAvailable(size)
     }
   } else {
-    IO.unit
+    Task.unit
   }
 
-  def waitForNoActive(delay: FiniteDuration = 100.millis): IO[Unit] = if (active == 0) {
-    IO.unit
+  def waitForNoActive(delay: FiniteDuration = 100.millis): Task[Unit] = if (active == 0) {
+    Task.unit
   } else {
-    IO.sleep(delay).flatMap(_ => waitForNoActive(delay))
+    Task.sleep(delay).flatMap(_ => waitForNoActive(delay))
   }
 
-  def dispose(): IO[Unit] = waitForNoActive().flatMap { _ =>
+  def dispose(): Task[Unit] = waitForNoActive().flatMap { _ =>
     Option(queue.poll()) match {
       case Some(value) => dispose(value).flatMap(_ => dispose())
       case None =>
         _created.set(0)
         _active.set(0)
         _queued.set(0)
-        IO.unit
+        Task.unit
     }
   }
 }

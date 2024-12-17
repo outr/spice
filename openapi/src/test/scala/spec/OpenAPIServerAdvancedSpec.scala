@@ -1,16 +1,15 @@
 package spec
 
-import cats.effect.testing.scalatest.AsyncIOSpec
 import fabric._
 import fabric.io.JsonFormatter
 import fabric.rw._
 import org.scalatest.matchers.should.Matchers
-import org.scalatest.wordspec.AsyncWordSpec
+import org.scalatest.wordspec.{AnyWordSpec, AsyncWordSpec}
 import spice.http.HttpMethod
 import spice.net.{URLPath, _}
 import spice.openapi.server.{OpenAPIHttpServer, Schema, Service, ServiceCall}
 
-class OpenAPIServerAdvancedSpec extends AsyncWordSpec with AsyncIOSpec with Matchers {
+class OpenAPIServerAdvancedSpec extends AnyWordSpec with Matchers {
   "OpenAPIServer Advanced" should {
     "validate a proper swagger.yml file" in {
       val expected = TestUtils.loadJson("openapi-tictactoe.json")

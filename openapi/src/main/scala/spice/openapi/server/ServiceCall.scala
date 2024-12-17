@@ -1,6 +1,6 @@
 package spice.openapi.server
 
-import cats.effect.IO
+import rapid._
 import fabric._
 import fabric.define.DefType
 import fabric.io.JsonParser
@@ -35,9 +35,9 @@ trait ServiceCall extends HttpHandler {
   def requestSchema: Option[Schema]
   def responseSchema: Option[Schema]
 
-  def apply(request: ServiceRequest[Request])(implicit mdc: MDC): IO[ServiceResponse[Response]]
+  def apply(request: ServiceRequest[Request])(implicit mdc: MDC): Task[ServiceResponse[Response]]
 
-  override def handle(exchange: HttpExchange)(implicit mdc: MDC): IO[HttpExchange] = {
+  override def handle(exchange: HttpExchange)(implicit mdc: MDC): Task[HttpExchange] = {
     // Merge the base path of the listener (if defined) to the service path
     val actualPath = BasePath.get(exchange) match {
       case Some(basePath) => basePath.merge(service.path)
