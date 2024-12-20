@@ -1,12 +1,12 @@
 package spice.http.server.dsl
 
-import cats.effect.IO
+import rapid.Task
 import scribe.mdc.MDC
 import spice.http.HttpExchange
 import spice.http.server.handler.HttpHandler
 
 trait ConnectionFilter extends HttpHandler {
-  def apply(exchange: HttpExchange)(implicit mdc: MDC): IO[FilterResponse]
+  def apply(exchange: HttpExchange)(implicit mdc: MDC): Task[FilterResponse]
 
   protected def continue(exchange: HttpExchange): FilterResponse = FilterResponse.Continue(exchange)
   protected def stop(exchange: HttpExchange): FilterResponse = FilterResponse.Stop(exchange)
@@ -26,13 +26,13 @@ trait ConnectionFilter extends HttpHandler {
     exchange.store(ConnectionFilter.LastKey) = current ::: filters.toList
   }
 
-  override def handle(exchange: HttpExchange)(implicit mdc: MDC): IO[HttpExchange] = {
+  override def handle(exchange: HttpExchange)(implicit mdc: MDC): Task[HttpExchange] = {
     apply(exchange).flatMap {
       case FilterResponse.Continue(c) => {
         val last = c.store.getOrElse[List[ConnectionFilter]](ConnectionFilter.LastKey, Nil)
         ConnectionFilter.recurse(c, last).map(_.exchange)
       }
-      case FilterResponse.Stop(c) => IO.pure(c)
+      case FilterResponse.Stop(c) => Task.pure(c)
     }
   }
 }
@@ -40,12 +40,12 @@ trait ConnectionFilter extends HttpHandler {
 object ConnectionFilter {
   private val LastKey: String = "ConnectionFilterLast"
 
-  def recurse(exchange: HttpExchange, filters: List[ConnectionFilter]): IO[FilterResponse] = if (filters.isEmpty) {
-    IO.pure(FilterResponse.Continue(exchange))
+  def recurse(exchange: HttpExchange, filters: List[ConnectionFilter]): Task[FilterResponse] = if (filters.isEmpty) {
+    Task.pure(FilterResponse.Continue(exchange))
   } else {
     val filter = filters.head
     filter.apply(exchange).flatMap {
-      case stop: FilterResponse.Stop => IO.pure(stop)
+      case stop: FilterResponse.Stop => Task.pure(stop)
       case FilterResponse.Continue(c) => recurse(c, filters.tail)
     }
   }

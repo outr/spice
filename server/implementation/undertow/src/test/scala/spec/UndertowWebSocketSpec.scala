@@ -1,11 +1,10 @@
 package spec
 
-import cats.effect.IO
-import cats.effect.testing.scalatest.AsyncIOSpec
+import rapid._
 import org.scalatest.concurrent.Eventually._
 import org.scalatest.matchers.should.Matchers
 import org.scalatest.time.{Seconds, Span}
-import org.scalatest.wordspec.AsyncWordSpec
+import org.scalatest.wordspec.{AnyWordSpec, AsyncWordSpec}
 import spice.http.client.HttpClient
 import spice.http.{ConnectionStatus, HttpExchange, WebSocket, WebSocketListener}
 import spice.http.server.StaticHttpServer
@@ -14,7 +13,7 @@ import spice.http.server.dsl._
 import spice.http.server.handler.{HttpHandler, WebSocketHandler}
 import spice.net._
 
-class UndertowWebSocketSpec extends AsyncWordSpec with AsyncIOSpec with Matchers {
+class UndertowWebSocketSpec extends AnyWordSpec with Matchers {
   private var webSocketClient: WebSocket = _
   private var fromServer = List.empty[String]
 
@@ -23,7 +22,7 @@ class UndertowWebSocketSpec extends AsyncWordSpec with AsyncIOSpec with Matchers
 
     "start the server" in {
       server.config.clearListeners().addListeners(HttpServerListener(port = None))
-      server.start().map(_ => succeed)
+      server.start().map(_ => succeed).sync()
     }
     "open a WebSocket to the server" in {
       webSocketClient = HttpClient
@@ -36,7 +35,7 @@ class UndertowWebSocketSpec extends AsyncWordSpec with AsyncIOSpec with Matchers
       webSocketClient.connect()
         .map { status =>
           status should be(ConnectionStatus.Open)
-        }
+        }.sync()
     }
     "send a message to the server" in {
       webSocketClient.send.text @= "Hello, World!"
@@ -53,7 +52,7 @@ class UndertowWebSocketSpec extends AsyncWordSpec with AsyncIOSpec with Matchers
       succeed
     }
     "stop the server" in {
-      server.dispose().map(_ => succeed)
+      server.dispose().map(_ => succeed).sync()
     }
   }
 
@@ -64,13 +63,13 @@ class UndertowWebSocketSpec extends AsyncWordSpec with AsyncIOSpec with Matchers
   }
 
   object EchoWebSocketHandler extends WebSocketHandler {
-    override def connect(exchange: HttpExchange, listener: WebSocketListener): IO[Unit] = {
+    override def connect(exchange: HttpExchange, listener: WebSocketListener): Task[Unit] = {
       listener.receive.text.attach { text =>
         scribe.info(s"Received: $text from client! Echoing back...")
         listener.send.text @= text
       }
 
-      IO.unit
+      Task.unit
     }
   }
 }

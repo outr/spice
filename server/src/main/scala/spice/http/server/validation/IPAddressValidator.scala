@@ -1,11 +1,11 @@
 package spice.http.server.validation
 
-import cats.effect.IO
+import rapid._
 import spice.http.{HttpExchange, HttpStatus}
 import spice.net.IP
 
 class IPAddressValidator(allow: Set[IP], reject: Set[IP], defaultAllow: Boolean) extends Validator {
-  override def validate(exchange: HttpExchange): IO[ValidationResult] = IO {
+  override def validate(exchange: HttpExchange): Task[ValidationResult] = Task {
     val ip = exchange.request.originalSource
     if ((allow.contains(ip) || defaultAllow) && !reject.contains(ip)) {
       ValidationResult.Continue(exchange)

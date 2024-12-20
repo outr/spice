@@ -1,11 +1,10 @@
 package spice.util
 
-import cats.effect.{FiberIO, IO}
-import cats.syntax.all._
-import scribe.cats.{io => logger}
+import rapid._
 
 import java.util.concurrent.atomic.AtomicLong
 import scala.concurrent.duration._
+import scribe.{rapid => logger}
 
 case class BufferManager(checkEvery: FiniteDuration = 10.seconds,
                          triggerAfter: Int = 100,
@@ -17,33 +16,33 @@ case class BufferManager(checkEvery: FiniteDuration = 10.seconds,
   private val lastCheck = new AtomicLong(System.currentTimeMillis())
   private var keepAlive = true
 
-  def start: IO[FiberIO[Unit]] = recurse(0).start
+  def start: Fiber[Unit] = recurse(0).start()
 
-  def stop(): IO[Unit] = IO {
+  def stop(): Task[Unit] = Task {
     keepAlive = false
   }
 
-  def create[T](handler: List[T] => IO[Unit]): BufferQueue[T] = synchronized {
+  def create[T](handler: List[T] => Task[Unit]): BufferQueue[T] = synchronized {
     val q = BufferQueue[T](this, handler)
     queues = q :: queues
     q
   }
 
-  private def recurse(failures: Int): IO[Unit] = IO
+  private def recurse(failures: Int): Task[Unit] = Task
     .sleep(checkFrequency)
     .flatMap { _ =>
       val timeElapsed: Boolean = lastCheck.get() + checkEvery.toMillis < System.currentTimeMillis()
       queues
         .filter(q => q.nonEmpty && (timeElapsed || q.ready))
         .map(q => q.process())
-        .parSequence
+        .tasks
         .map { _ =>
           if (timeElapsed) lastCheck.set(System.currentTimeMillis())
         }
         .flatMap(_ => recurse(0))
-        .whenA(keepAlive)
+        .when(keepAlive)
     }
-    .handleErrorWith { throwable =>
+    .handleError { throwable =>
       val message = s"An error occurred processing the buffer (failure count: $failures). Delaying before trying again."
       val log = if (failures < logErrorAfter) {
         logger.warn(message)
@@ -52,7 +51,7 @@ case class BufferManager(checkEvery: FiniteDuration = 10.seconds,
       }
       log
         .flatMap { _ =>
-          IO.sleep(checkEvery).flatMap(_ => recurse(failures + 1)).whenA(keepAlive)
+          Task.sleep(checkEvery).flatMap(_ => recurse(failures + 1)).when(keepAlive)
         }
     }
 }

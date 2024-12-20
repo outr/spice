@@ -1,6 +1,6 @@
 package spice.http.server.rest
 
-import cats.effect.IO
+import rapid._
 import fabric.io.JsonParser
 import fabric.rw._
 import fabric.{Json, Obj, Str, arr, obj, str}
@@ -14,7 +14,7 @@ import spice.http.{HttpExchange, HttpMethod, HttpStatus}
 import spice.net.{URL, URLPath}
 
 import scala.collection.mutable.ListBuffer
-import scala.concurrent.duration.Duration
+import scala.concurrent.duration.{Duration, DurationInt, FiniteDuration}
 import scala.language.experimental.macros
 
 abstract class Restful[Request, Response](implicit val requestRW: RW[Request],
@@ -23,7 +23,7 @@ abstract class Restful[Request, Response](implicit val requestRW: RW[Request],
 
   def pathOption: Option[URLPath] = None
 
-  def apply(exchange: HttpExchange, request: Request)(implicit mdc: MDC): IO[RestfulResponse[Response]]
+  def apply(exchange: HttpExchange, request: Request)(implicit mdc: MDC): Task[RestfulResponse[Response]]
 
   def validations: List[RestfulValidation[Request]] = Nil
 
@@ -37,7 +37,7 @@ abstract class Restful[Request, Response](implicit val requestRW: RW[Request],
 
   def error(errors: List[ValidationError], status: HttpStatus): RestfulResponse[Response]
 
-  def timeout: Duration = Duration.Inf
+  def timeout: FiniteDuration = 24.hours
 
   protected def ok(response: Response): RestfulResponse[Response] = this.response(response, HttpStatus.OK)
 
@@ -45,12 +45,12 @@ abstract class Restful[Request, Response](implicit val requestRW: RW[Request],
     RestfulResponse(response, status)
   }
 
-  override def apply(exchange: HttpExchange)(implicit mdc: MDC): IO[FilterResponse] = if (accept(exchange)) {
+  override def apply(exchange: HttpExchange)(implicit mdc: MDC): Task[FilterResponse] = if (accept(exchange)) {
     handle(exchange).map { e =>
       FilterResponse.Continue(e)
     }
   } else {
-    IO.pure(FilterResponse.Stop(exchange))
+    Task.pure(FilterResponse.Stop(exchange))
   }
 
   protected lazy val acceptedMethods: List[HttpMethod] =
@@ -67,10 +67,10 @@ abstract class Restful[Request, Response](implicit val requestRW: RW[Request],
     }
   }
 
-  override def handle(exchange: HttpExchange)(implicit mdc: MDC): IO[HttpExchange] = if (accept(exchange)) {
+  override def handle(exchange: HttpExchange)(implicit mdc: MDC): Task[HttpExchange] = if (accept(exchange)) {
     if (exchange.request.method == HttpMethod.Options) {
       exchange.modify { response =>
-        IO {
+        Task {
           response
             .withStatus(HttpStatus.OK)
             .withHeader("Allow", acceptedMethods.mkString(", "))
@@ -79,7 +79,7 @@ abstract class Restful[Request, Response](implicit val requestRW: RW[Request],
       }
     } else {
       // Build JSON
-      val io: IO[RestfulResponse[Response]] = {
+      val io: Task[RestfulResponse[Response]] = {
         Restful.jsonFromExchange(exchange).flatMap { json =>
           // Decode request
           val req = json.as[Request]
@@ -87,7 +87,7 @@ abstract class Restful[Request, Response](implicit val requestRW: RW[Request],
           Restful.validate[Request](req, validations) match {
             case Left(errors) =>
               val status = errors.map(_.status).max
-              IO.pure(error(errors, status))
+              Task.pure(error(errors, status))
             case Right(request) => try {
               var updatedRequest = request match {
                 case r: MultipartRequest => exchange.request.content match {
@@ -103,10 +103,10 @@ abstract class Restful[Request, Response](implicit val requestRW: RW[Request],
               apply(exchange, updatedRequest)
                 .timeout(timeout)
                 .handleError { throwable =>
-                  error(throwable)
+                  Task(error(throwable))
                 }
             } catch {
-              case t: Throwable => IO.pure(error(t))
+              case t: Throwable => Task.pure(error(t))
             }
           }
         }
@@ -115,18 +115,18 @@ abstract class Restful[Request, Response](implicit val requestRW: RW[Request],
       io.flatMap { result =>
         responseToContent(result.response).flatMap { content =>
           exchange.modify { httpResponse =>
-            IO.pure(httpResponse.withContent(content).withStatus(result.status))
+            Task.pure(httpResponse.withContent(content).withStatus(result.status))
           }
         }
       }
     }
   } else {
-    IO.pure(exchange)
+    Task.pure(exchange)
   }
 
-  protected def responseToContent(response: Response): IO[Content] = response match {
-    case content: Content => IO.pure(content)
-    case _ => IO.blocking {
+  protected def responseToContent(response: Response): Task[Content] = response match {
+    case content: Content => Task.pure(content)
+    case _ => Task {
       val json = response.json
       Content.json(json, compact = false)
     }
@@ -141,13 +141,13 @@ object Restful {
     exchange.store.update[Json](key, merged)
   }
 
-  def apply[Request: RW, Response: RW](handler: Request => IO[Response],
+  def apply[Request: RW, Response: RW](handler: Request => Task[Response],
                                                path: Option[URLPath] = None): Restful[Request, Response] =
     new Restful[Request, Response] {
       override def pathOption: Option[URLPath] = path
 
       override def apply(exchange: HttpExchange, request: Request)
-                        (implicit mdc: MDC): IO[RestfulResponse[Response]] = handler(request)
+                        (implicit mdc: MDC): Task[RestfulResponse[Response]] = handler(request)
         .map { response =>
           ok(response)
         }
@@ -173,11 +173,11 @@ object Restful {
     }
   }
 
-  def jsonFromExchange(exchange: HttpExchange): IO[Json] = {
+  def jsonFromExchange(exchange: HttpExchange): Task[Json] = {
     val request = exchange.request
-    val content = request.content match {
+    val content: Task[Json] = request.content match {
       case Some(content) => jsonFromContent(content)
-      case None => IO.pure(obj())
+      case None => Task.pure(obj())
     }
     content.map { contentJson =>
       val urlJson = jsonFromURL(request.url)
@@ -193,8 +193,8 @@ object Restful {
     }
   }
 
-  def jsonFromContent(content: Content): IO[Json] = content match {
-    case fdc: FormDataContent => IO {
+  def jsonFromContent(content: Content): Task[Json] = content match {
+    case fdc: FormDataContent => Task {
       val jsonValues = fdc.strings.map {
         case (key, entry) => try {
           key -> JsonParser(entry.value)

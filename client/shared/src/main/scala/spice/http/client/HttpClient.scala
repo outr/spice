@@ -1,14 +1,14 @@
 package spice.http.client
 
-import cats.effect.IO
 import fabric.Json
 import fabric.io.{Format, JsonFormatter, JsonParser}
 import fabric.rw._
+import rapid.Task
 import spice.http._
 import spice.http.client.intercept.Interceptor
 import spice.http.content.{Content, StringContent}
 import spice.http.cookie.Cookie
-import spice.net.{ContentType, DNS, URLPath, URL}
+import spice.net.{ContentType, DNS, URL, URLPath}
 
 import scala.concurrent.duration.{DurationInt, FiniteDuration}
 import scala.util.{Failure, Success, Try}
@@ -137,7 +137,7 @@ case class HttpClient(request: HttpRequest,
    *
    * @return Future[HttpResponse]
    */
-  final def sendTry(): IO[Try[HttpResponse]] = {
+  final def sendTry(): Task[Try[HttpResponse]] = {
     val updatedHeaders = sessionManager match {
       case Some(sm) =>
         val cookieHeaders = sm.session.cookies.map { cookie =>
@@ -160,7 +160,7 @@ case class HttpClient(request: HttpRequest,
           sm(cookies)
         }
 
-        IO.pure(Success(response))
+        Task.pure(Success(response))
       case Failure(t) =>
         val failures = this.failures + 1
         val client = copy(failures = failures)
@@ -169,7 +169,7 @@ case class HttpClient(request: HttpRequest,
     }
   }
 
-  final def send(): IO[HttpResponse] = sendTry().map {
+  final def send(): Task[HttpResponse] = sendTry().map {
     case Success(response) => response
     case Failure(exception) => throw exception
   }
@@ -181,11 +181,11 @@ case class HttpClient(request: HttpRequest,
    * @tparam Response the response type
    * @return Try[Response]
    */
-  def callTry[Response: RW]: IO[Try[Response]] = sendTry().flatMap {
+  def callTry[Response: RW]: Task[Try[Response]] = sendTry().flatMap {
     case Success(response) =>
       val contentString = response.content match {
         case Some(content) => content.asString
-        case None => IO.pure("")
+        case None => Task.pure("")
       }
       contentString.map { responseJson =>
         if (!failOnHttpStatus || response.status.isSuccess) {
@@ -205,7 +205,7 @@ case class HttpClient(request: HttpRequest,
    * @tparam Response the response type
    * @return Response
    */
-  def call[Response: RW]: IO[Response] = callTry[Response].map {
+  def call[Response: RW]: Task[Response] = callTry[Response].map {
     case Success(response) => response
     case Failure(throwable) => throw throwable
   }
@@ -219,12 +219,12 @@ case class HttpClient(request: HttpRequest,
    * @tparam Response the response type
    * @return Future[Response]
    */
-  def restfulTry[Request: RW, Response: RW](request: Request): IO[Try[Response]] = {
+  def restfulTry[Request: RW, Response: RW](request: Request): Task[Try[Response]] = {
     val requestJson = request.json
     method(if (method == HttpMethod.Get) HttpMethod.Post else method).json(requestJson).callTry[Response]
   }
 
-  def restful[Request: RW, Response: RW](request: Request): IO[Response] = restfulTry[Request, Response](request).map {
+  def restful[Request: RW, Response: RW](request: Request): Task[Response] = restfulTry[Request, Response](request).map {
     case Success(response) => response
     case Failure(throwable) => throw throwable
   }
@@ -238,12 +238,12 @@ case class HttpClient(request: HttpRequest,
    * @tparam Failure the failure (non-OK response) response type
    * @return either Failure or Success
    */
-  def restfulEither[Request: RW, Success: RW, Failure: RW](request: Request): IO[Either[Failure, Success]] = {
+  def restfulEither[Request: RW, Success: RW, Failure: RW](request: Request): Task[Either[Failure, Success]] = {
     val requestJson = request.json
     method(if (method == HttpMethod.Get) HttpMethod.Post else method).json(requestJson).send().flatMap { response =>
       val contentString = response.content match {
         case Some(content) => content.asString
-        case None => IO.pure("")
+        case None => Task.pure("")
       }
       contentString.map { responseJson =>
         if (responseJson.isEmpty) throw new ClientException(s"No content received in response for ${this.request.url}.", this.request, response, None)
@@ -258,7 +258,7 @@ case class HttpClient(request: HttpRequest,
 
   def webSocket(): WebSocket = instance.webSocket(request.url)
 
-  def dispose(): IO[Unit] = implementation.dispose()
+  def dispose(): Task[Unit] = implementation.dispose()
 }
 
 object HttpClient extends HttpClient(

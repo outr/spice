@@ -1,6 +1,6 @@
 package spice.openapi.server
 
-import cats.effect.IO
+import rapid._
 import fabric.rw._
 import scribe.mdc.MDC
 import spice.http.content.Content
@@ -12,9 +12,9 @@ trait Service extends HttpHandler {
   val path: URLPath
   val calls: List[ServiceCall]
 
-  override def handle(exchange: HttpExchange)(implicit mdc: MDC): IO[HttpExchange] = apply(exchange) match {
+  override def handle(exchange: HttpExchange)(implicit mdc: MDC): Task[HttpExchange] = apply(exchange) match {
     case Some(sc) => sc.handle(exchange)
-    case None => IO.pure(exchange)
+    case None => Task.pure(exchange)
   }
 
   def apply(exchange: HttpExchange): Option[ServiceCall] = {
@@ -34,7 +34,7 @@ trait Service extends HttpHandler {
                                      operationId: Option[String] = None,
                                      requestSchema: Option[Schema] = None,
                                      responseSchema: Option[Schema] = None)
-                                    (call: ServiceRequest[Request] => IO[ServiceResponse[Response]])
+                                    (call: ServiceRequest[Request] => Task[ServiceResponse[Response]])
                                     (implicit requestRW: RW[Request], responseRW: RW[Response]): ServiceCall = {
     TypedServiceCall[Request, Response](
       call = call,

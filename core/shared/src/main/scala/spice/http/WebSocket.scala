@@ -1,6 +1,6 @@
 package spice.http
 
-import cats.effect.IO
+import rapid.Task
 import reactify.{Channel, Val, Var}
 
 trait WebSocket {
@@ -11,7 +11,7 @@ trait WebSocket {
   val receive: WebSocketChannels = new WebSocketChannels
   val error: Channel[Throwable] = Channel[Throwable]
 
-  def connect(): IO[ConnectionStatus]
+  def connect(): Task[ConnectionStatus]
 
   def disconnect(): Unit
 }

@@ -1,8 +1,7 @@
 package spice.http.client
 
-import cats.effect.IO
-import cats.effect.unsafe.implicits.global
 import org.apache.http.entity.mime.MultipartEntityBuilder
+import rapid.Task
 import spice.http.content.FormDataEntry.{FileEntry, StringEntry}
 import spice.http.content.{BytesContent, FormDataContent, StreamContent, StringContent}
 import spice.http.{Headers, HttpMethod, HttpRequest, HttpResponse, HttpStatus, WebSocket}
@@ -12,7 +11,7 @@ import java.io.{ByteArrayOutputStream, InputStream}
 import java.net.http.HttpClient.{Redirect, Version}
 import java.net.http.HttpRequest.BodyPublishers
 import java.net.http.HttpResponse.BodyHandlers
-import scala.util.{Random, Success, Try}
+import scala.util.{Failure, Random, Success, Try}
 import java.net.{InetSocketAddress, ProxySelector, URI, http => jvm}
 import java.nio.channels.{Channels, Pipe}
 import java.nio.file.Files
@@ -33,22 +32,20 @@ class JVMHttpClientInstance(client: HttpClient) extends HttpClientInstance {
     .proxy(proxy)
     .build()
 
-  override def send(request: HttpRequest): IO[Try[HttpResponse]] = for {
+  override def send(request: HttpRequest): Task[Try[HttpResponse]] = for {
     jvmRequest <- request2JVM(request)
-    jvmResponse <- IO.blocking(jvmClient.send(jvmRequest, BodyHandlers.ofByteArray()))
-      .attempt
-      .map {
-        case Left(t) => throw new RuntimeException(s"Error sending to ${request.url}", t)
-        case Right(response) => response
+    jvmResponse <- Task(jvmClient.send(jvmRequest, BodyHandlers.ofByteArray()))
+      .handleError { t =>
+        throw new RuntimeException(s"Error sending to ${request.url}", t)
       }
     response <- response2Spice(jvmResponse)
   } yield Success(response)
 
   override def webSocket(url: URL): WebSocket = new JVMHttpClientWebSocket(url, this)
 
-  override def dispose(): IO[Unit] = IO.unit
+  override def dispose(): Task[Unit] = Task.unit
 
-  private def request2JVM(request: HttpRequest): IO[jvm.HttpRequest] = {
+  private def request2JVM(request: HttpRequest): Task[jvm.HttpRequest] = {
     var contentType = request.content.map(c => c.contentType.outputString)
     for {
       // TODO: Investigate streaming through InputStream
@@ -65,7 +62,7 @@ class JVMHttpClientInstance(client: HttpClient) extends HttpClientInstance {
           val httpEntity = builder.build()
           contentType = Some(httpEntity.getContentType.getValue)
 
-          IO.blocking {
+          Task {
             val baos = new ByteArrayOutputStream
             httpEntity.writeTo(baos)
             val bytes = baos.toByteArray
@@ -75,20 +72,20 @@ class JVMHttpClientInstance(client: HttpClient) extends HttpClientInstance {
           // TODO: Figure out why this isn't working - Appears that we're not properly allowing async operations to run
 //          val pipe = Pipe.open()
 //          for {
-//            writingFiber <- IO {
+//            writingFiber <- Task {
 //              val outputStream = Channels.newOutputStream(pipe.sink())
 //              httpEntity.writeTo(outputStream)
 //            }.start
-//            bp <- IO(BodyPublishers.ofInputStream(() => Channels.newInputStream(pipe.source())))
+//            bp <- Task(BodyPublishers.ofInputStream(() => Channels.newInputStream(pipe.source())))
 //            _ <- writingFiber.joinWithNever
 //          } yield bp
-        case Some(content: StringContent) => IO.blocking(BodyPublishers.ofString(content.value))
-        case Some(content) => content.asStream.compile.toList.map(_.toArray).map { bytes =>
+        case Some(content: StringContent) => Task(BodyPublishers.ofString(content.value))
+        case Some(content) => content.asStream.toList.map(_.toArray).map { bytes =>
           BodyPublishers.ofByteArray(bytes)
         }
-        case None => IO.pure(BodyPublishers.noBody())
+        case None => Task.pure(BodyPublishers.noBody())
       }
-      jvmRequest <- IO.blocking {
+      jvmRequest <- Task {
         val builder = jvm.HttpRequest.newBuilder()
           .uri(URI.create(request.url.toString.replace("{", "%7B").replace("}", "%7D")))
           .timeout(Duration.ofMillis(client.timeout.toMillis))
@@ -104,7 +101,7 @@ class JVMHttpClientInstance(client: HttpClient) extends HttpClientInstance {
     } yield jvmRequest
   }
 
-  private def response2Spice(jvmResponse: jvm.HttpResponse[Array[Byte]]): IO[HttpResponse] = IO.blocking {
+  private def response2Spice(jvmResponse: jvm.HttpResponse[Array[Byte]]): Task[HttpResponse] = Task {
     val headers = Headers(jvmResponse.headers().map().asScala.map {
       case (key, list) => key -> list.asScala.toList
     }.toMap)

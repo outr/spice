@@ -1,15 +1,15 @@
 package spice.http.server.dsl
 
-import cats.effect.IO
+import rapid.Task
 import scribe.mdc.MDC
 import spice.http.HttpExchange
 
-class ActionFilter(f: HttpExchange => IO[HttpExchange]) extends ConnectionFilter {
-  override def apply(exchange: HttpExchange)(implicit mdc: MDC): IO[FilterResponse] = {
+class ActionFilter(f: HttpExchange => Task[HttpExchange]) extends ConnectionFilter {
+  override def apply(exchange: HttpExchange)(implicit mdc: MDC): Task[FilterResponse] = {
     f(exchange).map(FilterResponse.Continue.apply)
   }
 }
 
 object ActionFilter {
-  def apply(f: HttpExchange => IO[HttpExchange]): ActionFilter = new ActionFilter(f)
+  def apply(f: HttpExchange => Task[HttpExchange]): ActionFilter = new ActionFilter(f)
 }

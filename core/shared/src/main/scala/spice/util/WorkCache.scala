@@ -1,7 +1,6 @@
 package spice.util
 
-import cats.effect.unsafe.implicits.global
-import cats.effect.{Deferred, IO}
+import rapid.{Fiber, Task}
 
 import java.util.concurrent.ConcurrentHashMap
 
@@ -13,7 +12,7 @@ import java.util.concurrent.ConcurrentHashMap
  * @tparam Result the result of the work
  */
 trait WorkCache[Key, Result] {
-  private val map = new ConcurrentHashMap[Key, Deferred[IO, Result]]
+  private val map = new ConcurrentHashMap[Key, Fiber[Result]]
 
   /**
    * Check for a persisted result. Work that is completed by `work` should persist to be able to be retrieved by this
@@ -23,7 +22,7 @@ trait WorkCache[Key, Result] {
    * @return Some(result) if the work has already been done for this key, None otherwise to say that the work should be
    *         done.
    */
-  protected def persisted(key: Key): IO[Option[Result]]
+  protected def persisted(key: Key): Task[Option[Result]]
 
   /**
    * Execute the work to generate the Result for this Key. The contract of this method is to persist the result so that
@@ -32,41 +31,40 @@ trait WorkCache[Key, Result] {
    * @param key the Key to do work for
    * @return the Result of the work
    */
-  protected def work(key: Key): IO[WorkResult[Result]]
+  protected def work(key: Key): Task[WorkResult[Result]]
 
   /**
    * Retrieve the Result for this Key doing work if necessary and retrieving from persisted state if available.
    */
-  def apply(key: Key): IO[Result] = IO(Option(map.get(key))).flatMap {
-    case Some(d) => d.get
+  def apply(key: Key): Task[Result] = Task(Option(map.get(key))).flatMap {
+    case Some(f) => f
     case None => persisted(key).flatMap {
-      case Some(result) => IO.pure(result)
-      case None => Deferred[IO, Result].flatMap { d =>
-        map.put(key, d)
+      case Some(result) => Task.pure(result)
+      case None => {
+        val completable = Task.completable[Result]
+        map.put(key, completable.start())
         work(key)
           .flatMap {
             case WorkResult.FinalResult(result) =>
-              d.complete(result).map { _ =>
-                map.remove(key)
-                result
-              }
+              completable.success(result)
+              map.remove(key)
+              Task.pure(result)
             case WorkResult.ProgressiveResult(result, complete) =>
               complete
-                .flatMap { result =>
-                  d.complete(result).map { _ =>
-                    map.remove(key)
-                  }
+                .map { result =>
+                  completable.success(result)
+                  map.remove(key)
                 }
-                .handleError(errorHandler(key, _))
-                .unsafeRunAndForget()
-              IO.pure(result)
+                .handleError(throwable => Task(errorHandler(key, throwable).start()))
+                .start()
+              Task.pure(result)
           }
           .handleError(errorHandler(key, _))
       }
     }
   }
 
-  protected def errorHandler(key: Key, throwable: Throwable): Result = {
+  protected def errorHandler(key: Key, throwable: Throwable): Task[Result] = Task {
     scribe.error(s"Error while processing $key ", throwable)
     throw throwable
   }

@@ -1,9 +1,8 @@
 package spec
 
-import cats.effect.IO
-import cats.effect.testing.scalatest.AsyncIOSpec
+import rapid._
 import org.scalatest.matchers.should.Matchers
-import org.scalatest.wordspec.AsyncWordSpec
+import org.scalatest.wordspec.{AnyWordSpec, AsyncWordSpec}
 import spice.ValidationError
 import spice.http.content.Content
 import spice.http.server.{DefaultErrorHandler, HttpServer, MutableHttpServer, StaticHttpServer}
@@ -14,7 +13,7 @@ import spice.http.server.rest.{Restful, RestfulResponse}
 import spice.net._
 import fabric.rw._
 
-class ServerDSLSpec extends AsyncWordSpec with AsyncIOSpec with Matchers {
+class ServerDSLSpec extends AnyWordSpec with Matchers {
   private lazy val text = "Hello, World!".withContentType(ContentType.`text/plain`)
   private lazy val textPost = "Hello, Post!".withContentType(ContentType.`text/plain`)
   private lazy val html = """<html>
@@ -34,7 +33,7 @@ class ServerDSLSpec extends AsyncWordSpec with AsyncIOSpec with Matchers {
           val response = exchange.response
           response.content should be(Some(text))
           response.status should be(HttpStatus.OK)
-        }
+        }.sync()
       }
       "properly accept a request for /hello/world.html" in {
         val request = HttpRequest(source = ip"127.0.0.1", url = url"http://www.example.com/hello/world.html")
@@ -42,14 +41,14 @@ class ServerDSLSpec extends AsyncWordSpec with AsyncIOSpec with Matchers {
           val response = exchange.response
           response.content should be(Some(html))
           response.status should be(HttpStatus.OK)
-        }
+        }.sync()
       }
       "properly return a 404 for /hello/other.html" in {
         val request = HttpRequest(source = ip"127.0.0.1", url = url"http://www.example.com/hello/other.html")
         mutableServer.handle(HttpExchange(request)).map { exchange =>
           val response = exchange.response
           response.status should be(HttpStatus.NotFound)
-        }
+        }.sync()
       }
       "properly return a 404 for a POST" in {
         val request = HttpRequest(
@@ -60,7 +59,7 @@ class ServerDSLSpec extends AsyncWordSpec with AsyncIOSpec with Matchers {
         mutableServer.handle(HttpExchange(request)).map { exchange =>
           val response = exchange.response
           response.status should be(HttpStatus.NotFound)
-        }
+        }.sync()
       }
       "reject a request from a different origin IP" in {
         val request = HttpRequest(source = ip"127.0.0.2", url = url"http://www.example.com/hello/world.html")
@@ -68,7 +67,7 @@ class ServerDSLSpec extends AsyncWordSpec with AsyncIOSpec with Matchers {
           val response = exchange.response
           response.content should be(Some(DefaultErrorHandler.html(HttpStatus.NotFound)))
           response.status should be(HttpStatus.NotFound)
-        }
+        }.sync()
       }
     }
     "creating a HttpServer directly" should {
@@ -78,7 +77,7 @@ class ServerDSLSpec extends AsyncWordSpec with AsyncIOSpec with Matchers {
           val response = exchange.response
           response.content should be(Some(text))
           response.status should be(HttpStatus.OK)
-        }
+        }.sync()
       }
       "match a simple POST" in {
         val request = HttpRequest(
@@ -90,7 +89,7 @@ class ServerDSLSpec extends AsyncWordSpec with AsyncIOSpec with Matchers {
           val response = exchange.response
           response.content should be(Some(textPost))
           response.status should be(HttpStatus.OK)
-        }
+        }.sync()
       }
       "match not-found" in {
         val request = HttpRequest(
@@ -101,7 +100,7 @@ class ServerDSLSpec extends AsyncWordSpec with AsyncIOSpec with Matchers {
           val response = exchange.response
           response.content should be(Some(LifecycleHandler.DefaultNotFound))
           response.status should be(HttpStatus.NotFound)
-        }
+        }.sync()
       }
     }
     "specific testing with filters" should {
@@ -109,11 +108,11 @@ class ServerDSLSpec extends AsyncWordSpec with AsyncIOSpec with Matchers {
 
       val r1 = Restful[String, String]({ request =>
         triggered = triggered ::: List("r1")
-        IO(request.reverse)
+        Task(request.reverse)
       }, Some(path"/r1"))
       val r2 = Restful[String, String]({ request =>
         triggered = triggered ::: List("r2")
-        IO(request.capitalize)
+        Task(request.capitalize)
       }, Some(path"/r2"))
       val f: ConnectionFilter = filters(
         r1,
@@ -130,7 +129,7 @@ class ServerDSLSpec extends AsyncWordSpec with AsyncIOSpec with Matchers {
             exchange.response.content.get.asString.map { s =>
               s should be("\"gnitset\"")
             }
-          }
+          }.sync()
       }
       "properly fall through to the second path" in {
         f
@@ -142,7 +141,7 @@ class ServerDSLSpec extends AsyncWordSpec with AsyncIOSpec with Matchers {
             exchange.response.content.get.asString.map { s =>
               s should be("\"Testing\"")
             }
-          }
+          }.sync()
       }
     }
   }

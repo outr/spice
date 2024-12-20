@@ -1,12 +1,12 @@
 package spice.util
 
-import cats.effect.IO
+import rapid.Task
 
 import java.util.concurrent.ConcurrentLinkedQueue
 import java.util.concurrent.atomic.AtomicInteger
 import scala.annotation.tailrec
 
-case class BufferQueue[T](manager: BufferManager, handler: List[T] => IO[Unit]) {
+case class BufferQueue[T](manager: BufferManager, handler: List[T] => Task[Unit]) {
   private val queue = new ConcurrentLinkedQueue[T]
   private val size = new AtomicInteger(0)
 
@@ -23,12 +23,12 @@ case class BufferQueue[T](manager: BufferManager, handler: List[T] => IO[Unit]) 
 
   def nonEmpty: Boolean = !isEmpty
 
-  def process(): IO[Unit] = {
+  def process(): Task[Unit] = {
     val items = pollQueue(Nil, manager.maxPerBatch)
     if (manager.sendEmpty || items.nonEmpty) {
       handler(items)
     } else {
-      IO.unit
+      Task.unit
     }
   }
 

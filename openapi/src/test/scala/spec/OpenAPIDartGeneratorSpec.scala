@@ -1,6 +1,6 @@
 package spec
 
-import cats.effect.IO
+import rapid._
 import fabric.rw._
 import org.scalatest.matchers.should.Matchers
 import org.scalatest.wordspec.AnyWordSpec
@@ -48,7 +48,7 @@ class OpenAPIDartGeneratorSpec extends AnyWordSpec with Matchers {
       case SortDirection.Ascending => list
       case SortDirection.Descending => list.reverse
     }
-    IO.pure(ListResponse(l))
+    Task.pure(ListResponse(l))
   }
 
   case class ListRequest(direction: SortDirection)

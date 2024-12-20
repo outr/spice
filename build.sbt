@@ -1,6 +1,6 @@
 name := "spice"
 ThisBuild / organization := "com.outr"
-ThisBuild / version := "0.6.4"
+ThisBuild / version := "0.7.0-SNAPSHOT"
 
 val scala213: String = "2.13.15"
 
@@ -61,9 +61,9 @@ lazy val core = crossProject(JSPlatform, JVMPlatform)
 		name := "spice-core",
 		description := "Core functionality leveraged and shared by most other sub-projects of Spice.",
 		libraryDependencies ++= Seq(
-			dep.profig, dep.scribe, dep.scribeCats, dep.fabricParse, dep.reactify, dep.catsEffect, dep.fs2, dep.fs2IO,
+			dep.profig, dep.scribe, dep.scribeRapid, dep.fabricParse, dep.reactify, dep.rapid,
 			dep.literally, dep.moduload,
-			dep.scalaTest, dep.catsEffectTesting
+			dep.scalaTest
 		)
 	)
 	.jsSettings(
@@ -81,7 +81,7 @@ lazy val client = crossProject(JSPlatform, JVMPlatform)
 	.settings(
 		name := "spice-client",
 		libraryDependencies ++= Seq(
-			dep.scalaTest, dep.catsEffectTesting
+			dep.scalaTest
 		)
 	)
 
@@ -95,7 +95,7 @@ lazy val clientImplementationOkHttp = project
 		name := "spice-client-okhttp",
 		libraryDependencies ++= Seq(
 			dep.okHttp,
-			dep.scalaTest, dep.catsEffectTesting
+			dep.scalaTest
 		)
 	)
 
@@ -106,7 +106,7 @@ lazy val clientImplementationJVM = project
 		name := "spice-client-jvm",
 		libraryDependencies ++= Seq(
 			dep.httpMime,
-			dep.scalaTest, dep.catsEffectTesting
+			dep.scalaTest
 		)
 	)
 
@@ -116,7 +116,7 @@ lazy val delta = project
 	.settings(
 		name := "spice-delta",
 		libraryDependencies ++= Seq(
-			dep.scalaTest, dep.catsEffectTesting
+			dep.scalaTest
 		)
 	)
 
@@ -127,7 +127,7 @@ lazy val server = project
 		name := "spice-server",
 		Test / testGrouping := groupTests((Test / definedTests).value),
 		libraryDependencies ++= Seq(
-			dep.scalaTest, dep.catsEffectTesting
+			dep.scalaTest
 		)
 	)
 
@@ -142,7 +142,7 @@ lazy val serverImplementationUndertow = project
 		fork := true,
 		libraryDependencies ++= Seq(
 			dep.undertow, dep.scribeSlf4j,
-			dep.scalaTest, dep.catsEffectTesting
+			dep.scalaTest
 		)
 	)
 
@@ -153,6 +153,6 @@ lazy val openAPI = project
 		name := "spice-openapi",
 		fork := true,
 		libraryDependencies ++= Seq(
-			dep.scalaTest, dep.catsEffectTesting
+			dep.scalaTest
 		)
 	)

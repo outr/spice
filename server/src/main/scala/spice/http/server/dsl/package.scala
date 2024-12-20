@@ -1,7 +1,7 @@
 package spice.http.server
 
-import cats.effect.IO
 import fabric.rw._
+import rapid.Task
 import scribe.mdc.MDC
 import spice.http.content.Content
 import spice.http.server.handler._
@@ -18,7 +18,7 @@ package object dsl {
   implicit class ValidatorFilter(val validator: Validator) extends ConnectionFilter {
     private lazy val list = List(validator)
 
-    override def apply(exchange: HttpExchange)(implicit mdc: MDC): IO[FilterResponse] = {
+    override def apply(exchange: HttpExchange)(implicit mdc: MDC): Task[FilterResponse] = {
       ValidatorHttpHandler.validate(exchange, list).map {
         case ValidationResult.Continue(c) => FilterResponse.Continue(c)
         case vr => FilterResponse.Stop(vr.exchange)
@@ -32,24 +32,24 @@ package object dsl {
     if (PathPart.fulfilled(exchange)) {
       handler.handle(exchange)
     } else {
-      IO.pure(exchange)
+      Task.pure(exchange)
     }
   }
 
   implicit class CachingManagerFilter(val caching: CachingManager) extends LastConnectionFilter(handler2Filter(caching))
 
-//  implicit class DeltasFilter(val deltas: List[Delta]) extends ActionFilter(exchange => IO {
+//  implicit class DeltasFilter(val deltas: List[Delta]) extends ActionFilter(exchange => Task {
 //    exchange.deltas ++= deltas
 //    exchange
 //  })
 //
-//  implicit class DeltaFilter(delta: Delta) extends ActionFilter(exchange => IO {
+//  implicit class DeltaFilter(delta: Delta) extends ActionFilter(exchange => Task {
 //    exchange.deltas += delta
 //    exchange
 //  })
 
   implicit class StringFilter(val s: String) extends ConnectionFilter {
-    override def apply(exchange: HttpExchange)(implicit mdc: MDC): IO[FilterResponse] = IO {
+    override def apply(exchange: HttpExchange)(implicit mdc: MDC): Task[FilterResponse] = Task {
       val path = if (s.startsWith("/")) {
         s
       } else {
@@ -84,7 +84,7 @@ package object dsl {
   }
 
   def redirect(path: URLPath): ConnectionFilter = new ConnectionFilter {
-    override def apply(exchange: HttpExchange)(implicit mdc: MDC): IO[FilterResponse] = {
+    override def apply(exchange: HttpExchange)(implicit mdc: MDC): Task[FilterResponse] = {
       HttpHandler.redirect(exchange, path.encoded).map { redirected =>
         FilterResponse.Continue(redirected)
       }

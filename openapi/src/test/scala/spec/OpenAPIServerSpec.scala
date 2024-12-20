@@ -1,11 +1,10 @@
 package spec
 
-import cats.effect.testing.scalatest.AsyncIOSpec
 import fabric._
 import fabric.io.{JsonFormatter, JsonParser}
 import fabric.rw._
 import org.scalatest.matchers.should.Matchers
-import org.scalatest.wordspec.AsyncWordSpec
+import org.scalatest.wordspec.{AnyWordSpec, AsyncWordSpec}
 import spice.http.content.JsonContent
 import spice.http.server.config.HttpsServerListener
 import spice.http.{HttpExchange, HttpMethod, HttpRequest}
@@ -14,7 +13,7 @@ import spice.openapi.server.{OpenAPIHttpServer, Service, ServiceCall}
 
 import java.nio.file.{Files, Paths}
 
-class OpenAPIServerSpec extends AsyncWordSpec with AsyncIOSpec with Matchers {
+class OpenAPIServerSpec extends AnyWordSpec with Matchers {
   "OpenAPIServer" should {
     "validate a proper swagger.yml file" in {
       val expected = TestUtils.loadYaml("openapi-simple.yml")
@@ -32,7 +31,7 @@ class OpenAPIServerSpec extends AsyncWordSpec with AsyncIOSpec with Matchers {
             "root", "john.doe"
           ))
         }
-      }
+      }.sync()
     }
     "call the /users endpoint on staging-api.example.com" in {
       val request = HttpRequest(url = url"https://staging-api.example.com/users")
@@ -43,7 +42,7 @@ class OpenAPIServerSpec extends AsyncWordSpec with AsyncIOSpec with Matchers {
             "root", "john.doe"
           ))
         }
-      }
+      }.sync()
     }
   }
 

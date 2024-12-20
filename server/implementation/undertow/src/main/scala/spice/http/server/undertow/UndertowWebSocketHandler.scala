@@ -1,7 +1,6 @@
 package spice.http.server.undertow
 
-import cats.effect.IO
-import cats.effect.unsafe.implicits.global
+import rapid._
 import io.undertow.Handlers
 import io.undertow.server.HttpServerExchange
 import io.undertow.websockets.WebSocketConnectionCallback
@@ -17,7 +16,7 @@ object UndertowWebSocketHandler {
   def apply(undertow: HttpServerExchange,
             server: HttpServer,
             exchange: HttpExchange,
-            webSocketListener: WebSocketListener): IO[Unit] = IO {
+            webSocketListener: WebSocketListener): Task[Unit] = Task {
     val handler = Handlers.websocket(new WebSocketConnectionCallback {
       override def onConnect(exchange: WebSocketHttpExchange, channel: WebSocketChannel): Unit = {
         // Handle sending messages
@@ -62,7 +61,7 @@ object UndertowWebSocketHandler {
           }
         })
         channel.resumeReceives()
-        webSocketListener.connect().unsafeRunSync()
+        webSocketListener.connect().sync()
       }
     })
     if (server.config.webSocketCompression()) {
