@@ -149,7 +149,7 @@ class OkHttpClientInstance(client: HttpClient) extends HttpClientInstance {
         completable.failure(exc)
       }
     })
-    OkHttpClientImplementation.process(completable.attempt())
+    OkHttpClientImplementation.process(completable.attempt)
   }
 
   private def requestToOk(request: HttpRequest): okhttp3.Request = {
