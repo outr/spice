@@ -137,7 +137,7 @@ class OkHttpClientInstance(client: HttpClient) extends HttpClientInstance {
   }*/
 
   override def send(request: HttpRequest): Task[Try[HttpResponse]] = {
-    val completable = Task.completable[HttpResponse]
+    val completable = new Task.Completable[HttpResponse]
     val req = requestToOk(request)
     instance.newCall(req).enqueue(new okhttp3.Callback {
       override def onResponse(call: okhttp3.Call, res: okhttp3.Response): Unit = {

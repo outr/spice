@@ -41,7 +41,7 @@ trait WorkCache[Key, Result] {
     case None => persisted(key).flatMap {
       case Some(result) => Task.pure(result)
       case None => {
-        val completable = Task.completable[Result]
+        val completable = new Task.Completable[Result]
         map.put(key, completable.start())
         work(key)
           .flatMap {

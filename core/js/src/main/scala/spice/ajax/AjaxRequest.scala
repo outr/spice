@@ -19,7 +19,7 @@ class AjaxRequest(url: URL,
                   withCredentials: Boolean = true,
                   responseType: String = "") {
   val req = new dom.XMLHttpRequest()
-  val completable: Task.Completable[Try[XMLHttpRequest]] = Task.completable[Try[XMLHttpRequest]]
+  val completable: Task.Completable[Try[XMLHttpRequest]] = new Task.Completable[Try[XMLHttpRequest]]
   val loaded: Val[Double] = Var(0.0)
   val total: Val[Double] = Var(0.0)
   val percentage: Val[Int] = Var(0)
