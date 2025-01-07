@@ -8,8 +8,10 @@ package spice.openapi.generator
  */
 case class OpenAPIGeneratorConfig(baseNames: (String, Set[String])*) {
   lazy val baseForTypeMap: Map[String, String] = baseNames.flatMap {
-    case (parent, children) => children.map { child =>
+    case (parent, children) => children.toList.map { child =>
       child -> parent
+    } ::: children.toList.map { child =>
+      s"$parent$child" -> parent
     }
   }.toMap
 }

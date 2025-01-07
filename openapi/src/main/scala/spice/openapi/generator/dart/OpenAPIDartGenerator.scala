@@ -9,7 +9,7 @@ import spice.streamer._
 
 import scala.collection.mutable
 
-object OpenAPIDartGenerator extends OpenAPIGenerator {
+case class OpenAPIDartGenerator(api: OpenAPI, config: OpenAPIGeneratorConfig) extends OpenAPIGenerator {
   private lazy val ModelTemplate: String = loadString("generator/dart/model.template")
   private lazy val ModelWithParamsTemplate: String = loadString("generator/dart/model_with_params.template")
   private lazy val ParentTemplate: String = loadString("generator/dart/parent.template")
@@ -21,8 +21,18 @@ object OpenAPIDartGenerator extends OpenAPIGenerator {
   override protected def generatedComment: String = "/// GENERATED CODE: Do not edit!"
 
   private implicit class StringExtras(s: String) {
-    def ref2Type: String = s.substring(s.lastIndexOf('/') + 1)
+    def ref: String = s.substring(s.lastIndexOf('/') + 1)
+
+    def component: OpenAPISchema.Component = api.componentByRef(s).get
+
+    def ref2Type: String = {
+      api.componentByRef(s) match {
+        case Some(c) => typeNameForComponent(ref, c)
+        case None => ref
+      }
+    }
     def type2File: String = {
+      val s = ref2Type
       val pre = s.charAt(0).toLower
       val suffix = "\\p{Lu}".r.replaceAllIn(s.substring(1), m => {
         s"_${m.group(0).toLowerCase}"
@@ -50,12 +60,12 @@ object OpenAPIDartGenerator extends OpenAPIGenerator {
       .schema
       .asInstanceOf[OpenAPISchema.Ref]
 
-    def refType: String = ref.ref.ref2Type
-
-    def component(api: OpenAPI): OpenAPISchema.Component = {
-      val componentName = ref.ref.substring(ref.ref.lastIndexOf('/') + 1)
-      api.components.get.schemas(componentName).asInstanceOf[OpenAPISchema.Component]
+    def refType: String = {
+      val t = ref.ref.ref2Type
+      typeNameForComponent(t, component)
     }
+
+    def component: OpenAPISchema.Component = api.componentByRef(ref.ref).get
   }
 
   private lazy val renameMap = Map(
@@ -72,31 +82,42 @@ object OpenAPIDartGenerator extends OpenAPIGenerator {
     }
   }
 
-  override def generate(api: OpenAPI, config: OpenAPIGeneratorConfig): List[SourceFile] = {
-    val service = generateService(api, config)
-    val modelObjects = generatePaths(api, config)
+  override def generate(): List[SourceFile] = {
+    val service = generateService()
+    val modelObjects = generatePaths()
 
     service :: modelObjects
   }
 
   private var parentFiles = Map.empty[String, SourceFile]
 
-  def generatePaths(api: OpenAPI, config: OpenAPIGeneratorConfig): List[SourceFile] = {
+  def generatePaths(): List[SourceFile] = {
     parentFiles = Map.empty
     val sourceFiles = api.components.toList.flatMap(_.schemas.toList).map {
-      case (typeName, schema: OpenAPISchema.Component) => parseComponent(typeName, schema, api, config)
+      case (typeName, schema: OpenAPISchema.Component) => parseComponent(typeName, schema)
       case (typeName, schema) => throw new UnsupportedOperationException(s"$typeName has unsupported schema: $schema")
     }
     sourceFiles ::: parentFiles.values.toList
   }
 
-  private def parseComponent(rawTypeName: String, schema: OpenAPISchema.Component, api: OpenAPI, config: OpenAPIGeneratorConfig): SourceFile = {
+  private def typeNameForComponent(rawTypeName: => String, schema: OpenAPISchema.Component): String = schema.xFullClass match {
+    case Some(cn) =>
+      val parts = cn.split('.')
+      if (parts.length > 1 && parts(parts.length - 2).charAt(0).isUpper) {
+        s"${parts(parts.length - 2)}${parts.last}"
+      } else {
+        parts.last
+      }
+    case None => rawTypeName.replace(" ", "")
+  }
+
+  private def parseComponent(rawTypeName: String, schema: OpenAPISchema.Component): SourceFile = {
     val imports = mutable.Set.empty[String]
 
-    val typeName: String = rawTypeName.replace(" ", "")
+    val typeName: String = typeNameForComponent(rawTypeName, schema)
     val fileName: String = s"${typeName.type2File}.dart"
     val fields: List[String] = schema.properties.toList.map {
-      case (fieldName, schema) => parseField(fieldName, schema, api, config, imports).toString
+      case (fieldName, schema) => parseField(fieldName, schema, imports).toString
     }
     val fieldsString = fields.mkString("\n  ") match {
       case "" => "// No fields defined"
@@ -162,20 +183,21 @@ object OpenAPIDartGenerator extends OpenAPIGenerator {
 
   private def parseField(fieldName: String,
                          schema: OpenAPISchema,
-                         api: OpenAPI,
-                         config: OpenAPIGeneratorConfig,
                          imports: mutable.Set[String]): ParsedField = schema match {
     case c: OpenAPISchema.Component if c.`enum`.nonEmpty =>
-      val parentName = config.baseForTypeMap.getOrElse(c.`enum`.head.asString, throw new NullPointerException(s"Unable to find enum entry ${c.`enum`.head} for $fieldName"))
+      val parentName = typeNameForComponent(
+        rawTypeName = config.baseForTypeMap.getOrElse(c.`enum`.head.asString, throw new NullPointerException(s"Unable to find enum entry ${c.`enum`.head} for $fieldName")),
+        schema = c
+      )
       val `enum` = c.`enum`.map {
         case Str(s, _) => s
         case json => throw new UnsupportedOperationException(s"Enum only supports Str: $json")
       }
       imports += parentName.type2File
-      addParent(api, config, parentName, `enum`)
+      addParent(parentName, `enum`)
       ParsedField(parentName, fieldName, c.nullable.getOrElse(false))
     case c: OpenAPISchema.Component if c.`type` == "array" =>
-      val item = parseField(fieldName, c.items.get, api, config, imports)
+      val item = parseField(fieldName, c.items.get, imports)
       item.copy(
         `type` = s"List<${item.`type`}>",
         nullable = c.nullable.getOrElse(false)
@@ -186,16 +208,17 @@ object OpenAPIDartGenerator extends OpenAPIGenerator {
           case Str(s, _) => s
           case json => throw new UnsupportedOperationException(s"Enum only supports Str: $json")
         }
-        val baseType = config.baseForTypeMap.getOrElse(`enum`.head, throw new RuntimeException(s"No mapping defined for ${`enum`.head} ($fieldName)"))
-        imports += baseType.type2File
-        addParent(api, config, baseType, `enum`)
-        baseType.dartType
+        val parentName = typeNameForComponent(
+          rawTypeName = config.baseForTypeMap.getOrElse(c.`enum`.head.asString, throw new NullPointerException(s"Unable to find enum entry ${c.`enum`.head} for $fieldName")),
+          schema = c
+        )
+        imports += parentName.type2File
+        addParent(parentName, `enum`)
+        parentName.dartType
       } else if (c.`type` == "object" && c.additionalProperties.nonEmpty) {
         val additionalField = parseField(
           fieldName = fieldName,
           schema = c.additionalProperties.get,
-          api = api,
-          config = config,
           imports = imports
         )
         s"Map<String, ${additionalField.`type`}>"
@@ -218,12 +241,12 @@ object OpenAPIDartGenerator extends OpenAPIGenerator {
       }
       val parentType = parentName.type2File
       imports += parentType
-      addParent(api, config, parentName)
+      addParent(parentName)
       ParsedField(parentName, fieldName, c.nullable.getOrElse(false))
     case _ => throw new UnsupportedOperationException(s"Schema for '$fieldName' is unsupported: $schema")
   }
 
-  private def addParent(api: OpenAPI, config: OpenAPIGeneratorConfig, tn: String, `enum`: List[String] = Nil): Unit = {
+  private def addParent(tn: String, `enum`: List[String] = Nil): Unit = {
     val typeName = tn.replace(" ", "")
     if (!parentFiles.contains(typeName)) {
       if (`enum`.nonEmpty) {
@@ -244,8 +267,9 @@ object OpenAPIDartGenerator extends OpenAPIGenerator {
           source = source
         )
       } else {
-        val children = config.baseNames.find(_._1 == typeName).get._2.toList.sorted
-        var imports = children.toSet
+        val children = config.baseNames.find(_._1 == typeName.ref).get._2.toList.sorted
+        val typedChildren = children.map(_.ref2Type)
+        var imports = typedChildren.toSet
         val maps = children.map { child =>
           val components = api.components.get
           val component = components
@@ -262,7 +286,7 @@ object OpenAPIDartGenerator extends OpenAPIGenerator {
                       case json => throw new UnsupportedOperationException(s"Enum only supports Str: $json")
                     }
                     imports = imports + parentName.type2File
-                    addParent(api, config, parentName, `enum`)
+                    addParent(parentName, `enum`)
 
                     if (c.nullable.contains(true)) {
                       s"List<$parentName>?"
@@ -289,7 +313,7 @@ object OpenAPIDartGenerator extends OpenAPIGenerator {
                     }
                     val c = parentName.type2File
                     imports = imports + c
-                    addParent(api, config, parentName)
+                    addParent(parentName)
                     val s = s"List<$c>"
                     if (o.nullable.contains(true)) {
                       s"$s?"
@@ -305,7 +329,7 @@ object OpenAPIDartGenerator extends OpenAPIGenerator {
                     case json => throw new UnsupportedOperationException(s"Enum only supports Str: $json")
                   }
                   imports = imports + parentName.type2File
-                  addParent(api, config, parentName, `enum`)
+                  addParent(parentName, `enum`)
 
                   if (c.nullable.contains(true)) {
                     s"$parentName?"
@@ -340,10 +364,11 @@ object OpenAPIDartGenerator extends OpenAPIGenerator {
         val importString = imports.map { c =>
           s"import '${c.type2File}.dart';"
         }.mkString("\n")
-        val fromJson = children.map { c =>
-          s"""if (t == '$c') {
-             |      return ${c.replace(" ", "")}.fromJson(json);
-             |    }""".stripMargin
+        val fromJson = children.zip(typedChildren).map {
+          case (child, typed) =>
+            s"""if (t == '$child') {
+               |      return $typed.fromJson(json);
+               |    }""".stripMargin
         }.mkString("    ", " else ",
           """ else {
             |      throw Exception("Unsupported type: $t");
@@ -364,7 +389,7 @@ object OpenAPIDartGenerator extends OpenAPIGenerator {
     }
   }
 
-  def generateService(api: OpenAPI, config: OpenAPIGeneratorConfig): SourceFile = {
+  def generateService(): SourceFile = {
     var imports = Set.empty[String]
     val methods: List[String] = api.paths.toList.sortBy(_._1).map {
       case (pathString, path) =>
@@ -398,7 +423,7 @@ object OpenAPIDartGenerator extends OpenAPIGenerator {
                |  }""".stripMargin
           case _: OpenAPISchema.Ref =>
             val responseType = successResponse.refType
-            val component = successResponse.component(api)
+            val component = successResponse.component
             val binary = component.format.contains("binary")
             imports = imports + responseType.type2File
             if (requestContentType == ContentType.`multipart/form-data`) {

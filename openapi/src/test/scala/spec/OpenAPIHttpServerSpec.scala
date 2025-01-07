@@ -17,11 +17,12 @@ class OpenAPIHttpServerSpec extends AnyWordSpec with Matchers {
       Example.api.asYaml should be(expected)
     }
     "generate Dart code for the server" in {
-      val sourceFiles = OpenAPIDartGenerator.generate(Example.api, OpenAPIGeneratorConfig(
+      val generator = OpenAPIDartGenerator(Example.api, OpenAPIGeneratorConfig(
         baseNames = "NumEnum" -> Set(
           "One", "Two", "Three"
         )
       ))
+      val sourceFiles = generator.generate()
       sourceFiles should not be Nil
       /*sourceFiles.foreach { f =>
         scribe.info(s"File: ${f.fileName}\n-----------------------\n${f.source}\n--------------------------")

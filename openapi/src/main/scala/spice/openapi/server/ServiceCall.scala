@@ -76,7 +76,7 @@ trait ServiceCall extends HttpHandler {
           contentType -> OpenAPIContentType(
             schema = if (contentType == ContentType.`multipart/form-data`) {
               val map = requestRW.definition.asInstanceOf[DefType.Obj].map
-              componentSchema(requestSchema.getOrElse(Schema()), map, None, nullable = None)
+              componentSchema(requestRW.definition.className, requestSchema.getOrElse(Schema()), map, None, nullable = None)
             } else {
               schemaFrom(requestRW.definition, requestSchema.getOrElse(Schema()), None, nullable = None)
             }
@@ -106,13 +106,14 @@ trait ServiceCall extends HttpHandler {
     ))
   }
 
-  private def componentSchema(schema: Schema, map: Map[String, DefType], format: Option[String], nullable: Option[Boolean]): OpenAPISchema = {
+  private def componentSchema(className: Option[String], schema: Schema, map: Map[String, DefType], format: Option[String], nullable: Option[Boolean]): OpenAPISchema = {
     val c = if (map.keySet == Set("[key]")) {
       val t = map("[key]")
       OpenAPISchema.Component(
         `type` = "object",
         format = format,
-        additionalProperties = Some(schemaFrom(t, Schema(), format, nullable))
+        additionalProperties = Some(schemaFrom(t, Schema(), format, nullable)),
+        xFullClass = className
       )
     } else {
       OpenAPISchema.Component(
@@ -120,7 +121,8 @@ trait ServiceCall extends HttpHandler {
         format = format,
         properties = map.map {
           case (key, dt) => key -> schemaFrom(dt, schema.properties.getOrElse(key, Schema()), format, nullable)
-        }
+        },
+        xFullClass = className
       )
     }
     if (nullable.getOrElse(false)) {
@@ -131,13 +133,13 @@ trait ServiceCall extends HttpHandler {
   }
 
   private def schemaFrom(dt: DefType, schema: Schema, format: Option[String], nullable: Option[Boolean]): OpenAPISchema = (dt match {
-    case DefType.Obj(map, None) => componentSchema(schema, map, format, nullable)
+    case DefType.Obj(map, None) => componentSchema(dt.className, schema, map, format, nullable)
     case DefType.Obj(_, Some("spice.http.server.rest.FileUpload")) => OpenAPISchema.Component(
       `type` = "string",
       format = Some("binary")
     )
     case DefType.Obj(map, Some(className)) =>
-      val refName = OpenAPIHttpServer.register(className)(componentSchema(schema, map, format, None))
+      val refName = OpenAPIHttpServer.register(className)(componentSchema(Some(className), schema, map, format, None))
       OpenAPISchema.Ref(s"#/components/schemas/$refName", nullable)
     case DefType.Arr(t) => OpenAPISchema.Component(
       `type` = "array",
@@ -155,7 +157,8 @@ trait ServiceCall extends HttpHandler {
       description = cn,
       `enum` = values,
       format = format,
-      nullable = nullable
+      nullable = nullable,
+      xFullClass = cn
     )
     case DefType.Bool => OpenAPISchema.Component(
       `type` = "boolean",

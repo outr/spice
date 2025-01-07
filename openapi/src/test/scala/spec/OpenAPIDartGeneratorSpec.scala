@@ -9,23 +9,18 @@ import spice.openapi.generator.OpenAPIGeneratorConfig
 import spice.openapi.generator.dart.OpenAPIDartGenerator
 import spice.openapi.server.{OpenAPIHttpServer, RestService, Service}
 
+import java.io.File
+import java.nio.file.Path
+
 class OpenAPIDartGeneratorSpec extends AnyWordSpec with Matchers {
   "OpenAPIDartGenerator" should {
     "generate Dart code for the server" in {
-      val sourceFiles = OpenAPIDartGenerator.generate(Server.api, OpenAPIGeneratorConfig(
-        "SortDirection" -> Set(
-          "Ascending", "Descending"
-        ),
-        "NumEnum" -> Set(
-          "One", "Two", "Three"
-        ),
-        "Winner" -> Set(
-          ".", "X", "O"
-        )
-      ))
+      val generator = OpenAPIDartGenerator(Server.api, OpenAPIGeneratorConfig())
+      val sourceFiles = generator.generate()
       sourceFiles should not be Nil
-      sourceFiles.map(_.fileName).toSet should be(Set("list_request.dart", "num_enum.dart", "file_upload_response.dart", "reverse_response.dart", "winner.dart", "reverse_request.dart", "list_response.dart", "combine_request.dart", "auth.dart", "sort_direction.dart", "combine_response.dart", "status.dart", "service.dart"))
-      val listRequestSource = sourceFiles.find(_.fileName == "list_request.dart").get
+      generator.write(sourceFiles, Path.of("output"))
+      sourceFiles.map(_.fileName).toSet should be(Set("open_a_p_i_dart_generator_spec_filter.dart", "open_a_p_i_dart_generator_spec_list_response.dart", "sort_direction.dart", "service.dart", "open_a_p_i_dart_generator_spec_list_request.dart"))
+      val listRequestSource = sourceFiles.find(_.fileName == "open_a_p_i_dart_generator_spec_list_request.dart").get
       listRequestSource.source should include("import 'sort_direction.dart';")
       listRequestSource.source should include("final SortDirection direction;")
       val sortDirectionSource = sourceFiles.find(_.fileName == "sort_direction.dart").get
@@ -48,10 +43,14 @@ class OpenAPIDartGeneratorSpec extends AnyWordSpec with Matchers {
       case SortDirection.Ascending => list
       case SortDirection.Descending => list.reverse
     }
-    Task.pure(ListResponse(l))
+    val filtered = request.filter match {
+      case Some(f) => l.filter(_.matches(f.regex))
+      case None => l
+    }
+    Task.pure(ListResponse(filtered))
   }
 
-  case class ListRequest(direction: SortDirection)
+  case class ListRequest(filter: Option[Filter], direction: SortDirection)
 
   object ListRequest {
     implicit val rw: RW[ListRequest] = RW.gen
@@ -63,10 +62,16 @@ class OpenAPIDartGeneratorSpec extends AnyWordSpec with Matchers {
     implicit val rw: RW[ListResponse] = RW.gen
   }
 
+  case class Filter(regex: String)
+
+  object Filter {
+    implicit val rw: RW[Filter] = RW.gen
+  }
+
   sealed trait SortDirection
 
   object SortDirection {
-    implicit val rw: RW[SortDirection] = RW.enumeration(List(Ascending, Descending))
+    implicit val rw: RW[SortDirection] = RW.enumeration(List(Ascending, Descending), className = Some("SortDirection"))
 
     case object Ascending extends SortDirection
     case object Descending extends SortDirection

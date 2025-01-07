@@ -7,10 +7,13 @@ import java.nio.file.{Files, Path}
 import scala.io.Source
 
 trait OpenAPIGenerator {
+  def api: OpenAPI
+  def config: OpenAPIGeneratorConfig
+
   protected def fileExtension: String
   protected def generatedComment: String
 
-  def generate(api: OpenAPI, config: OpenAPIGeneratorConfig): List[SourceFile]
+  def generate(): List[SourceFile]
 
   protected def isGenerated(file: File): Boolean = if (!file.isDirectory && file.getName.toLowerCase.endsWith(fileExtension)) {
     val s = Source.fromFile(file)
@@ -27,6 +30,7 @@ trait OpenAPIGenerator {
     if (deleteBeforeWrite) {
       sourceFiles.map(_.path).distinct.foreach { filePath =>
         val directory = path.resolve(filePath).toFile
+        directory.mkdirs()
         directory.listFiles().foreach { file =>
           if (isGenerated(file)) {
             if (!file.delete()) {
