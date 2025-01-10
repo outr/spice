@@ -1,16 +1,13 @@
 package spice.openapi.server
 
-import rapid._
-import scribe.mdc.MDC
-import spice.http.{HttpExchange, paths}
+import spice.http.paths
 import spice.http.content.Content
-import spice.http.server.{HttpServer, MutableHttpServer}
-import spice.openapi._
+import spice.http.server.MutableHttpServer
 import spice.net._
 import spice.openapi.{OpenAPI, OpenAPIComponents, OpenAPIInfo, OpenAPIPath, OpenAPISchema, OpenAPIServer, OpenAPITag}
 
 import scala.annotation.tailrec
-import scala.collection.immutable.{SortedMap, VectorMap}
+import scala.collection.immutable.VectorMap
 
 trait OpenAPIHttpServer extends MutableHttpServer {
   def openAPIVersion: String = "3.0.3"
@@ -57,6 +54,12 @@ trait OpenAPIHttpServer extends MutableHttpServer {
 object OpenAPIHttpServer {
   private var fullNameMap = Map.empty[String, String]
   private var componentsMap = Map.empty[String, OpenAPISchema]
+
+  // TODO: Properly separate instances in the future
+  def clear(): Unit = {
+    fullNameMap = Map.empty
+    componentsMap = Map.empty
+  }
 
   def register(fullName: String)(f: => OpenAPISchema): String = synchronized {
     fullNameMap.get(fullName) match {

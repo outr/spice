@@ -14,7 +14,7 @@ class OpenAPIServerAdvancedSpec extends AnyWordSpec with Matchers {
     "validate a proper swagger.yml file" in {
       val expected = TestUtils.loadJson("openapi-tictactoe.json")
       val json = AdvancedOpenAPIServer.api.asJson
-      println(JsonFormatter.Default(json))
+//      println(JsonFormatter.Default(json))
       // TODO: Finish support
 //      json should be(expected)
       succeed

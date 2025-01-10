@@ -9,12 +9,12 @@ import spice.openapi.generator.OpenAPIGeneratorConfig
 import spice.openapi.generator.dart.OpenAPIDartGenerator
 import spice.openapi.server.{OpenAPIHttpServer, RestService, Service}
 
-import java.io.File
 import java.nio.file.Path
 
 class OpenAPIDartGeneratorSpec extends AnyWordSpec with Matchers {
   "OpenAPIDartGenerator" should {
     "generate Dart code for the server" in {
+      OpenAPIHttpServer.clear()
       val generator = OpenAPIDartGenerator(Server.api, OpenAPIGeneratorConfig())
       val sourceFiles = generator.generate()
       sourceFiles should not be Nil
