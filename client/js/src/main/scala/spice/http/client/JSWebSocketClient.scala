@@ -5,6 +5,7 @@ import rapid.{Fiber, Task}
 import spice.http.{ByteBufferData, ConnectionStatus, WebSocket}
 import spice.net.URL
 
+import scala.concurrent.ExecutionContext
 import scala.scalajs.js.typedarray.TypedArrayBufferOps._
 import scala.scalajs.js.typedarray._
 
@@ -57,7 +58,7 @@ class JSWebSocketClient(url: URL) extends WebSocket {
         }
       }
     }
-    Fiber.fromFuture(status.future(s => s != ConnectionStatus.Connecting))
+    Fiber.fromFuture(status.future(s => s != ConnectionStatus.Connecting))(ExecutionContext.global)
   }
 
   private def updateStatus(): Unit = webSocket.readyState match {

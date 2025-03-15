@@ -1264,6 +1264,7 @@ object ContentType {
   map("mime", "message/rfc822")
   map("mj2", "video/mj2")
   map("mjp2", "video/mj2")
+  map("mjs", "application/javascript")
   map("mk3d", "video/x-matroska")
   map("mka", "audio/x-matroska")
   map("mks", "video/x-matroska")
