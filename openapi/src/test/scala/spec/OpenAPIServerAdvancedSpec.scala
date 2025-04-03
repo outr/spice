@@ -21,13 +21,15 @@ class OpenAPIServerAdvancedSpec extends AnyWordSpec with Matchers {
     }
   }
 
-  object AdvancedOpenAPIServer extends OpenAPIHttpServer {
+  object AdvancedOpenAPIServer extends OpenAPIHttpServer { s =>
     override def title: String = "Tic Tac Toe"
     override def version: String = "1.0.0"
     override def description: Option[String] = Some("This API allows writing down marks on a Tic Tac Toe board and requesting the state of the board or of individual squares.")
     override def tags: List[String] = List("gameplay")
 
     object board extends Service {
+      override def server: OpenAPIHttpServer = s
+
       override val path: URLPath = path"/board"
 
       override val calls: List[ServiceCall] = List(
@@ -68,6 +70,8 @@ class OpenAPIServerAdvancedSpec extends AnyWordSpec with Matchers {
     }
 
     object boardSquare extends Service {
+      override def server: OpenAPIHttpServer = s
+
       override val path: URLPath = path"/board/{row}/{column}"
 
       override val calls: List[ServiceCall] = List(

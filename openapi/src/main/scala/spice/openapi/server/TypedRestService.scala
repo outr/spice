@@ -4,7 +4,8 @@ import rapid._
 import fabric.rw._
 import spice.net.URLPath
 
-case class TypedRestService[Req, Res](path: URLPath,
+case class TypedRestService[Req, Res](server: OpenAPIHttpServer,
+                                      path: URLPath,
                                       summary: String,
                                       override val responseTypes: List[ResponseType],
                                       f: Req => Task[Res])

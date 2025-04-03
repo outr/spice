@@ -42,11 +42,13 @@ abstract class RestService extends Service {
 }
 
 object RestService {
-  def apply[Req, Res](urlPath: URLPath,
+  def apply[Req, Res](server: OpenAPIHttpServer,
+                      urlPath: URLPath,
                       serviceSummary: String,
                       types: List[ResponseType] = List(ResponseType(ContentType.`application/json`)))
                      (f: Req => Task[Res])
                      (implicit reqRW: RW[Req], resRW: RW[Res]): TypedRestService[Req, Res] = TypedRestService[Req, Res](
+    server = server,
     path = urlPath,
     summary = serviceSummary,
     responseTypes = types,

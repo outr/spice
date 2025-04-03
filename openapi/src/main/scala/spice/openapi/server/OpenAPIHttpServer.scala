@@ -1,5 +1,6 @@
 package spice.openapi.server
 
+import rapid.Task
 import spice.http.paths
 import spice.http.content.Content
 import spice.http.server.MutableHttpServer
@@ -10,55 +11,13 @@ import scala.annotation.tailrec
 import scala.collection.immutable.VectorMap
 
 trait OpenAPIHttpServer extends MutableHttpServer {
-  def openAPIVersion: String = "3.0.3"
-
-  def title: String
-  def version: String
-  def description: Option[String] = None
-  def tags: List[String] = Nil
-
-  def api: OpenAPI = OpenAPI(
-    openapi = openAPIVersion,
-    info = OpenAPIInfo(
-      title = title,
-      version = version,
-      description = description
-    ),
-    tags = tags.map(OpenAPITag.apply),
-    servers = config.listeners() flatMap { server =>
-      server.urls.map { url =>
-        OpenAPIServer(url = url, description = server.description)
-      }
-    },
-    paths = services.map { service =>
-      service.path.toString -> OpenAPIPath(
-        parameters = Nil, // TODO: Implement
-        methods = service.calls.flatMap(sc => sc.openAPI.map(sc.method -> _)).toMap
-      )
-    }.toMap,
-    components = Some(OpenAPIComponents(
-      parameters = Map.empty,
-      schemas = OpenAPIHttpServer.components
-    ))
-  )
-
-  def services: List[Service]
-
-  services.foreach { service =>
-    handlers += service
-  }
-  handler.matcher(paths.exact("/openapi.json")).content(Content.json(api.asJson, compact = false))
-  handler.matcher(paths.exact("/openapi.yaml")).content(Content.string(api.asYaml, ContentType.`text/yaml`))
-}
-
-object OpenAPIHttpServer {
   private var fullNameMap = Map.empty[String, String]
   private var componentsMap = Map.empty[String, OpenAPISchema]
 
-  // TODO: Properly separate instances in the future
-  def clear(): Unit = {
-    fullNameMap = Map.empty
-    componentsMap = Map.empty
+  override protected def initialize(): Task[Unit] = super.initialize().map { _ =>
+    services.foreach { service =>
+      handlers += service
+    }
   }
 
   def register(fullName: String)(f: => OpenAPISchema): String = synchronized {
@@ -95,4 +54,41 @@ object OpenAPIHttpServer {
 
     recurse(0)
   }
+
+  def openAPIVersion: String = "3.0.3"
+
+  def title: String
+  def version: String
+  def description: Option[String] = None
+  def tags: List[String] = Nil
+
+  def api: OpenAPI = OpenAPI(
+    openapi = openAPIVersion,
+    info = OpenAPIInfo(
+      title = title,
+      version = version,
+      description = description
+    ),
+    tags = tags.map(OpenAPITag.apply),
+    servers = config.listeners() flatMap { server =>
+      server.urls.map { url =>
+        OpenAPIServer(url = url, description = server.description)
+      }
+    },
+    paths = services.map { service =>
+      service.path.toString -> OpenAPIPath(
+        parameters = Nil, // TODO: Implement
+        methods = service.calls.flatMap(sc => sc.openAPI.map(sc.method -> _)).toMap
+      )
+    }.toMap,
+    components = Some(OpenAPIComponents(
+      parameters = Map.empty,
+      schemas = components
+    ))
+  )
+
+  def services: List[Service]
+
+  handler.matcher(paths.exact("/openapi.json")).content(Content.json(api.asJson, compact = false))
+  handler.matcher(paths.exact("/openapi.yaml")).content(Content.string(api.asYaml, ContentType.`text/yaml`))
 }

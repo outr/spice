@@ -1,6 +1,7 @@
 %%IMPORTS%%
 
 /// GENERATED CODE: Do not edit!
+/// Parent
 abstract class %%CLASSNAME%% {
   %%FIELDS%%
 

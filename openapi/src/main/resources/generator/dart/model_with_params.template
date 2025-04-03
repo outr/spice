@@ -7,6 +7,7 @@ import 'package:copy_with_extension/copy_with_extension.dart';
 part '%%FILENAME%%.g.dart';
 
 /// GENERATED CODE: Do not edit!
+/// Model with Params
 @JsonSerializable(explicitToJson: true)
 @CopyWith()
 class %%CLASSNAME%% %%EXTENDS%%{

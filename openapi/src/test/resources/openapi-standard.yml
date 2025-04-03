@@ -1,0 +1,41 @@
+openapi: '3.0.3'
+info:
+  title: 'Sample API'
+  version: '0.1.9'
+  description: 'Optional multiline or single-line description in [CommonMark](https://commonmark.org/help/) or HTML.'
+servers:
+  - url: 'https://api.example.com/v1'
+    description: 'Optional server description, e.g. Main (production) server'
+  - url: 'https://staging-api.example.com'
+    description: 'Optional server description, e.g. Internal staging server for testing'
+paths:
+  /users:
+    get:
+      summary: 'Returns a list of users.'
+      description: 'Optional extended description in CommonMark or HTML.'
+      responses:
+        200:
+          description: 'A JSON array of users'
+          content:
+            application/json:
+              schema:
+                type: 'array'
+                items:
+                  $ref: '#/components/schemas/User'
+components:
+  schemas:
+    User:
+      type: 'object'
+      properties:
+        name:
+          type: 'string'
+        type:
+          $ref: '#/components/schemas/UserType'
+      xFullClass: 'spec.OpenAPIServerSpec.User'
+    UserType:
+      type: 'string'
+      description: 'spec.OpenAPIServerSpec.UserType'
+      enum:
+        - 'Admin'
+        - 'Basic'
+      xFullClass: 'spec.OpenAPIServerSpec.UserType'

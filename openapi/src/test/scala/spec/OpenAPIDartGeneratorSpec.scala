@@ -14,7 +14,6 @@ import java.nio.file.Path
 class OpenAPIDartGeneratorSpec extends AnyWordSpec with Matchers {
   "OpenAPIDartGenerator" should {
     "generate Dart code for the server" in {
-      OpenAPIHttpServer.clear()
       val generator = OpenAPIDartGenerator(Server.api, OpenAPIGeneratorConfig())
       val sourceFiles = generator.generate()
       sourceFiles should not be Nil
@@ -38,7 +37,7 @@ class OpenAPIDartGeneratorSpec extends AnyWordSpec with Matchers {
   }
 
   private val list = List("Apple", "Banana", "Cherry", "Date", "Elderberry", "Fig", "Grape")
-  private val listService = RestService[ListRequest, ListResponse](path"/list", "List results") { request =>
+  private val listService = RestService[ListRequest, ListResponse](Server, path"/list", "List results") { request =>
     val l = request.direction match {
       case SortDirection.Ascending => list
       case SortDirection.Descending => list.reverse

@@ -39,7 +39,7 @@ class OpenAPIHttpServerSpec extends AnyWordSpec with Matchers {
     )
   }
 
-  private val reverseService = RestService[ReverseRequest, ReverseResponse](path"/reverse", "Reverses text") { request =>
+  private val reverseService = RestService[ReverseRequest, ReverseResponse](Example, path"/reverse", "Reverses text") { request =>
     if (request.auth.username == "admin" && request.auth.password == "password") {
       Task.pure(ReverseResponse(Some(request.text.reverse), None))
     } else {
@@ -47,7 +47,7 @@ class OpenAPIHttpServerSpec extends AnyWordSpec with Matchers {
     }
   }
 
-  private val combineService = RestService[CombineRequest, CombineResponse](path"/combine", "Combines the values of an enum") { request =>
+  private val combineService = RestService[CombineRequest, CombineResponse](Example, path"/combine", "Combines the values of an enum") { request =>
     if (request.auth.username == "admin" && request.auth.password == "password") {
       Task.pure(CombineResponse(request.map.values.toList.sortBy(_.getClass.getName), None))
     } else {
@@ -55,7 +55,7 @@ class OpenAPIHttpServerSpec extends AnyWordSpec with Matchers {
     }
   }
 
-  private val fileUploadService = RestService[FileUploadRequest, FileUploadResponse](path"/upload", "Uploads a file") { request =>
+  private val fileUploadService = RestService[FileUploadRequest, FileUploadResponse](Example, path"/upload", "Uploads a file") { request =>
     Task {
       val file = request.file
       scribe.info(s"Headers: ${file.headers}")

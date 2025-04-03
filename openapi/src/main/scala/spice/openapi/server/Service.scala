@@ -9,6 +9,8 @@ import spice.http.{HttpExchange, HttpMethod}
 import spice.net.{ContentType, URLPath}
 
 trait Service extends HttpHandler {
+  def server: OpenAPIHttpServer
+
   val path: URLPath
   val calls: List[ServiceCall]
 

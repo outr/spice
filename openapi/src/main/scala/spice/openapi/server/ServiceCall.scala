@@ -139,7 +139,17 @@ trait ServiceCall extends HttpHandler {
       format = Some("binary")
     )
     case DefType.Obj(map, Some(className)) =>
-      val refName = OpenAPIHttpServer.register(className)(componentSchema(Some(className), schema, map, format, None))
+      val refName = service.server.register(className)(componentSchema(Some(className), schema, map, format, None))
+      OpenAPISchema.Ref(s"#/components/schemas/$refName", nullable)
+    case DefType.Enum(values, Some(className)) =>
+      val refName = service.server.register(className)(OpenAPISchema.Component(
+        `type` = "string",
+        description = Some(className),
+        `enum` = values,
+        format = format,
+        nullable = nullable,
+        xFullClass = Some(className)
+      ))
       OpenAPISchema.Ref(s"#/components/schemas/$refName", nullable)
     case DefType.Arr(t) => OpenAPISchema.Component(
       `type` = "array",
@@ -152,14 +162,17 @@ trait ServiceCall extends HttpHandler {
       format = format,
       nullable = nullable
     )
-    case DefType.Enum(values, cn) => OpenAPISchema.Component(
-      `type` = "string",
-      description = cn,
-      `enum` = values,
-      format = format,
-      nullable = nullable,
-      xFullClass = cn
-    )
+    case DefType.Enum(values, cn) => {
+      scribe.info(s"Values: $values, CN: $cn")
+      OpenAPISchema.Component(
+        `type` = "string",
+        description = cn,
+        `enum` = values,
+        format = format,
+        nullable = nullable,
+        xFullClass = cn
+      )
+    }
     case DefType.Bool => OpenAPISchema.Component(
       `type` = "boolean",
       format = format,

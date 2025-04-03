@@ -6,6 +6,7 @@ import 'package:json_annotation/json_annotation.dart';
 part '%%FILENAME%%.g.dart';
 
 /// GENERATED CODE: Do not edit!
+/// Model
 @JsonSerializable(explicitToJson: true)
 class %%CLASSNAME%% %%EXTENDS%%{
   %%FIELDS%%

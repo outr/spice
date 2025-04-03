@@ -7,7 +7,8 @@ import 'package:outr_flutter/application.dart';
 
 %%IMPORTS%%
 
-// GENERATED CODE: Do not edit!
+/// GENERATED CODE: Do not edit!
+/// Service
 class Service {
   static Uri base = Uri.base;
 
