@@ -101,7 +101,7 @@ class OpenAPIServerSpec extends AnyWordSpec with Matchers {
   sealed trait UserType
 
   object UserType {
-    implicit val rw: RW[UserType] = RW.enumeration(List(Admin, Basic), className = Some("spec.OpenAPIServerSpec.UserType"))
+    implicit val rw: RW[UserType] = RW.enumeration(List(Admin, Basic))
 
     case object Admin extends UserType
     case object Basic extends UserType

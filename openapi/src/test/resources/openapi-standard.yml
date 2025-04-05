@@ -24,18 +24,18 @@ paths:
                   $ref: '#/components/schemas/User'
 components:
   schemas:
+    OpenAPIServerSpec$UserType:
+      type: 'string'
+      description: 'spec.OpenAPIServerSpec$UserType'
+      enum:
+        - 'Admin'
+        - 'Basic'
+      xFullClass: 'spec.OpenAPIServerSpec$UserType'
     User:
       type: 'object'
       properties:
         name:
           type: 'string'
         type:
-          $ref: '#/components/schemas/UserType'
+          $ref: '#/components/schemas/OpenAPIServerSpec$UserType'
       xFullClass: 'spec.OpenAPIServerSpec.User'
-    UserType:
-      type: 'string'
-      description: 'spec.OpenAPIServerSpec.UserType'
-      enum:
-        - 'Admin'
-        - 'Basic'
-      xFullClass: 'spec.OpenAPIServerSpec.UserType'

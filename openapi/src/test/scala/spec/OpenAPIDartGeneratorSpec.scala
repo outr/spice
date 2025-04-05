@@ -70,7 +70,7 @@ class OpenAPIDartGeneratorSpec extends AnyWordSpec with Matchers {
   sealed trait SortDirection
 
   object SortDirection {
-    implicit val rw: RW[SortDirection] = RW.enumeration(List(Ascending, Descending), className = Some("SortDirection"))
+    implicit val rw: RW[SortDirection] = RW.enumeration(List(Ascending, Descending))
 
     case object Ascending extends SortDirection
     case object Descending extends SortDirection

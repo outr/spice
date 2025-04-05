@@ -1,7 +1,7 @@
 package spec
 
 import profig.Profig
-import rapid.Task
+import rapid._
 import scribe.mdc.MDC
 import spice.http.{HttpExchange, HttpStatus}
 import spice.http.content.Content
@@ -9,7 +9,6 @@ import spice.http.server.StaticHttpServer
 import spice.http.server.handler.HttpHandler
 import spice.net._
 import spice.http.client.HttpClient
-import scribe.{rapid => logger}
 
 import java.util.concurrent.atomic.AtomicLong
 import scala.concurrent.duration.DurationInt

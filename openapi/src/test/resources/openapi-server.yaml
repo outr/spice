@@ -82,11 +82,7 @@ components:
         map:
           type: 'object'
           additionalProperties:
-            type: 'string'
-            enum:
-              - 'One'
-              - 'Two'
-              - 'Three'
+            $ref: '#/components/schemas/OpenAPIHttpServerSpec$NumEnum'
       xFullClass: 'spec.OpenAPIHttpServerSpec.CombineRequest'
     CombineResponse:
       type: 'object'
@@ -94,11 +90,7 @@ components:
         list:
           type: 'array'
           items:
-            type: 'string'
-            enum:
-              - 'One'
-              - 'Two'
-              - 'Three'
+            $ref: '#/components/schemas/OpenAPIHttpServerSpec$NumEnum'
         error:
           type: 'string'
           nullable: true
@@ -111,6 +103,14 @@ components:
         length:
           type: 'integer'
       xFullClass: 'spec.OpenAPIHttpServerSpec.FileUploadResponse'
+    OpenAPIHttpServerSpec$NumEnum:
+      type: 'string'
+      description: 'spec.OpenAPIHttpServerSpec$NumEnum'
+      enum:
+        - 'One'
+        - 'Two'
+        - 'Three'
+      xFullClass: 'spec.OpenAPIHttpServerSpec$NumEnum'
     ReverseRequest:
       type: 'object'
       properties:

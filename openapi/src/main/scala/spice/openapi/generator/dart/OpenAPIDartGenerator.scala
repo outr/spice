@@ -99,7 +99,7 @@ case class OpenAPIDartGenerator(api: OpenAPI, config: OpenAPIGeneratorConfig) ex
 
   private def typeNameForComponent(rawTypeName: => String, schema: OpenAPISchema.Component): String = schema.xFullClass match {
     case Some(cn) =>
-      val parts = cn.split('.')
+      val parts = cn.substring(cn.lastIndexOf('$') + 1).split('.')
       if (parts.length > 1 && parts(parts.length - 2).charAt(0).isUpper) {
         s"${parts(parts.length - 2)}${parts.last}"
       } else {
