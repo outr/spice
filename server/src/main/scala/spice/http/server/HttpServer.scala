@@ -1,7 +1,6 @@
 package spice.http.server
 
-import rapid.Task
-import scribe.{rapid => logger}
+import rapid._
 import spice.http.HttpExchange
 import spice.http.server.config.{ServerConfig, ServerSocketListener}
 import spice.http.server.handler.{HttpHandler, LifecycleHandler}

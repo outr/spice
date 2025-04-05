@@ -4,7 +4,6 @@ import rapid._
 
 import java.util.concurrent.atomic.AtomicLong
 import scala.concurrent.duration._
-import scribe.{rapid => logger}
 
 case class BufferManager(checkEvery: FiniteDuration = 10.seconds,
                          triggerAfter: Int = 100,

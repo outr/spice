@@ -1,9 +1,8 @@
 package spice.http.server
 
-import rapid.Task
+import rapid._
 
 import java.net.{BindException, InetAddress, ServerSocket}
-import scribe.{rapid => logger}
 import spice.net.IP
 
 object ServerUtil {

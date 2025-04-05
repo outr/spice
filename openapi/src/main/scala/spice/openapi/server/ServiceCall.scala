@@ -163,7 +163,6 @@ trait ServiceCall extends HttpHandler {
       nullable = nullable
     )
     case DefType.Enum(values, cn) => {
-      scribe.info(s"Values: $values, CN: $cn")
       OpenAPISchema.Component(
         `type` = "string",
         description = cn,

@@ -12,7 +12,6 @@ import spice.http.{Headers, HttpExchange, HttpResponse}
 import java.io.IOException
 import java.nio.ByteBuffer
 import scala.jdk.CollectionConverters.SeqHasAsJava
-import scribe.{rapid => logger}
 
 object UndertowResponseSender {
   def apply(undertow: HttpServerExchange,

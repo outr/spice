@@ -29,11 +29,11 @@ object Dependencies {
 
   val profig: ModuleID = "com.outr" %% "profig" % version.profig
 	val scribe: ModuleID = "com.outr" %% "scribe" % version.scribe
-	val scribeRapid: ModuleID = "com.outr" %% "scribe-rapid" % version.scribe
   val scribeSlf4j: ModuleID = "com.outr" %% "scribe-slf4j" % version.scribe
 	val fabricParse: ModuleID = "org.typelevel" %% "fabric-io" % version.fabric
 	val reactify: ModuleID = "com.outr" %% "reactify" % version.reactify
   val rapid: ModuleID = "com.outr" %% "rapid-core" % version.rapid
+  val rapidScribe: ModuleID = "com.outr" %% "rapid-scribe" % version.rapid
 	val literally: ModuleID = "org.typelevel" %% "literally" % version.literally
 	val okHttp: ModuleID = "com.squareup.okhttp3" % "okhttp" % version.okHttp
   val httpMime: ModuleID = "org.apache.httpcomponents" % "httpmime" % version.httpMime

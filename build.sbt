@@ -61,7 +61,7 @@ lazy val core = crossProject(JSPlatform, JVMPlatform)
 		name := "spice-core",
 		description := "Core functionality leveraged and shared by most other sub-projects of Spice.",
 		libraryDependencies ++= Seq(
-			dep.profig, dep.scribe, dep.scribeRapid, dep.fabricParse, dep.reactify, dep.rapid,
+			dep.profig, dep.scribe, dep.fabricParse, dep.reactify, dep.rapid, dep.rapidScribe,
 			dep.literally, dep.moduload,
 			dep.scalaTest
 		)

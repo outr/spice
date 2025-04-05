@@ -1,11 +1,10 @@
 package spice.http.client
 
-import rapid.Task
+import rapid._
 import spice.http.{HttpRequest, HttpResponse}
 
 import scala.concurrent.duration.FiniteDuration
 import scala.util.{Failure, Try}
-import scribe.{rapid => logger}
 
 trait RetryManager {
   def retry(request: HttpRequest,

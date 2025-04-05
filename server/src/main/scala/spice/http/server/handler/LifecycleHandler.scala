@@ -2,8 +2,7 @@ package spice.http.server.handler
 
 import fabric._
 import fabric.rw._
-import rapid.Task
-import scribe.{rapid => logger}
+import rapid.{Task, logger}
 import scribe.mdc.MDC
 import spice.UserException
 import spice.http.{HttpExchange, HttpStatus}
