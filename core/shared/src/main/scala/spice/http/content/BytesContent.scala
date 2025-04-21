@@ -3,6 +3,8 @@ package spice.http.content
 import rapid.Task
 import spice.net.ContentType
 
+import scala.collection.compat.immutable.ArraySeq
+
 case class BytesContent(value: Array[Byte], contentType: ContentType, lastModified: Long = System.currentTimeMillis()) extends Content {
   override def length: Long = value.length
 
@@ -13,5 +15,5 @@ case class BytesContent(value: Array[Byte], contentType: ContentType, lastModifi
 
   override def asString: Task[String] = Task.pure(new String(value, "UTF-8"))
 
-  override def asStream: rapid.Stream[Byte] = new rapid.Stream(Task(value.iterator))
+  override def asStream: rapid.Stream[Byte] = rapid.Stream.emits(ArraySeq.unsafeWrapArray(value))
 }

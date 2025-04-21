@@ -6,6 +6,8 @@ import fabric.rw._
 import rapid.Task
 import spice.net.ContentType
 
+import scala.collection.compat.immutable.ArraySeq
+
 case class JsonContent(json: Json,
                        compact: Boolean = true,
                        contentType: ContentType = ContentType.`application/json`,
@@ -20,7 +22,7 @@ case class JsonContent(json: Json,
   override def asString: Task[String] = Task.pure(value)
 
   override def asStream: rapid.Stream[Byte] =
-    new rapid.Stream(Task(value.getBytes("UTF-8").iterator))
+    rapid.Stream.emits(ArraySeq.unsafeWrapArray(value.getBytes("UTF-8")))
 }
 
 object JsonContent {
