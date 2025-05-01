@@ -111,9 +111,10 @@ case class OpenAPIDartGenerator(api: OpenAPI, config: OpenAPIGeneratorConfig) ex
   private def parseEnum(typeName: String, `enum`: List[String]): SourceFile = {
     val fileName = s"${typeName.type2File}.dart"
     val fields = `enum`.map { e =>
+      val className = e.filter(_.isLetterOrDigit)
       s"""@JsonValue('$e')
-         |  ${e.replace(" ", "")},""".stripMargin
-    }.mkString("\n  ")
+         |  $className('$e')""".stripMargin
+    }.mkString(",\n  ")
     val source = EnumTemplate
       .replace("%%FILENAME%%", typeName.type2File)
       .replace("%%CLASSNAME%%", typeName)

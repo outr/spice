@@ -6,5 +6,8 @@ part '%%FILENAME%%.g.dart';
 /// Enum
 @JsonEnum(alwaysCreate: true)
 enum %%CLASSNAME%% {
-  %%FIELDS%%
+  %%FIELDS%%;
+
+  final String label;
+  const %%CLASSNAME%%(this.label);
 }
