@@ -1,6 +1,6 @@
 name := "spice"
 ThisBuild / organization := "com.outr"
-ThisBuild / version := "0.9.2-SNAPSHOT"
+ThisBuild / version := "0.10.0-SNAPSHOT"
 
 val scala213: String = "2.13.16"
 
@@ -45,7 +45,7 @@ def dep: Dependencies.type = Dependencies
 lazy val root = project.in(file("."))
 	.aggregate(
 		coreJS, coreJVM,
-		clientJS, clientJVM, clientImplementationOkHttp, clientImplementationJVM,
+		clientJS, clientJVM, clientImplementationOkHttp, clientImplementationJVM, clientImplementationNetty,
 		delta,
 		server, serverImplementationUndertow,
 		openAPI
@@ -109,6 +109,24 @@ lazy val clientImplementationJVM = project
 			dep.scalaTest
 		)
 	)
+
+lazy val clientImplementationNetty = project
+	.dependsOn(clientJVM)
+	.in(file("client/implementation/netty"))
+	.settings(
+		name := "spice-client-netty",
+		libraryDependencies ++= Seq(
+			dep.nettyCodecHttp,
+			dep.nettyHandler,
+			dep.nettyHandlerProxy,
+			dep.nettyTransport,
+			dep.nettyBuffer,
+			dep.nettyCommon,
+			dep.nettyResolver,
+			dep.scalaTest
+		)
+	)
+
 
 lazy val delta = project
 	.dependsOn(coreJVM)

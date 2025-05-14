@@ -16,6 +16,8 @@ object Dependencies {
     
     val okHttp: String = "4.12.0"
 
+    val netty: String = "4.2.1.Final"
+
     val httpMime: String = "4.5.14"
     
     val undertow: String = "2.3.18.Final"
@@ -36,6 +38,13 @@ object Dependencies {
   val rapidScribe: ModuleID = "com.outr" %% "rapid-scribe" % version.rapid
 	val literally: ModuleID = "org.typelevel" %% "literally" % version.literally
 	val okHttp: ModuleID = "com.squareup.okhttp3" % "okhttp" % version.okHttp
+  val nettyCodecHttp: ModuleID = "io.netty" % "netty-codec-http" % version.netty
+  val nettyHandler: ModuleID = "io.netty" % "netty-handler" % version.netty
+  val nettyHandlerProxy: ModuleID = "io.netty" % "netty-handler-proxy" % version.netty
+  val nettyTransport: ModuleID = "io.netty" % "netty-transport" % version.netty
+  val nettyBuffer: ModuleID = "io.netty" % "netty-buffer" % version.netty
+  val nettyCommon: ModuleID = "io.netty" % "netty-common" % version.netty
+  val nettyResolver: ModuleID = "io.netty" % "netty-resolver" % version.netty
   val httpMime: ModuleID = "org.apache.httpcomponents" % "httpmime" % version.httpMime
 	val undertow: ModuleID = "io.undertow" % "undertow-core" % version.undertow
 	val moduload: ModuleID = "com.outr" %% "moduload" % version.moduload
