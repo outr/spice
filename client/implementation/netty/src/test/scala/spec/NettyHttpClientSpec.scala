@@ -76,6 +76,23 @@ class NettyHttpClientSpec extends AnyWordSpec with Matchers {
         response.content.map(_.contentType) should be(Some(ContentType.`image/jpeg`))
       }
     }
+    "download a large HTTPS file and stream to disk" in {
+      val url = url"https://github.com/sksamuel/avro4s/archive/refs/heads/master.zip"
+      HttpClient.url(url).send().map { response =>
+        response.status should be(HttpStatus.OK)
+
+        response.content match {
+          case Some(fc: FileContent) =>
+            fc.file.exists() should be(true)
+            fc.file.length() > 100000 should be(true) // sanity check file size
+            fc.contentType.subType should be("zip")
+          case Some(other) =>
+            fail(s"Expected FileContent but got: ${other.getClass.getSimpleName}")
+          case None =>
+            fail("No content returned")
+        }
+      }
+    }
   }
 
   case class Placeholder(userId: Int, id: Int, title: String, completed: Boolean)
