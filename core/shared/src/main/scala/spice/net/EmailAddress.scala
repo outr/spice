@@ -43,11 +43,13 @@ object EmailAddress {
 
   private val EmailRegex = """(.+)@(.+)[.](.+)""".r
 
-  def parse(email: String): Option[EmailAddress] = email.trim match {
+  def parse(email: String): Option[EmailAddress] = parse(email, warn = true)
+
+  def parse(email: String, warn: Boolean): Option[EmailAddress] = email.trim match {
     case null | "" => None
     case EmailRegex(local, domain, tld) => Some(new EmailAddress(s"$local@$domain.$tld"))
     case _ =>
-      scribe.warn(s"Unrecognized email address: [$email]")
+      if (warn) scribe.warn(s"Unrecognized email address: [$email]")
       None
   }
 

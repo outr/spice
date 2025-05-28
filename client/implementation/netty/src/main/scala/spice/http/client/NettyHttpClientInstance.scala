@@ -60,6 +60,7 @@ class NettyHttpClientInstance(client: HttpClient) extends HttpClientInstance {
             }
 
             p.addLast(new HttpClientCodec())
+//            p.addLast(new LoggingHandler(LogLevel.INFO))
             p.addLast(new SimpleChannelInboundHandler[HttpObject]() {
               private var statusCode: Int = 0
               private var headersResult: Headers = Headers.empty
@@ -122,7 +123,7 @@ class NettyHttpClientInstance(client: HttpClient) extends HttpClientInstance {
           task.failure(f.cause())
         } else {
           val ch = f.channel()
-          val nettyUri = uri.toString.replace("{", "%7B").replace("}", "%7D")
+          val nettyUri = uri.encoded.pathAndArgs
           val method = NettyHttpMethod.valueOf(request.method.value.toUpperCase)
 
           val bodyBytes = request.content match {
@@ -133,8 +134,9 @@ class NettyHttpClientInstance(client: HttpClient) extends HttpClientInstance {
           val nettyContent = Unpooled.wrappedBuffer(bodyBytes)
           val nettyRequest = new DefaultFullHttpRequest(HttpVersion.HTTP_1_1, method, nettyUri, nettyContent)
 
-          nettyRequest.headers().set(HttpHeaderNames.HOST, host)
+          nettyRequest.headers().set(HttpHeaderNames.HOST, s"$host:$port")
           nettyRequest.headers().set(HttpHeaderNames.CONTENT_LENGTH, nettyContent.readableBytes())
+          nettyRequest.headers().remove(HttpHeaderNames.ORIGIN)
 
           request.headers.map.foreach {
             case (key, values) => values.foreach(value => nettyRequest.headers().add(key, value))

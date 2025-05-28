@@ -29,7 +29,15 @@ class NettyHttpClientWebSocket(url: URL, instance: NettyHttpClientInstance) exte
     val task = Task.completable[ConnectionStatus]
     _status @= ConnectionStatus.Connecting
 
-    val uri = new URI(url.toString)
+    val uri = new URI(
+      url.protocol.scheme,
+      null,
+      url.host,
+      url.port,
+      url.path.encoded,
+      if (url.parameters.isEmpty) null else url.parameters.encoded.drop(1),
+      url.fragment.orNull
+    )
     val scheme = uri.getScheme
     val host = uri.getHost
     val port = if (uri.getPort == -1) {
@@ -69,7 +77,7 @@ class NettyHttpClientWebSocket(url: URL, instance: NettyHttpClientInstance) exte
       }
 
       override def channelActive(ctx: ChannelHandlerContext): Unit = {
-        handshaker.handshake(ctx.channel())
+//        handshaker.handshake(ctx.channel())
       }
 
       override def userEventTriggered(ctx: ChannelHandlerContext, evt: AnyRef): Unit = {
@@ -100,6 +108,7 @@ class NettyHttpClientWebSocket(url: URL, instance: NettyHttpClientInstance) exte
           }
           p.addLast(new HttpClientCodec())
           p.addLast(new HttpObjectAggregator(8192))
+          p.addLast(new WebSocketClientProtocolHandler(handshaker))
           p.addLast(handler)
         }
       })
@@ -111,7 +120,6 @@ class NettyHttpClientWebSocket(url: URL, instance: NettyHttpClientInstance) exte
         task.success(ConnectionStatus.Closed)
       } else {
         val ch = f.channel()
-        handshaker.handshake(ch)
 
         channelVar @= Some(ch)
         webSocketVar @= Some(handshaker)
