@@ -58,7 +58,7 @@ trait LifecycleHandler extends HttpHandler {
 
   protected def errorMessage2JsonContent(message: String, code: Option[Int]): Content = {
     Content.json(obj(
-      "message" -> message,
+      "message" -> str(message),
       "code" -> code.json
     ))
   }

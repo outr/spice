@@ -14,8 +14,8 @@ class RestfulSpec extends AnyWordSpec with Matchers {
         val json = Restful.jsonFromURL(url)
         json should be(obj(
           "foo" -> obj(
-            "one" -> "1",
-            "two" -> "2"
+            "one" -> str("1"),
+            "two" -> str("2")
           )
         ))
       }

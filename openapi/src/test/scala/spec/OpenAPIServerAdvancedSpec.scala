@@ -1,6 +1,6 @@
 package spec
 
-import fabric._
+import fabric.dsl._
 import fabric.io.JsonFormatter
 import fabric.rw._
 import org.scalatest.matchers.should.Matchers

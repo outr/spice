@@ -1851,5 +1851,5 @@ object ContentType {
     extension2MimeType.get(extension.toLowerCase).map(new ContentType(_))
   }
 
-  implicit val rw: RW[ContentType] = RW.from(_.outputString, v => parse(v.asStr.value), DefType.Str)
+  implicit val rw: RW[ContentType] = RW.from(ct => str(ct.outputString), v => parse(v.asStr.value), DefType.Str)
 }

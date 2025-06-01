@@ -51,7 +51,7 @@ object OpenAPISchema {
 
   object Ref {
     implicit val rw: RW[Ref] = RW.from(
-      r = s => obj("$ref" -> s.ref, "nullable" -> s.nullable.json),
+      r = s => obj("$ref" -> str(s.ref), "nullable" -> s.nullable.json),
       w = j => Ref(j("$ref").asString, j.get("nullable").map(_.as[Boolean])),
       d = DefType.Obj(Some("Ref"), "$ref" -> DefType.Str, "nullable" -> DefType.Opt(DefType.Bool))
     )
@@ -89,7 +89,7 @@ object OpenAPISchema {
                     nullable: Option[Boolean]): Json = obj(
     `type` -> schemas.json,
     "discriminator" -> obj(
-      "propertyName" -> propertyName
+      "propertyName" -> str(propertyName)
     ),
     "nullable" -> nullable.json
   )

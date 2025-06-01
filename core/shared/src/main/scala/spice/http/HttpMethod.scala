@@ -20,10 +20,9 @@ sealed abstract class HttpMethod private(val value: String) {
 object HttpMethod {
   private var map = Map.empty[String, HttpMethod]
 
-  implicit val rw: RW[HttpMethod] = RW.from(
-    r = m => m.value,
-    w = v => apply(v.asString),
-    d = DefType.Str
+  implicit val rw: RW[HttpMethod] = RW.string(
+    asString = _.value,
+    fromString = apply
   )
 
   val Get: HttpMethod = new HttpMethod("GET") {}
