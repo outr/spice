@@ -270,7 +270,7 @@ object HttpClient extends HttpClient(
   ),
   interceptor = Interceptor.empty,
   saveDirectory = ClientPlatform.defaultSaveDirectory,
-  timeout = 15.seconds,
+  timeout = 60.seconds,
   pingInterval = None,
   dns = DNS.default,
   dropNullValuesInJson = false,
