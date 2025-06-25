@@ -89,8 +89,8 @@ class NettyConnectionPoolManager(
             p.addLast("ssl", sslCtx.newHandler(ch.alloc(), key.host, key.port))
           }
 
-          // Add timeout handlers (removed readTimeout based on earlier discussion)
           val timeoutSeconds = client.timeout.toSeconds.toInt
+          p.addLast("readTimeout", new ReadTimeoutHandler(timeoutSeconds))
           p.addLast("writeTimeout", new WriteTimeoutHandler(timeoutSeconds))
           p.addLast("idleState", new IdleStateHandler(
             keepAlive.toSeconds.toInt,

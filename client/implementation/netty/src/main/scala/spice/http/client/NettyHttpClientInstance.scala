@@ -16,7 +16,7 @@ import io.netty.bootstrap.Bootstrap
 import io.netty.channel.socket.nio.NioSocketChannel
 import io.netty.handler.ssl.SslContextBuilder
 import io.netty.handler.ssl.util.InsecureTrustManagerFactory
-import io.netty.handler.timeout.{IdleStateHandler, WriteTimeoutHandler}
+import io.netty.handler.timeout.{IdleStateHandler, ReadTimeoutHandler, WriteTimeoutHandler}
 import rapid.task.CompletableTask
 import spice.http.content.FormDataEntry.{FileEntry, StringEntry}
 
@@ -140,6 +140,7 @@ class NettyHttpClientInstance(val client: HttpClient) extends HttpClientInstance
 
         // Add timeout handlers
         val timeoutSeconds = client.timeout.toSeconds.toInt
+        p.addLast("readTimeout", new ReadTimeoutHandler(timeoutSeconds))
         p.addLast("writeTimeout", new WriteTimeoutHandler(timeoutSeconds))
         p.addLast("idleState", new IdleStateHandler(0, 0, timeoutSeconds))
 
