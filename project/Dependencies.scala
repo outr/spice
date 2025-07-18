@@ -37,7 +37,7 @@ object Dependencies {
   val rapid: ModuleID = "com.outr" %% "rapid-core" % version.rapid
   val rapidScribe: ModuleID = "com.outr" %% "rapid-scribe" % version.rapid
 	val literally: ModuleID = "org.typelevel" %% "literally" % version.literally
-	val okHttp: ModuleID = "com.squareup.okhttp3" % "okhttp" % version.okHttp
+	val okHttp: ModuleID = "com.squareup.okhttp3" % "okhttp-jvm" % version.okHttp
   val nettyCodecHttp: ModuleID = "io.netty" % "netty-codec-http" % version.netty
   val nettyHandler: ModuleID = "io.netty" % "netty-handler" % version.netty
   val nettyHandlerProxy: ModuleID = "io.netty" % "netty-handler-proxy" % version.netty

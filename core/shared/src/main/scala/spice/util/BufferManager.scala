@@ -53,4 +53,5 @@ case class BufferManager(checkEvery: FiniteDuration = 10.seconds,
           Task.sleep(checkEvery).flatMap(_ => recurse(failures + 1)).when(keepAlive)
         }
     }
+    .unit
 }
