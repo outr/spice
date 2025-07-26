@@ -14,6 +14,7 @@ class OpenAPIHttpServerSpec extends AnyWordSpec with Matchers {
   "OpenAPIHttpServer" should {
     "verify the YAML generated is correct" in {
       val expected = TestUtils.loadString("openapi-server.yaml")
+      println(Example.api.asYaml)
       Example.api.asYaml should be(expected)
     }
     "generate Dart code for the server" in {

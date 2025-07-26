@@ -18,11 +18,11 @@ class OpenAPIDartGeneratorSpec extends AnyWordSpec with Matchers {
       val sourceFiles = generator.generate()
       sourceFiles should not be Nil
       generator.write(sourceFiles, Path.of("output"))
-      sourceFiles.map(_.fileName).toSet should be(Set("open_a_p_i_dart_generator_spec_filter.dart", "open_a_p_i_dart_generator_spec_list_response.dart", "sort_direction.dart", "service.dart", "open_a_p_i_dart_generator_spec_list_request.dart"))
+      sourceFiles.map(_.fileName).toSet should be(Set("open_a_p_i_dart_generator_spec_filter.dart", "open_a_p_i_dart_generator_spec_list_response.dart", "open_a_p_i_dart_generator_spec_sort_direction.dart", "service.dart", "open_a_p_i_dart_generator_spec_list_request.dart"))
       val listRequestSource = sourceFiles.find(_.fileName == "open_a_p_i_dart_generator_spec_list_request.dart").get
-      listRequestSource.source should include("import 'sort_direction.dart';")
-      listRequestSource.source should include("final SortDirection direction;")
-      val sortDirectionSource = sourceFiles.find(_.fileName == "sort_direction.dart").get
+      listRequestSource.source should include("import 'open_a_p_i_dart_generator_spec_sort_direction.dart';")
+      listRequestSource.source should include("final OpenAPIDartGeneratorSpecSortDirection direction;")
+      val sortDirectionSource = sourceFiles.find(_.fileName == "open_a_p_i_dart_generator_spec_sort_direction.dart").get
       sortDirectionSource.source should include("@JsonValue('Ascending')")
       sortDirectionSource.source should include("@JsonValue('Descending')")
     }

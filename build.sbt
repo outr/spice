@@ -1,6 +1,6 @@
 name := "spice"
 ThisBuild / organization := "com.outr"
-ThisBuild / version := "0.10.4"
+ThisBuild / version := "0.10.5"
 
 val scala213: String = "2.13.16"
 
@@ -11,8 +11,9 @@ ThisBuild / scalacOptions ++= Seq("-deprecation")
 ThisBuild / javacOptions ++= Seq("-source", "11", "-target", "11")
 ThisBuild / crossScalaVersions := Seq(scala213, scala3)
 
+publishMavenStyle := true
+
 ThisBuild / sonatypeCredentialHost := xerial.sbt.Sonatype.sonatypeCentralHost
-ThisBuild / publishMavenStyle := true
 ThisBuild / publishTo := sonatypePublishToBundle.value
 ThisBuild / sonatypeProfileName := "com.outr"
 ThisBuild / licenses := Seq("MIT" -> url("https://github.com/outr/spice/blob/master/LICENSE"))
