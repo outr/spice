@@ -8,10 +8,11 @@ import profig.Profig
 import scribe.mdc.MDC
 import spice.http.content.FormDataEntry.FileEntry
 import spice.{UserException, ValidationError}
-import spice.http.content.{Content, FormDataContent}
+import spice.http.content.{Content, FormDataContent, JsonContent}
 import spice.http.server.dsl.{ConnectionFilter, FilterResponse, PathFilter}
+import spice.http.server.handler.LifecycleHandler
 import spice.http.{HttpExchange, HttpMethod, HttpStatus}
-import spice.net.{URL, URLPath}
+import spice.net.{ContentType, URL, URLPath}
 
 import scala.collection.mutable.ListBuffer
 import scala.concurrent.duration.{Duration, DurationInt, FiniteDuration}
@@ -27,9 +28,13 @@ abstract class Restful[Request, Response](implicit val requestRW: RW[Request],
 
   def validations: List[RestfulValidation[Request]] = Nil
 
-  def error(throwable: Throwable): RestfulResponse[Response] = {
-    scribe.error(throwable)
-    error(List(ValidationError("An internal error occurred")), HttpStatus.InternalServerError)
+  def error(exchange: HttpExchange, throwable: Throwable): RestfulResponse[Response] = {
+    val content = LifecycleHandler.throwable2Content(exchange, throwable, ContentType.`application/json`)
+    val json = content.asInstanceOf[JsonContent].json
+    error(List(ValidationError(
+      message = json("error")("message").asString,
+      code = json("error")("code").as[Option[Int]].getOrElse(ValidationError.General)
+    )), HttpStatus.InternalServerError)
   }
 
   def error(message: String): RestfulResponse[Response] =
@@ -103,10 +108,10 @@ abstract class Restful[Request, Response](implicit val requestRW: RW[Request],
               apply(exchange, updatedRequest)
                 .timeout(timeout)
                 .handleError { throwable =>
-                  Task(error(throwable))
+                  Task(error(exchange, throwable))
                 }
             } catch {
-              case t: Throwable => Task.pure(error(t))
+              case t: Throwable => Task.pure(error(exchange, t))
             }
           }
         }

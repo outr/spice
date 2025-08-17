@@ -1,12 +1,12 @@
 name := "spice"
 ThisBuild / organization := "com.outr"
-ThisBuild / version := "0.10.7"
+ThisBuild / version := "0.10.8-SNAPSHOT"
 
 val scala213: String = "2.13.16"
 
 val scala3: String = "3.3.6"
 
-ThisBuild / scalaVersion := scala213
+ThisBuild / scalaVersion := scala3
 ThisBuild / scalacOptions ++= Seq("-deprecation")
 ThisBuild / javacOptions ++= Seq("-source", "11", "-target", "11")
 ThisBuild / crossScalaVersions := Seq(scala213, scala3)

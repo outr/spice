@@ -6,7 +6,7 @@ import fabric.rw._
 import org.scalatest.matchers.should.Matchers
 import org.scalatest.wordspec.{AnyWordSpec, AsyncWordSpec}
 import scribe.mdc.MDC
-import spice.ValidationError
+import spice.{ExceptionType, UserException, ValidationError}
 import spice.http.content.{Content, FormDataContent, JsonContent, StringContent}
 import spice.http.server.dsl._
 import spice.http.server.handler.HttpHandler
@@ -90,6 +90,48 @@ class ServerSpec extends AnyWordSpec with Matchers {
         response.reversed should be(Some("gnitseT"))
       }.sync()
     }
+    "reverse a String with an informational error" in {
+      server.handle(HttpExchange(HttpRequest(
+        method = HttpMethod.Get,
+        url = url"http://localhost/test/reverse/info"
+      ))).map { exchange =>
+        exchange.response.status should be(HttpStatus.InternalServerError)
+        val json = exchange.response.content.get.asInstanceOf[JsonContent].json
+        val response = json.as[ReverseResponse]
+        response.errors should be(List(ValidationError(
+          message = "Info Test"
+        )))
+        response.reversed should be(None)
+      }.sync()
+    }
+    "reverse a String with an warn error" in {
+      server.handle(HttpExchange(HttpRequest(
+        method = HttpMethod.Get,
+        url = url"http://localhost/test/reverse/warn"
+      ))).map { exchange =>
+        exchange.response.status should be(HttpStatus.InternalServerError)
+        val json = exchange.response.content.get.asInstanceOf[JsonContent].json
+        val response = json.as[ReverseResponse]
+        response.errors should be(List(ValidationError(
+          message = "Warn Test"
+        )))
+        response.reversed should be(None)
+      }.sync()
+    }
+    "reverse a String with a logged error" in {
+      server.handle(HttpExchange(HttpRequest(
+        method = HttpMethod.Get,
+        url = url"http://localhost/test/reverse/error"
+      ))).map { exchange =>
+        exchange.response.status should be(HttpStatus.InternalServerError)
+        val json = exchange.response.content.get.asInstanceOf[JsonContent].json
+        val response = json.as[ReverseResponse]
+        response.errors should be(List(ValidationError(
+          message = "Error Test"
+        )))
+        response.reversed should be(None)
+      }.sync()
+    }
     "call a Restful endpoint that takes Unit as the request" in {
       val begin = System.currentTimeMillis()
       server.handle(HttpExchange(HttpRequest(
@@ -134,8 +176,14 @@ class ServerSpec extends AnyWordSpec with Matchers {
 
   object ReverseService extends Restful[ReverseRequest, ReverseResponse] {
     override def apply(exchange: HttpExchange, request: ReverseRequest)
-                      (implicit mdc: MDC): Task[RestfulResponse[ReverseResponse]] = {
-      Task.pure(RestfulResponse(ReverseResponse(Some(request.value.reverse), Nil), HttpStatus.OK))
+                      (implicit mdc: MDC): Task[RestfulResponse[ReverseResponse]] = Task {
+      val result = request.value match {
+        case "info" => throw UserException("Info Test")
+        case "warn" => throw UserException("Warn Test", `type` = ExceptionType.Warn)
+        case "error" => throw UserException("Error Test", `type` = ExceptionType.Error)
+        case s => s.reverse
+      }
+      RestfulResponse(ReverseResponse(Some(result), Nil), HttpStatus.OK)
     }
 
     override def error(errors: List[ValidationError], status: HttpStatus): RestfulResponse[ReverseResponse] = {

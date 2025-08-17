@@ -4,7 +4,7 @@ import fabric._
 import fabric.rw._
 import rapid.{Task, logger}
 import scribe.mdc.MDC
-import spice.UserException
+import spice.{ExceptionType, UserException}
 import spice.http.{HttpExchange, HttpStatus}
 import spice.http.content.Content
 import spice.net.ContentType
@@ -34,34 +34,13 @@ trait LifecycleHandler extends HttpHandler {
                               state: LifecycleState,
                               throwable: Throwable): Task[HttpExchange] = exchange.modify { response =>
     Task {
-      val content = throwable match {
-        case UserException(message, code) => errorMessageToContent(message, code)
-        case _ => errorMessageToContent(s"An internal error occurred: ${throwable.getClass.getSimpleName}", None)
-      }
+      val content = throwable2Content(exchange, throwable)
       response.withContent(content)
     }
   }
 
-  protected def errorMessageToContent(message: String, code: Option[Int]): Content =
-    errorMessage2StringContent(message, code)
-
-  protected def errorMessage2StringContent(message: String, code: Option[Int]): Content = {
-    val output = code match {
-      case Some(c) => s"$message ($c)"
-      case None => message
-    }
-    Content.string(
-      value = output,
-      contentType = ContentType.`text/plain`
-    )
-  }
-
-  protected def errorMessage2JsonContent(message: String, code: Option[Int]): Content = {
-    Content.json(obj(
-      "message" -> str(message),
-      "code" -> code.json
-    ))
-  }
+  protected def throwable2Content(exchange: HttpExchange, throwable: Throwable): Content =
+    LifecycleHandler.throwable2Content(exchange, throwable, ContentType.`text/plain`)
 
   protected def notFoundContent: Task[Content] = Task.pure(LifecycleHandler.DefaultNotFound)
 
@@ -94,4 +73,41 @@ trait LifecycleHandler extends HttpHandler {
 
 object LifecycleHandler {
   lazy val DefaultNotFound: Content = Content.string("Not found!", ContentType.`text/plain`)
+
+  def throwable2Content(exchange: HttpExchange, throwable: Throwable, contentType: ContentType): Content = throwable match {
+    case exc: UserException =>
+      exc.`type` match {
+        case ExceptionType.Info => // Nothing needs to be logged
+        case ExceptionType.Warn => scribe.warn(s"${exchange.request.url} failed with ${exc.message}")
+        case ExceptionType.Error => scribe.error(s"${exchange.request.url} failed with ${exc.message}", exc)
+      }
+      errorMessageToContent(exc.message, exc.code, contentType)
+    case _ => errorMessageToContent(s"An internal error occurred: ${throwable.getClass.getSimpleName}", None, contentType)
+  }
+
+  protected def errorMessageToContent(message: String,
+                                      code: Option[Int],
+                                      contentType: ContentType): Content = contentType match {
+    case ContentType.`text/plain` => errorMessage2StringContent(message, code)
+    case ContentType.`application/json` => errorMessage2JsonContent(message, code)
+    case _ => throw new RuntimeException(s"Unsupported content type: $contentType")
+  }
+
+  protected def errorMessage2StringContent(message: String, code: Option[Int]): Content = {
+    val output = code match {
+      case Some(c) => s"$message ($c)"
+      case None => message
+    }
+    Content.string(
+      value = output,
+      contentType = ContentType.`text/plain`
+    )
+  }
+
+  protected def errorMessage2JsonContent(message: String, code: Option[Int]): Content = Content.json(obj(
+    "error" -> obj(
+      "message" -> message.json,
+      "code" -> code.json
+    )
+  ))
 }
