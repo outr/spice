@@ -1,5 +1,7 @@
 package spice.openapi.generator.dart
 
+import fabric.io.JsonFormatter
+import fabric.rw.Convertible
 import fabric.{Json, Str}
 import spice.http.HttpMethod
 import spice.net.ContentType
@@ -287,51 +289,9 @@ case class OpenAPIDartGenerator(api: OpenAPI, config: OpenAPIGeneratorConfig) ex
             .asInstanceOf[OpenAPISchema.Component]
           component.properties.map {
             case (key, schema) =>
-              val `type` = schema match {
-                case c: OpenAPISchema.Component if c.`type` == "array" => c.items.get match {
-                  case c: OpenAPISchema.Component if c.`enum`.nonEmpty =>
-                    val parentName = config.baseForTypeMap(c.`enum`.head.asString)
-                    val `enum` = c.`enum`.map {
-                      case Str(s, _) => s
-                      case json => throw new UnsupportedOperationException(s"Enum only supports Str: $json")
-                    }
-                    imports = imports + parentName.type2File
-                    addParent(parentName, `enum`)
-
-                    if (c.nullable.contains(true)) {
-                      s"List<$parentName>?"
-                    } else {
-                      s"List<$parentName>"
-                    }
-                  case c: OpenAPISchema.Component if c.nullable.contains(true) => s"List<${c.`type`.dartType}>?"
-                  case c: OpenAPISchema.Component => s"List<${c.`type`.dartType}>"
-                  case r: OpenAPISchema.Ref =>
-                    val c = r.ref.substring(r.ref.lastIndexOf('/') + 1)
-                    imports += c
-                    val s = s"List<$c>"
-                    if (r.nullable.contains(true)) {
-                      s"$s?"
-                    } else {
-                      s
-                    }
-                  case o: OpenAPISchema.OneOf =>
-                    val refs = o.schemas.map(_.asInstanceOf[OpenAPISchema.Ref].ref.ref2Type)
-                    val parents: List[String] = refs.map(r => config.baseForTypeMap.getOrElse(r, throw new RuntimeException(s"No mapping defined for $r"))).distinct
-                    val parentName = parents match {
-                      case parent :: Nil => parent
-                      case _ => throw new RuntimeException(s"Multiple parents found for ${refs.mkString(", ")}: ${parents.mkString(", ")}")
-                    }
-                    val c = parentName.type2File
-                    imports = imports + c
-                    addParent(parentName)
-                    val s = s"List<$c>"
-                    if (o.nullable.contains(true)) {
-                      s"$s?"
-                    } else {
-                      s
-                    }
-                  case s => throw new UnsupportedOperationException(s"Unsupported array schema: $s")
-                }
+              def recurseType(schema: OpenAPISchema): String = schema match {
+                case c: OpenAPISchema.Component if c.`type` == "array" =>
+                  s"List<${recurseType(c.items.get)}>${if (c.nullable.contains(true)) "?" else ""}"
                 case c: OpenAPISchema.Component if c.`enum`.nonEmpty =>
                   val parentName = config.baseForTypeMap(c.`enum`.head.asString)
                   val `enum` = c.`enum`.map {
@@ -350,14 +310,38 @@ case class OpenAPIDartGenerator(api: OpenAPI, config: OpenAPIGeneratorConfig) ex
                 case c: OpenAPISchema.Component => c.`type`.dartType
                 case r: OpenAPISchema.Ref =>
                   val c = r.ref.substring(r.ref.lastIndexOf('/') + 1)
+                  scribe.info(s"3: $c / ${r.ref}")
                   imports += c
                   if (r.nullable.contains(true)) {
                     s"$c?"
                   } else {
                     c
                   }
+                case o: OpenAPISchema.OneOf =>
+                  val refs = o.schemas.map {
+                    case ref: OpenAPISchema.Ref =>
+                      scribe.info(JsonFormatter.Default(ref.json))
+                      ref.ref.ref2Type
+                    case c: OpenAPISchema.Component =>
+                      scribe.info(JsonFormatter.Default(c.json))
+                      typeNameForComponent(c.`type`.dartType, c)
+                  }
+                  val parents: List[String] = refs.map(r => config.baseForTypeMap.getOrElse(r, throw new RuntimeException(s"No mapping defined for $r"))).distinct
+                  val parentName = parents match {
+                    case parent :: Nil => parent
+                    case _ => throw new RuntimeException(s"Multiple parents found for ${refs.mkString(", ")}: ${parents.mkString(", ")}")
+                  }
+                  val c = parentName.type2File
+                  imports += c
+                  addParent(parentName)
+                  if (o.nullable.contains(true)) {
+                    s"$c?"
+                  } else {
+                    c
+                  }
                 case s => throw new RuntimeException(s"Unsupported schema: $s")
               }
+              val `type` = recurseType(schema)
               val k = key match {
                 case "_id" => "id"
                 case _ => key
