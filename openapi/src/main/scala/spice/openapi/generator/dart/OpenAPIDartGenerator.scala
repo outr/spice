@@ -27,7 +27,12 @@ case class OpenAPIDartGenerator(api: OpenAPI, config: OpenAPIGeneratorConfig) ex
 
     def ref2Type: String = {
       api.componentByRef(s) match {
-        case Some(c) => typeNameForComponent(ref, c)
+        case Some(c: OpenAPISchema.Component) => typeNameForComponent(ref, c)
+        case Some(_: OpenAPISchema.Ref) => ref // Handle nested refs
+        case Some(_: OpenAPISchema.OneOf) => ref // Handle OneOf schemas
+        case Some(_: OpenAPISchema.AllOf) => ref // Handle AllOf schemas
+        case Some(_: OpenAPISchema.AnyOf) => ref // Handle AnyOf schemas
+        case Some(_: OpenAPISchema.Not) => ref // Handle Not schemas
         case None => ref
       }
     }
@@ -64,7 +69,10 @@ case class OpenAPIDartGenerator(api: OpenAPI, config: OpenAPIGeneratorConfig) ex
       typeNameForComponent(t, component)
     }
 
-    def component: OpenAPISchema.Component = api.componentByRef(ref.ref).get
+    def component: OpenAPISchema.Component = api.componentByRef(ref.ref).get match {
+      case c: OpenAPISchema.Component => c
+      case _ => throw new RuntimeException(s"Expected Component schema but got: ${api.componentByRef(ref.ref)}")
+    }
   }
 
   private lazy val renameMap = Map(
@@ -92,11 +100,202 @@ case class OpenAPIDartGenerator(api: OpenAPI, config: OpenAPIGeneratorConfig) ex
 
   def generatePaths(): List[SourceFile] = {
     parentFiles = Map.empty
-    val sourceFiles = api.components.toList.flatMap(_.schemas.toList).map {
+    val sourceFiles = api.components.toList.flatMap(_.schemas.toList).filter {
+      case (typeName, schema: OpenAPISchema.Component) => 
+        !isPrimitiveTypeOnly(schema) && !conflictsWithDartBuiltInTypes(typeName)
+      case (typeName, _: OpenAPISchema.OneOf) => !conflictsWithDartBuiltInTypes(typeName)
+      case (typeName, _: OpenAPISchema.AllOf) => !conflictsWithDartBuiltInTypes(typeName)
+      case (typeName, _: OpenAPISchema.AnyOf) => !conflictsWithDartBuiltInTypes(typeName)
+      case (typeName, _: OpenAPISchema.Not) => !conflictsWithDartBuiltInTypes(typeName)
+      case _ => false
+    }.map {
       case (typeName, schema: OpenAPISchema.Component) => parseComponent(typeName, schema)
+      case (typeName, schema: OpenAPISchema.OneOf) => parseOneOf(typeName, schema)
+      case (typeName, schema: OpenAPISchema.AllOf) => parseAllOf(typeName, schema)
+      case (typeName, schema: OpenAPISchema.AnyOf) => parseAnyOf(typeName, schema)
+      case (typeName, schema: OpenAPISchema.Not) => parseNot(typeName, schema)
       case (typeName, schema) => throw new UnsupportedOperationException(s"$typeName has unsupported schema: $schema")
     }
     sourceFiles ::: parentFiles.values.toList
+  }
+
+  /**
+   * Check if a schema is just a primitive type without additional properties that would warrant a separate Dart file
+   */
+  private def isPrimitiveTypeOnly(schema: OpenAPISchema.Component): Boolean = {
+    // If it has properties, it's not just a primitive type
+    if (schema.properties.nonEmpty) return false
+    
+    // If it has an enum, it should generate a file (even if it's a primitive type)
+    if (schema.`enum`.nonEmpty) return false
+    
+    // If it has additional properties like description, format, etc., it might need a file
+    if (schema.description.isDefined || schema.format.isDefined || schema.example.isDefined) return false
+    
+    // If it has validation constraints, it might need a file
+    if (schema.minLength.isDefined || schema.maxLength.isDefined || schema.pattern.isDefined ||
+        schema.minimum.isDefined || schema.maximum.isDefined || schema.exclusiveMinimum.isDefined ||
+        schema.exclusiveMaximum.isDefined || schema.multipleOf.isDefined) return false
+    
+    // If it has xFullClass, it should generate a file
+    if (schema.xFullClass.isDefined) return false
+    
+    // Otherwise, it's just a primitive type that doesn't need a separate file
+    true
+  }
+
+  /**
+   * Check if a schema name conflicts with Dart's built-in types
+   */
+  private def conflictsWithDartBuiltInTypes(typeName: String): Boolean = {
+    val dartBuiltInTypes = Set(
+      "string", "String", "int", "double", "bool", "boolean", "num", "dynamic", "void", "Object",
+      "List", "Map", "Set", "Iterable", "Future", "Stream", "DateTime", "Duration", "RegExp",
+      "Uri", "BigInt", "Symbol", "Type", "Function", "Null"
+    )
+    dartBuiltInTypes.contains(typeName.toLowerCase)
+  }
+
+  /**
+   * Safely add an import, filtering out any that would conflict with Dart's built-in types
+   */
+  private def safeAddImport(imports: mutable.Set[String], typeName: String): Unit = {
+    if (!conflictsWithDartBuiltInTypes(typeName)) {
+      imports += typeName
+    }
+  }
+
+  private def parseOneOf(typeName: String, schema: OpenAPISchema.OneOf): SourceFile = {
+    // For OneOf schemas, we need to create a base class and subclasses for each variant
+    // This is a simplified implementation that creates a base class
+    val fileName = s"${typeName.type2File}.dart"
+    val source = s"""/// GENERATED CODE: Do not edit!
+                    |import 'package:equatable/equatable.dart';
+                    |import 'package:json_annotation/json_annotation.dart';
+                    |
+                    |part '${typeName.type2File}.g.dart';
+                    |
+                    |@JsonSerializable()
+                    |abstract class $typeName extends Equatable {
+                    |  const $typeName();
+                    |
+                    |  factory $typeName.fromJson(Map<String, dynamic> json) {
+                    |    // This is a base class for OneOf schema - implement specific logic in subclasses
+                    |    throw UnimplementedError('Implement in specific subclasses');
+                    |  }
+                    |
+                    |  Map<String, dynamic> toJson();
+                    |
+                    |  @override
+                    |  List<Object?> get props => [];
+                    |}""".stripMargin
+    
+    SourceFile(
+      language = "Dart",
+      name = typeName,
+      fileName = fileName,
+      path = "lib/model",
+      source = source
+    )
+  }
+
+  private def parseAllOf(typeName: String, schema: OpenAPISchema.AllOf): SourceFile = {
+    // For AllOf schemas, we create a class that combines all the schemas
+    val fileName = s"${typeName.type2File}.dart"
+    val source = s"""/// GENERATED CODE: Do not edit!
+                    |import 'package:equatable/equatable.dart';
+                    |import 'package:json_annotation/json_annotation.dart';
+                    |
+                    |part '${typeName.type2File}.g.dart';
+                    |
+                    |@JsonSerializable()
+                    |class $typeName extends Equatable {
+                    |  // This class combines multiple schemas - implement specific fields based on the schemas
+                    |  const $typeName();
+                    |
+                    |  factory $typeName.fromJson(Map<String, dynamic> json) {
+                    |    return _$$${typeName}FromJson(json);
+                    |  }
+                    |
+                    |  Map<String, dynamic> toJson() => _$$${typeName}ToJson(this);
+                    |
+                    |  @override
+                    |  List<Object?> get props => [];
+                    |}""".stripMargin
+    
+    SourceFile(
+      language = "Dart",
+      name = typeName,
+      fileName = fileName,
+      path = "lib/model",
+      source = source
+    )
+  }
+
+  private def parseAnyOf(typeName: String, schema: OpenAPISchema.AnyOf): SourceFile = {
+    // For AnyOf schemas, we create a flexible class that can handle any of the types
+    val fileName = s"${typeName.type2File}.dart"
+    val source = s"""/// GENERATED CODE: Do not edit!
+                    |import 'package:equatable/equatable.dart';
+                    |import 'package:json_annotation/json_annotation.dart';
+                    |
+                    |part '${typeName.type2File}.g.dart';
+                    |
+                    |@JsonSerializable()
+                    |class $typeName extends Equatable {
+                    |  // This class can be any of the specified types - implement based on your needs
+                    |  const $typeName();
+                    |
+                    |  factory $typeName.fromJson(Map<String, dynamic> json) {
+                    |    return _$$${typeName}FromJson(json);
+                    |  }
+                    |
+                    |  Map<String, dynamic> toJson() => _$$${typeName}ToJson(this);
+                    |
+                    |  @override
+                    |  List<Object?> get props => [];
+                    |}""".stripMargin
+    
+    SourceFile(
+      language = "Dart",
+      name = typeName,
+      fileName = fileName,
+      path = "lib/model",
+      source = source
+    )
+  }
+
+  private def parseNot(typeName: String, schema: OpenAPISchema.Not): SourceFile = {
+    // For Not schemas, we create a class that excludes the specified schema
+    val fileName = s"${typeName.type2File}.dart"
+    val source = s"""/// GENERATED CODE: Do not edit!
+                    |import 'package:equatable/equatable.dart';
+                    |import 'package:json_annotation/json_annotation.dart';
+                    |
+                    |part '${typeName.type2File}.g.dart';
+                    |
+                    |@JsonSerializable()
+                    |class $typeName extends Equatable {
+                    |  // This class excludes the specified schema - implement based on your needs
+                    |  const $typeName();
+                    |
+                    |  factory $typeName.fromJson(Map<String, dynamic> json) {
+                    |    return _$$${typeName}FromJson(json);
+                    |  }
+                    |
+                    |  Map<String, dynamic> toJson() => _$$${typeName}ToJson(this);
+                    |
+                    |  @override
+                    |  List<Object?> get props => [];
+                    |}""".stripMargin
+    
+    SourceFile(
+      language = "Dart",
+      name = typeName,
+      fileName = fileName,
+      path = "lib/model",
+      source = source
+    )
   }
 
   private def typeNameForComponent(rawTypeName: => String, schema: OpenAPISchema.Component): String = schema.xFullClass match {
@@ -220,7 +419,7 @@ case class OpenAPIDartGenerator(api: OpenAPI, config: OpenAPIGeneratorConfig) ex
         case Str(s, _) => s
         case json => throw new UnsupportedOperationException(s"Enum only supports Str: $json")
       }
-      imports += parentName.type2File
+      safeAddImport(imports, parentName.type2File)
       addParent(parentName, `enum`)
       ParsedField(parentName, fieldName, c.nullable.getOrElse(false))
     case c: OpenAPISchema.Component if c.`type` == "array" =>
@@ -239,7 +438,7 @@ case class OpenAPIDartGenerator(api: OpenAPI, config: OpenAPIGeneratorConfig) ex
           rawTypeName = config.baseForTypeMap.getOrElse(c.`enum`.head.asString, throw new NullPointerException(s"Unable to find enum entry ${c.`enum`.head} for $fieldName")),
           schema = c
         )
-        imports += parentName.type2File
+        safeAddImport(imports, parentName.type2File)
         addParent(parentName, `enum`)
         parentName.dartType
       } else if (c.`type` == "object" && c.additionalProperties.nonEmpty) {
@@ -257,7 +456,7 @@ case class OpenAPIDartGenerator(api: OpenAPI, config: OpenAPIGeneratorConfig) ex
       ParsedField(c.`type`.dartType, fieldName, c.nullable.getOrElse(false))
     case c: OpenAPISchema.Ref =>
       val modelType = c.ref.ref2Type
-      imports += modelType.type2File
+      safeAddImport(imports, modelType.type2File)
       ParsedField(modelType, fieldName, c.nullable.getOrElse(false))
     case c: OpenAPISchema.OneOf =>
       val refs = c.schemas.map(_.asInstanceOf[OpenAPISchema.Ref].ref.ref2Type)
@@ -267,7 +466,7 @@ case class OpenAPIDartGenerator(api: OpenAPI, config: OpenAPIGeneratorConfig) ex
         case _ => throw new RuntimeException(s"Multiple parents found for ${refs.mkString(", ")}: ${parents.mkString(", ")}")
       }
       val parentType = parentName.type2File
-      imports += parentType
+      safeAddImport(imports, parentType)
       addParent(parentName)
       ParsedField(parentName, fieldName, c.nullable.getOrElse(false))
     case _ => throw new UnsupportedOperationException(s"Schema for '$fieldName' is unsupported: $schema")
@@ -281,7 +480,27 @@ case class OpenAPIDartGenerator(api: OpenAPI, config: OpenAPIGeneratorConfig) ex
       } else {
         val children = config.baseNames.find(_._1 == typeName.ref).get._2.toList.sorted
         val typedChildren = children.map(_.ref2Type)
-        var imports = typedChildren.toSet
+        var imports = mutable.Set.empty[String]
+        imports ++= typedChildren
+        
+        // Also collect imports from all child schemas, not just common properties
+        // This ensures that types like PhoneNumberType are imported even if they're not in common properties
+        children.foreach { child =>
+          val components = api.components.get
+          val component = components
+            .schemas.getOrElse(child, throw new NullPointerException(s"Unable to find $child in ${components.schemas.keys.mkString(", ")}"))
+            .asInstanceOf[OpenAPISchema.Component]
+          component.properties.foreach {
+            case (_, schema) =>
+              schema match {
+                case ref: OpenAPISchema.Ref =>
+                  val refType = ref.ref.ref2Type
+                  safeAddImport(imports, refType.type2File)
+                case _ => // Handle other schema types if needed
+              }
+          }
+        }
+        
         val maps = children.map { child =>
           val components = api.components.get
           val component = components
@@ -298,7 +517,7 @@ case class OpenAPIDartGenerator(api: OpenAPI, config: OpenAPIGeneratorConfig) ex
                     case Str(s, _) => s
                     case json => throw new UnsupportedOperationException(s"Enum only supports Str: $json")
                   }
-                  imports = imports + parentName.type2File
+                  safeAddImport(imports, parentName.type2File)
                   addParent(parentName, `enum`)
 
                   if (c.nullable.contains(true)) {
@@ -310,8 +529,7 @@ case class OpenAPIDartGenerator(api: OpenAPI, config: OpenAPIGeneratorConfig) ex
                 case c: OpenAPISchema.Component => c.`type`.dartType
                 case r: OpenAPISchema.Ref =>
                   val c = r.ref.substring(r.ref.lastIndexOf('/') + 1)
-                  scribe.info(s"3: $c / ${r.ref}")
-                  imports += c
+                  safeAddImport(imports, c)
                   if (r.nullable.contains(true)) {
                     s"$c?"
                   } else {
@@ -319,9 +537,7 @@ case class OpenAPIDartGenerator(api: OpenAPI, config: OpenAPIGeneratorConfig) ex
                   }
                 case o: OpenAPISchema.OneOf =>
                   val refs = o.schemas.map {
-                    case ref: OpenAPISchema.Ref =>
-                      scribe.info(JsonFormatter.Default(ref.json))
-                      ref.ref.ref2Type
+                    case ref: OpenAPISchema.Ref => ref.ref.ref2Type
                     case c: OpenAPISchema.Component =>
                       scribe.info(JsonFormatter.Default(c.json))
                       typeNameForComponent(c.`type`.dartType, c)
@@ -332,7 +548,7 @@ case class OpenAPIDartGenerator(api: OpenAPI, config: OpenAPIGeneratorConfig) ex
                     case _ => throw new RuntimeException(s"Multiple parents found for ${refs.mkString(", ")}: ${parents.mkString(", ")}")
                   }
                   val c = parentName.type2File
-                  imports += c
+                  safeAddImport(imports, c)
                   addParent(parentName)
                   if (o.nullable.contains(true)) {
                     s"$c?"
@@ -384,7 +600,7 @@ case class OpenAPIDartGenerator(api: OpenAPI, config: OpenAPIGeneratorConfig) ex
   }
 
   def generateService(): SourceFile = {
-    var imports = Set.empty[String]
+    var imports = mutable.Set.empty[String]
     val methods: List[String] = api.paths.toList.sortBy(_._1).map {
       case (pathString, path) =>
         val name = "[^a-zA-Z0-9](\\S)".r.replaceAllIn(pathString.substring(1), m => {
@@ -401,7 +617,7 @@ case class OpenAPIDartGenerator(api: OpenAPI, config: OpenAPIGeneratorConfig) ex
           case c: OpenAPISchema.Component => c.format match {
             case Some("binary") =>
               val requestType = requestContent.refType
-              imports = imports + requestType.type2File
+              safeAddImport(imports, requestType.type2File)
               s"""  /// ${entry.description}
                  |  static Future<void> $name($requestType request, String fileName) async {
                  |    await restDownload(fileName, "$pathString", request.toJson());
@@ -410,7 +626,7 @@ case class OpenAPIDartGenerator(api: OpenAPI, config: OpenAPIGeneratorConfig) ex
           }
           case c: OpenAPISchema.Ref if c.ref == "#/components/schemas/Content" =>
             val requestType = requestContent.refType
-            imports = imports + requestType.type2File
+            safeAddImport(imports, requestType.type2File)
             s"""  /// ${entry.description}
                |  static Future<void> $name($requestType request, String fileName) async {
                |    await restDownload(fileName, "$pathString", request.toJson());
@@ -419,7 +635,7 @@ case class OpenAPIDartGenerator(api: OpenAPI, config: OpenAPIGeneratorConfig) ex
             val responseType = successResponse.refType
             val component = successResponse.component
             val binary = component.format.contains("binary")
-            imports = imports + responseType.type2File
+            safeAddImport(imports, responseType.type2File)
             if (requestContentType == ContentType.`multipart/form-data`) {
               apiContentType.schema match {
                 case c: OpenAPISchema.Component =>
@@ -429,7 +645,7 @@ case class OpenAPIDartGenerator(api: OpenAPI, config: OpenAPIGeneratorConfig) ex
                         case child: OpenAPISchema.Component if child.format.contains("binary") => "PlatformFile"
                         case child: OpenAPISchema.Component if child.`enum`.nonEmpty =>
                           val parentName = config.baseForTypeMap.getOrElse(child.`enum`.head.asString, throw new NullPointerException(s"Unable to find enum entry ${child.`enum`.head} for $key"))
-                          imports += parentName.type2File
+                          safeAddImport(imports, parentName.type2File)
                           parentName
                         case child: OpenAPISchema.Component => s"${child.`type`.dartType}"
                         case ref: OpenAPISchema.Ref => ref.ref.ref2Type
@@ -446,7 +662,7 @@ case class OpenAPIDartGenerator(api: OpenAPI, config: OpenAPIGeneratorConfig) ex
                         s"${ws}request.fields['$key'] = json.encode($key);"
                       }
                     case (key, ref: OpenAPISchema.Ref) =>
-                      imports = imports + ref.ref.ref2Type.type2File
+                      safeAddImport(imports, ref.ref.ref2Type.type2File)
                       s"${ws}request.fields['$key'] = json.encode($key.toJson());"
                     case (key, schema) => throw new UnsupportedOperationException(s"Unable to support $key: $schema")
                   }.mkString("\n")
@@ -464,7 +680,7 @@ case class OpenAPIDartGenerator(api: OpenAPI, config: OpenAPIGeneratorConfig) ex
               }
             } else if (binary) {
               val requestType = requestContent.refType
-              imports = imports + requestType.type2File
+              safeAddImport(imports, requestType.type2File)
               s"""  /// ${entry.description}
                  |  static Future<void> $name($requestType request) async {
                  |    return await restDownload(
@@ -475,7 +691,7 @@ case class OpenAPIDartGenerator(api: OpenAPI, config: OpenAPIGeneratorConfig) ex
                  |  }""".stripMargin
             } else {
               val requestType = requestContent.refType
-              imports = imports + requestType.type2File
+              safeAddImport(imports, requestType.type2File)
               s"""  /// ${entry.description}
                  |  static Future<$responseType> $name($requestType request) async {
                  |    return await restful(

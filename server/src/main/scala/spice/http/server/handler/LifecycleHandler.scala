@@ -78,8 +78,8 @@ object LifecycleHandler {
     case exc: UserException =>
       exc.`type` match {
         case ExceptionType.Info => // Nothing needs to be logged
-        case ExceptionType.Warn => scribe.warn(s"${exchange.request.url} failed with ${exc.message}")
-        case ExceptionType.Error => scribe.error(s"${exchange.request.url} failed with ${exc.message}", exc)
+        case ExceptionType.Warn => scribe.warn(s"${exchange.request.url} failed with ${exc.fullMessage}")
+        case ExceptionType.Error => scribe.error(s"${exchange.request.url} failed with ${exc.fullMessage}", exc)
       }
       errorMessageToContent(exc.message, exc.code, contentType)
     case _ => errorMessageToContent(s"An internal error occurred: ${throwable.getClass.getSimpleName}", None, contentType)

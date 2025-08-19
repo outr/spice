@@ -10,6 +10,11 @@ import spice.openapi.generator.dart.OpenAPIDartGenerator
 import spice.openapi.server.{OpenAPIHttpServer, RestService, Service}
 
 import java.nio.file.Path
+import spice.openapi.OpenAPI
+import spice.openapi.OpenAPIInfo
+import spice.openapi.OpenAPIComponents
+import spice.openapi.OpenAPISchema
+import fabric.str
 
 class OpenAPIDartGeneratorSpec extends AnyWordSpec with Matchers {
   "OpenAPIDartGenerator" should {
@@ -27,6 +32,89 @@ class OpenAPIDartGeneratorSpec extends AnyWordSpec with Matchers {
       sortDirectionSource.source should include("@JsonValue('Descending')")
     }
   }
+
+  "should not generate Dart files for primitive types without additional properties" in {
+    val api = OpenAPI(
+      info = OpenAPIInfo(
+        title = "Primitive Type Test",
+        version = "1.0.0"
+      ),
+      paths = Map.empty,
+      components = Some(OpenAPIComponents(
+        schemas = Map(
+          "SimpleString" -> OpenAPISchema.Component(`type` = "string"),
+          "SimpleInteger" -> OpenAPISchema.Component(`type` = "integer"),
+          "StringWithEnum" -> OpenAPISchema.Component(
+            `type` = "string",
+            `enum` = List(str("A"), str("B"), str("C"))
+          ),
+          "ComplexObject" -> OpenAPISchema.Component(
+            `type` = "object",
+            properties = Map(
+              "name" -> OpenAPISchema.Component(`type` = "string"),
+              "age" -> OpenAPISchema.Component(`type` = "integer")
+            )
+          )
+        )
+      ))
+    )
+
+    val config = OpenAPIGeneratorConfig()
+    val generator = OpenAPIDartGenerator(api, config)
+    val result = generator.generate()
+
+    // Should only generate files for schemas that are not just primitive types
+    result should have size 3 // Service + StringWithEnum + ComplexObject
+    
+    // Verify that primitive types without additional properties don't generate files
+    val primitiveTypeFiles = result.filter(file => 
+      file.fileName == "simple_string.dart" || file.fileName == "simple_integer.dart"
+    )
+    primitiveTypeFiles should have size 0
+    
+    // Verify that schemas with enums still generate files
+    val enumFiles = result.filter(_.fileName == "string_with_enum.dart")
+    enumFiles should have size 1
+    
+    // Verify that complex objects still generate files
+    val objectFiles = result.filter(_.fileName == "complex_object.dart")
+    objectFiles should have size 1
+  }
+
+  "should handle schema named 'string' correctly" in {
+    val api = OpenAPI(
+      info = OpenAPIInfo(
+        title = "String Schema Test",
+        version = "1.0.0"
+      ),
+      paths = Map.empty,
+      components = Some(OpenAPIComponents(
+        schemas = Map(
+          "string" -> OpenAPISchema.Component(
+            `type` = "string",
+            description = Some("A string schema named 'string'")
+          )
+        )
+      ))
+    )
+
+    val config = OpenAPIGeneratorConfig()
+    val generator = OpenAPIDartGenerator(api, config)
+    val result = generator.generate()
+
+    // This should generate only 1 file: service.dart
+    // The schema named "string" should be filtered out because it conflicts with Dart's built-in types
+    result should have size 1
+    
+    val stringFiles = result.filter(_.fileName == "string.dart")
+    stringFiles should have size 0
+    
+    // Only the service file should be generated
+    val serviceFiles = result.filter(_.fileName == "service.dart")
+    serviceFiles should have size 1
+  }
+
+
 
   object Server extends OpenAPIHttpServer {
     override def title: String = "Example Server"

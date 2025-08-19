@@ -78,14 +78,18 @@ class OpenAPISpec extends AnyWordSpec with Matchers {
                   required = true,
                   content = OpenAPIContent(
                     ContentType.`application/json` -> OpenAPIContentType(
-                      schema = OpenAPISchema.OneOf(List(
-                        OpenAPISchema.Component(
-                          `type` = "string"
+                      schema = OpenAPISchema.OneOf(
+                        schemas = List(
+                          OpenAPISchema.Component(
+                            `type` = "string"
+                          ),
+                          OpenAPISchema.Component(
+                            `type` = "integer"
+                          )
                         ),
-                        OpenAPISchema.Component(
-                          `type` = "integer"
-                        )
-                      ), nullable = None)
+                        discriminator = Some(OpenAPISchema.Discriminator(propertyName = "type")),
+                        nullable = None
+                      )
                     )
                   )
                 )),

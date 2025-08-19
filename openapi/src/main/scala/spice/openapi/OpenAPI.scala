@@ -15,12 +15,9 @@ case class OpenAPI(openapi: String = "3.0.3",
   lazy val asJsonString: String = JsonFormatter.Default(asJson)
   lazy val asYaml: String = YamlFormatter(asJson)
 
-  def componentByRef(ref: String): Option[OpenAPISchema.Component] = {
+  def componentByRef(ref: String): Option[OpenAPISchema] = {
     val name = ref.substring(ref.lastIndexOf('/') + 1)
-    components.get.schemas.get(name) match {
-      case Some(c: OpenAPISchema.Component) => Some(c)
-      case _ => None
-    }
+    components.get.schemas.get(name)
   }
 
   override def toString: String = asJsonString
