@@ -8,7 +8,7 @@ class UserException private(val message: String,
                             val `type`: ExceptionType,
                             val cause: Throwable,
                             val caller: String) extends RuntimeException(message, cause) {
-  lazy val fullMessage: String = s"message - $caller"
+  lazy val fullMessage: String = s"$message - $caller"
 }
 
 object UserException {
