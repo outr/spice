@@ -85,6 +85,7 @@ object ContentType {
   lazy val `application/java-serialized-object`: ContentType = ContentType("application", "java-serialized-object")
   lazy val `application/java-vm`: ContentType = ContentType("application", "java-vm")
   lazy val `application/json`: ContentType = ContentType("application", "json")
+  lazy val `application/jsonl`: ContentType = ContentType("application", "jsonl")
   lazy val `application/jsonml+json`: ContentType = ContentType("application", "jsonml+json")
   lazy val `application/lost+xml`: ContentType = ContentType("application", "lost+xml")
   lazy val `application/mac-binhex40`: ContentType = ContentType("application", "mac-binhex40")
