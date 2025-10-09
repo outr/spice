@@ -43,7 +43,8 @@ object RetryManager {
                        failures: Int,
                        throwable: Throwable): Task[Try[HttpResponse]] = delay(failures) match {
       case Some(d) => for {
-        _ <- logger.warn(s"Request to ${request.url} failed (${throwable.getMessage}, failures: $failures). Retrying after $d...").when(warnRetries)
+        // TODO: Only include stack trace when not a timeout
+        _ <- logger.warn(s"Request to ${request.url} failed (${throwable.getLocalizedMessage}, ${throwable.getClass.getSimpleName}, failures: $failures). Retrying after $d...", throwable).when(warnRetries)
         _ <- Task.sleep(d)
         response <- retry
       } yield response
