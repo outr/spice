@@ -8,6 +8,7 @@ import spice.net.ContentType
 import spice.openapi.{OpenAPI, OpenAPIContent, OpenAPISchema}
 import spice.openapi.generator.{OpenAPIGenerator, OpenAPIGeneratorConfig, SourceFile}
 import spice.streamer._
+import spice.util.NumberToWords
 
 import scala.collection.mutable
 
@@ -312,8 +313,15 @@ case class OpenAPIDartGenerator(api: OpenAPI, config: OpenAPIGeneratorConfig) ex
   private def parseEnum(typeName: String, `enum`: List[String]): SourceFile = {
     val fileName = s"${typeName.type2File}.dart"
     val fields = `enum`.map { e =>
-      val className = e.filter(_.isLetterOrDigit)
+      val className = e.filter(_.isLetterOrDigit) match {
+        case s if s.charAt(0).isDigit =>
+          val digits = s.takeWhile(_.isDigit)
+          val nums = NumberToWords(digits.toInt)
+          s"${nums.filter(_.isLetter)}${s.substring(digits.length)}"
+        case s => s
+      }
       s"""@JsonValue('$e')
+         |
          |  $className('$e')""".stripMargin
     }.mkString(",\n  ")
     val source = EnumTemplate
