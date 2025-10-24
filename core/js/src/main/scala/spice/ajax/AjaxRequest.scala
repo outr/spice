@@ -3,7 +3,7 @@ package spice.ajax
 import org.scalajs.dom
 import org.scalajs.dom.{ProgressEvent, XMLHttpRequest}
 import rapid.Task
-import rapid.task.CompletableTask
+import rapid.task.Completable
 import reactify._
 import spice.UserException
 import spice.http.HttpMethod
@@ -20,7 +20,7 @@ class AjaxRequest(url: URL,
                   withCredentials: Boolean = true,
                   responseType: String = "") {
   val req = new dom.XMLHttpRequest()
-  val completable: CompletableTask[Try[XMLHttpRequest]] = Task.completable[Try[XMLHttpRequest]]
+  val completable: Completable[Try[XMLHttpRequest]] = Task.completable[Try[XMLHttpRequest]]
   val loaded: Val[Double] = Var(0.0)
   val total: Val[Double] = Var(0.0)
   val percentage: Val[Int] = Var(0)

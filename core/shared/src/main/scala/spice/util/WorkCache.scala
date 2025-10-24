@@ -12,7 +12,7 @@ import java.util.concurrent.ConcurrentHashMap
  * @tparam Result the result of the work
  */
 trait WorkCache[Key, Result] {
-  private val map = new ConcurrentHashMap[Key, Fiber[Result]]
+  private val map = new ConcurrentHashMap[Key, Task[Result]]
 
   /**
    * Check for a persisted result. Work that is completed by `work` should persist to be able to be retrieved by this
@@ -42,7 +42,7 @@ trait WorkCache[Key, Result] {
       case Some(result) => Task.pure(result)
       case None => {
         val completable = Task.completable[Result]
-        map.put(key, completable.start())
+        map.put(key, completable)
         work(key)
           .flatMap {
             case WorkResult.FinalResult(result) =>

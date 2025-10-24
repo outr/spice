@@ -28,7 +28,7 @@ class JVMHttpClientWebSocket(url: URL, instance: JVMHttpClientInstance) extends 
       disconnect()
     }
 
-    Fiber.fromFuture(instance.jvmClient.newWebSocketBuilder().buildAsync(URI.create(url.toString), this))
+    Task(instance.jvmClient.newWebSocketBuilder().buildAsync(URI.create(url.toString), this).get())
       .map { ws =>
         jvmWebSocket @= Some(ws)
       }

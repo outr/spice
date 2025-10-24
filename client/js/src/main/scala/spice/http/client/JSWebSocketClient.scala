@@ -58,7 +58,13 @@ class JSWebSocketClient(url: URL) extends WebSocket {
         }
       }
     }
-    Fiber.fromFuture(status.future(s => s != ConnectionStatus.Connecting))(ExecutionContext.global)
+    val completable = Task.completable[ConnectionStatus]
+    status.future { s =>
+      s != ConnectionStatus.Connecting
+    }.andThen { result =>
+      completable.complete(result)
+    }(ExecutionContext.global)
+    completable
   }
 
   private def updateStatus(): Unit = webSocket.readyState match {

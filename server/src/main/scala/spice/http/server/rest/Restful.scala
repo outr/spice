@@ -106,7 +106,7 @@ abstract class Restful[Request, Response](implicit val requestRW: RW[Request],
                 case _ => updatedRequest
               }
               apply(exchange, updatedRequest)
-                .timeout(timeout)
+//                .timeout(timeout)                 // TODO: Fix!
                 .handleError { throwable =>
                   Task(error(exchange, throwable))
                 }

@@ -17,7 +17,7 @@ import io.netty.channel.socket.nio.NioSocketChannel
 import io.netty.handler.ssl.SslContextBuilder
 import io.netty.handler.ssl.util.InsecureTrustManagerFactory
 import io.netty.handler.timeout.{IdleStateHandler, ReadTimeoutHandler, WriteTimeoutHandler}
-import rapid.task.CompletableTask
+import rapid.task.Completable
 import spice.http.content.FormDataEntry.{FileEntry, StringEntry}
 
 import java.io.{ByteArrayOutputStream, File, FileOutputStream}
@@ -58,7 +58,7 @@ class NettyHttpClientInstance(val client: HttpClient) extends HttpClientInstance
     task
   }
 
-  private def sendViaPool(request: HttpRequest, task: CompletableTask[Try[HttpResponse]]): Unit = {
+  private def sendViaPool(request: HttpRequest, task: Completable[Try[HttpResponse]]): Unit = {
     val uri = request.url
     val host = uri.host
     val port = uri.port
@@ -92,7 +92,7 @@ class NettyHttpClientInstance(val client: HttpClient) extends HttpClientInstance
     })
   }
 
-  private def sendViaNewChannel(request: HttpRequest, task: CompletableTask[Try[HttpResponse]]): Unit = {
+  private def sendViaNewChannel(request: HttpRequest, task: Completable[Try[HttpResponse]]): Unit = {
     val uri = request.url
     val host = uri.host
     val port = uri.port
@@ -102,7 +102,7 @@ class NettyHttpClientInstance(val client: HttpClient) extends HttpClientInstance
       .group(eventLoopGroup)
       .channel(classOf[NioSocketChannel])
       .option[Integer](ChannelOption.CONNECT_TIMEOUT_MILLIS, client.timeout.toMillis.toInt)
-      .remoteAddress(new InetSocketAddress(host, port))  // Connect to TARGET host/port, not proxy!
+      .remoteAddress(new InetSocketAddress(host, port)) // Connect to TARGET host/port, not proxy!
 
     bootstrap.handler(new ChannelInitializer[Channel] {
       override def initChannel(ch: Channel): Unit = {
@@ -124,7 +124,7 @@ class NettyHttpClientInstance(val client: HttpClient) extends HttpClientInstance
             }
           case _ => throw new IllegalStateException("Unexpected proxy type")
         }
-        p.addFirst("proxy", handler)  // Add proxy handler first
+        p.addFirst("proxy", handler) // Add proxy handler first
 
         // Add SSL handler if HTTPS (will be activated after proxy connect)
         if (isHttps) {
@@ -166,10 +166,8 @@ class NettyHttpClientInstance(val client: HttpClient) extends HttpClientInstance
   }
 
   // Non-pooled response handler for proxy connections
-  private class NonPooledResponseHandler(
-                                          task: CompletableTask[Try[HttpResponse]],
-                                          client: HttpClient
-                                        ) extends ResponseHandler(task, client) {
+  private class NonPooledResponseHandler(task: Completable[Try[HttpResponse]],
+                                         client: HttpClient) extends ResponseHandler(task, client) {
 
     override def channelRead0(ctx: ChannelHandlerContext, msg: HttpObject): Unit = {
       super.channelRead0(ctx, msg)
@@ -211,9 +209,9 @@ class NettyHttpClientInstance(val client: HttpClient) extends HttpClientInstance
     // Set headers
     val hostHeader = if ((uri.protocol == Protocol.Http && uri.port == 80) ||
       (uri.protocol == Protocol.Https && uri.port == 443)) {
-      uri.host  // Standard ports can be omitted
+      uri.host // Standard ports can be omitted
     } else {
-      s"${uri.host}:${uri.port}"  // Include port for non-standard ports
+      s"${uri.host}:${uri.port}" // Include port for non-standard ports
     }
     nettyRequest.headers().set(HttpHeaderNames.HOST, hostHeader)
     nettyRequest.headers().set(HttpHeaderNames.CONNECTION, HttpHeaderValues.KEEP_ALIVE)
@@ -310,12 +308,10 @@ class NettyHttpClientInstance(val client: HttpClient) extends HttpClientInstance
   /**
    * Response handler that returns the channel to the pool when done
    */
-  private class PooledResponseHandler(
-                                       task: CompletableTask[Try[HttpResponse]],
-                                       client: HttpClient,
-                                       pool: SimpleChannelPool,
-                                       channel: Channel
-                                     ) extends ResponseHandler(task, client) {
+  private class PooledResponseHandler(task: Completable[Try[HttpResponse]],
+                                      client: HttpClient,
+                                      pool: SimpleChannelPool,
+                                      channel: Channel) extends ResponseHandler(task, client) {
 
     override def channelRead0(ctx: ChannelHandlerContext, msg: HttpObject): Unit = {
       super.channelRead0(ctx, msg)
@@ -340,7 +336,7 @@ class NettyHttpClientInstance(val client: HttpClient) extends HttpClientInstance
   }
 
   // Base response handler
-  private class ResponseHandler(task: CompletableTask[Try[HttpResponse]], client: HttpClient)
+  private class ResponseHandler(task: Completable[Try[HttpResponse]], client: HttpClient)
     extends SimpleChannelInboundHandler[HttpObject] {
 
     private var statusCode: Int = 0
@@ -406,7 +402,9 @@ class NettyHttpClientInstance(val client: HttpClient) extends HttpClientInstance
   // Content accumulator trait and implementations
   private trait ContentAccumulator {
     def accumulate(content: ByteBuf): Unit
+
     def toContent(contentType: ContentType): Content
+
     def cleanup(): Unit
   }
 
