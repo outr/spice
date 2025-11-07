@@ -1,10 +1,10 @@
 name := "spice"
 ThisBuild / organization := "com.outr"
-ThisBuild / version := "0.10.15"
+ThisBuild / version := "0.10.16"
 
 val scala213: String = "2.13.17"
 
-val scala3: String = "3.7.3"
+val scala3: String = "3.3.7"
 
 ThisBuild / scalaVersion := scala3
 ThisBuild / scalacOptions ++= Seq("-deprecation")
