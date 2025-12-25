@@ -204,7 +204,7 @@ class OkHttpClientInstance(client: HttpClient) extends HttpClientInstance {
 
     // Method
     r
-      .method(request.method.value, body)
+      .method(request.method.value, if (request.method == HttpMethod.Head) null else body)
       .header("Content-Length", Option(body).map(_.contentLength().toString).getOrElse("0"))
       .build()
   }

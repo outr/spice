@@ -5,6 +5,7 @@ import spice.http.HttpRequest
 
 import scala.concurrent.duration._
 
+// use per: Int, elapsed: Long - List[Long]
 case class RateLimiter(perRequestDelay: FiniteDuration) extends InterceptorAdapter { self =>
   private val maxDelay = perRequestDelay.toMillis
   @volatile private var lastTime: Long = 0L

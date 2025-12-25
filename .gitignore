@@ -1,3 +1,10 @@
 target/
 .idea/
 .bsp/
+.bloop/
+.metals/
+.vscode/
+metals.sbt
+output/
+expected.json
+out.json
