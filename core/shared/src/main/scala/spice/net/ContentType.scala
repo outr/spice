@@ -105,6 +105,7 @@ object ContentType {
   lazy val `application/mp4`: ContentType = ContentType("application", "mp4")
   lazy val `application/msword`: ContentType = ContentType("application", "msword")
   lazy val `application/mxf`: ContentType = ContentType("application", "mxf")
+  lazy val `application/x-ndjson`: ContentType = ContentType("application/x-ndjson", "ndjson")
   lazy val `application/octet-stream`: ContentType = ContentType("application", "octet-stream")
   lazy val `application/oda`: ContentType = ContentType("application", "oda")
   lazy val `application/oebps-package+xml`: ContentType = ContentType("application", "oebps-package+xml")

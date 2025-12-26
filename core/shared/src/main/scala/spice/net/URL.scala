@@ -63,6 +63,10 @@ case class URL(protocol: Protocol = Protocol.Http,
   def withParam(key: String, value: String, append: Boolean = true): URL = {
     copy(parameters = parameters.withParam(key, value, append))
   }
+  def withParamOpt(key: String, value: Option[String], append: Boolean = true): URL = value match {
+    case Some(value) => withParam(key, value, append)
+    case None => this
+  }
   def withParams(params: Map[String, String], append: Boolean = false): URL = {
     var u = this
     params.foreach {

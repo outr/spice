@@ -41,6 +41,10 @@ case class HttpClient(request: HttpRequest,
 
   def modify(f: HttpRequest => HttpRequest): HttpClient = copy(request = f(request))
 
+  def modifyUrl(f: URL => URL): HttpClient = modify { r =>
+    r.copy(url = f(r.url))
+  }
+
   def url: URL = request.url
   def url(url: URL): HttpClient = modify(_.copy(url = url))
   def path: URLPath = url.path
