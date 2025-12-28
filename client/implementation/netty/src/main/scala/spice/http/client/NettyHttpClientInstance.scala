@@ -76,16 +76,21 @@ class NettyHttpClientInstance(val client: HttpClient) extends HttpClientInstance
         val channel = future.getNow
 
         try {
-          // Create response handler
-          val responseHandler = new PooledResponseHandler(task, client, pool, channel)
-          channel.pipeline().addLast("responseHandler", responseHandler)
+          // Create response handler with a unique name to allow safe removal
+          val handlerName = s"responseHandler-${System.nanoTime()}"
+          val responseHandler = new PooledResponseHandler(task, client, pool, channel, handlerName)
+          channel.pipeline().addLast(handlerName, responseHandler)
 
           // Create and send request
           val nettyRequest = createNettyRequest(request, uri)
           channel.writeAndFlush(nettyRequest)
         } catch {
           case t: Throwable =>
-            pool.release(channel)
+            try {
+              pool.release(channel)
+            } catch {
+              case _: Throwable => // Ignore cleanup errors
+            }
             task.success(Failure(t))
         }
       }
@@ -179,8 +184,9 @@ class NettyHttpClientInstance(val client: HttpClient) extends HttpClientInstance
     }
 
     override def exceptionCaught(ctx: ChannelHandlerContext, cause: Throwable): Unit = {
+      // Call super first to handle the exception (which already closes the channel)
       super.exceptionCaught(ctx, cause)
-      ctx.close()
+      // Channel is already closed by super.exceptionCaught, so no need to close again
     }
   }
 
@@ -311,7 +317,10 @@ class NettyHttpClientInstance(val client: HttpClient) extends HttpClientInstance
   private class PooledResponseHandler(task: Completable[Try[HttpResponse]],
                                       client: HttpClient,
                                       pool: SimpleChannelPool,
-                                      channel: Channel) extends ResponseHandler(task, client) {
+                                      channel: Channel,
+                                      handlerName: String) extends ResponseHandler(task, client) {
+
+    @volatile private var cleanedUp: Boolean = false
 
     override def channelRead0(ctx: ChannelHandlerContext, msg: HttpObject): Unit = {
       super.channelRead0(ctx, msg)
@@ -323,15 +332,30 @@ class NettyHttpClientInstance(val client: HttpClient) extends HttpClientInstance
     }
 
     override def exceptionCaught(ctx: ChannelHandlerContext, cause: Throwable): Unit = {
+      // Call super first to handle the exception
       super.exceptionCaught(ctx, cause)
+      // Then clean up (remove handler and return to pool)
       cleanup(ctx)
     }
 
     private def cleanup(ctx: ChannelHandlerContext): Unit = {
-      // Remove this handler from the pipeline
-      ctx.pipeline().remove(this)
-      // Return channel to pool
-      pool.release(channel)
+      if (!cleanedUp) {
+        cleanedUp = true
+        // Remove this handler from the pipeline if it's still there
+        try {
+          if (ctx.pipeline().get(handlerName) != null) {
+            ctx.pipeline().remove(handlerName)
+          }
+        } catch {
+          case _: Throwable => // Handler already removed or pipeline closed, ignore
+        }
+        // Return channel to pool
+        try {
+          pool.release(channel)
+        } catch {
+          case _: Throwable => // Channel might already be closed, ignore
+        }
+      }
     }
   }
 
@@ -344,6 +368,7 @@ class NettyHttpClientInstance(val client: HttpClient) extends HttpClientInstance
     private var contentType: ContentType = ContentType.`application/octet-stream`
     private var contentLength: Option[Long] = None
     private var accumulator: ContentAccumulator = _
+    @volatile private var completed: Boolean = false
 
     override def channelRead0(ctx: ChannelHandlerContext, msg: HttpObject): Unit = {
       msg match {
@@ -367,19 +392,24 @@ class NettyHttpClientInstance(val client: HttpClient) extends HttpClientInstance
           }
 
         case chunk: HttpContent =>
-          val content = chunk.content()
-          if (content.readableBytes() > 0) {
-            accumulator.accumulate(content)
-          }
+          if (accumulator != null) {
+            val content = chunk.content()
+            if (content.readableBytes() > 0) {
+              accumulator.accumulate(content)
+            }
 
-          if (chunk.isInstanceOf[LastHttpContent]) {
-            val responseContent = accumulator.toContent(contentType)
-            val response = HttpResponse(
-              status = HttpStatus.byCode(statusCode),
-              headers = headers,
-              content = Some(responseContent)
-            )
-            task.success(Success(response))
+            if (chunk.isInstanceOf[LastHttpContent]) {
+              if (!completed) {
+                completed = true
+                val responseContent = accumulator.toContent(contentType)
+                val response = HttpResponse(
+                  status = HttpStatus.byCode(statusCode),
+                  headers = headers,
+                  content = Some(responseContent)
+                )
+                task.success(Success(response))
+              }
+            }
           }
 
         case _ => // ignore
@@ -387,8 +417,14 @@ class NettyHttpClientInstance(val client: HttpClient) extends HttpClientInstance
     }
 
     override def exceptionCaught(ctx: ChannelHandlerContext, cause: Throwable): Unit = {
-      Option(accumulator).foreach(_.cleanup())
-      task.success(Failure(cause))
+      // Prevent exception from propagating to tail of pipeline
+      if (!completed) {
+        completed = true
+        Option(accumulator).foreach(_.cleanup())
+        task.success(Failure(cause))
+      }
+      // Close channel on exception
+      ctx.close()
     }
 
     private def shouldAccumulateInMemory(contentType: ContentType, contentLength: Option[Long]): Boolean = {
