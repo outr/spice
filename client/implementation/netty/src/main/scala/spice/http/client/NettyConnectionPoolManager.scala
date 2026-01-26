@@ -11,8 +11,9 @@ import io.netty.handler.codec.http._
 import io.netty.handler.proxy.{HttpProxyHandler, Socks5ProxyHandler}
 import io.netty.handler.ssl.SslContextBuilder
 import io.netty.handler.ssl.util.InsecureTrustManagerFactory
-import io.netty.handler.timeout.{IdleStateHandler, ReadTimeoutHandler, WriteTimeoutHandler}
+import io.netty.handler.timeout.{IdleStateHandler, ReadTimeoutException, ReadTimeoutHandler, WriteTimeoutHandler}
 import io.netty.util.concurrent.Future
+import scribe._
 
 import java.net.InetSocketAddress
 import java.util.concurrent.{ConcurrentHashMap, TimeUnit}
@@ -100,6 +101,24 @@ class NettyConnectionPoolManager(
 
           // HTTP codec
           p.addLast("httpCodec", new HttpClientCodec())
+          
+          // Add permanent exception handler to catch ReadTimeoutException and other exceptions
+          // This ensures exceptions never reach the tail of the pipeline
+          p.addLast("exceptionHandler", new ChannelDuplexHandler {
+            override def exceptionCaught(ctx: ChannelHandlerContext, cause: Throwable): Unit = {
+              // Handle ReadTimeoutException and other exceptions gracefully
+              cause match {
+                case _: ReadTimeoutException =>
+                  // Read timeout - close the channel to prevent it from being reused
+                  ctx.close()
+                case _ =>
+                  // Other exceptions - log and close the channel
+                  scribe.warn(s"Exception caught in pipeline for ${key.host}:${key.port}: ${cause.getMessage}", cause)
+                  ctx.close()
+              }
+              // Prevent exception from propagating further
+            }
+          })
         }
 
         override def channelAcquired(ch: Channel): Unit = {

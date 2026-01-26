@@ -10,7 +10,7 @@ import io.netty.handler.codec.http.websocketx._
 import io.netty.handler.ssl.SslContextBuilder
 import io.netty.handler.ssl.util.InsecureTrustManagerFactory
 import io.netty.handler.codec.http.websocketx.WebSocketClientProtocolHandler.ClientHandshakeStateEvent
-import io.netty.handler.timeout.{IdleStateEvent, IdleStateHandler, ReadTimeoutHandler}
+import io.netty.handler.timeout.{IdleStateEvent, IdleStateHandler, ReadTimeoutException, ReadTimeoutHandler}
 import reactify.Var
 import rapid.Task
 import spice.UserException
@@ -153,15 +153,30 @@ class NettyHttpClientWebSocket(url: URL, instance: NettyHttpClientInstance) exte
         }
 
         override def exceptionCaught(ctx: ChannelHandlerContext, cause: Throwable): Unit = {
-          scribe.error(s"WebSocket exception", cause)
-          error @= cause
-          _status @= ConnectionStatus.Closed
+          // Explicitly handle ReadTimeoutException and prevent it from reaching tail
+          cause match {
+            case _: ReadTimeoutException =>
+              scribe.warn(s"WebSocket read timeout for $url")
+              error @= cause
+              _status @= ConnectionStatus.Closed
+              
+              if (!handshakeComplete && taskCompleted.compareAndSet(false, true)) {
+                task.failure(new RuntimeException(s"WebSocket read timeout connecting to $url", cause))
+              }
+              
+              ctx.close()
+            case _ =>
+              scribe.error(s"WebSocket exception", cause)
+              error @= cause
+              _status @= ConnectionStatus.Closed
 
-          if (!handshakeComplete && taskCompleted.compareAndSet(false, true)) {
-            task.failure(new RuntimeException(s"WebSocket error connecting to $url", cause))
+              if (!handshakeComplete && taskCompleted.compareAndSet(false, true)) {
+                task.failure(new RuntimeException(s"WebSocket error connecting to $url", cause))
+              }
+
+              ctx.close()
           }
-
-          ctx.close()
+          // Prevent exception from propagating to tail of pipeline
         }
       }
 

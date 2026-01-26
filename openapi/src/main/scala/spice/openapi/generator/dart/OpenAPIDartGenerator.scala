@@ -449,13 +449,17 @@ case class OpenAPIDartGenerator(api: OpenAPI, config: OpenAPIGeneratorConfig) ex
         safeAddImport(imports, parentName.type2File)
         addParent(parentName, `enum`)
         parentName.dartType
-      } else if (c.`type` == "object" && c.additionalProperties.nonEmpty) {
-        val additionalField = parseField(
-          fieldName = fieldName,
-          schema = c.additionalProperties.get,
-          imports = imports
-        )
-        s"Map<String, ${additionalField.`type`}>"
+      } else if (c.`type` == "object") {
+        if (c.additionalProperties.nonEmpty) {
+          val additionalField = parseField(
+            fieldName = fieldName,
+            schema = c.additionalProperties.get,
+            imports = imports
+          )
+          s"Map<String, ${additionalField.`type`}>"
+        } else {
+          throw new RuntimeException(s"Failed to parse: ${JsonFormatter.Default(c.json)}")
+        }
       } else {
         c.`type`.dartType
       }

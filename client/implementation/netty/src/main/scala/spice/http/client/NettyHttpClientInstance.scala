@@ -16,8 +16,9 @@ import io.netty.bootstrap.Bootstrap
 import io.netty.channel.socket.nio.NioSocketChannel
 import io.netty.handler.ssl.SslContextBuilder
 import io.netty.handler.ssl.util.InsecureTrustManagerFactory
-import io.netty.handler.timeout.{IdleStateHandler, ReadTimeoutHandler, WriteTimeoutHandler}
+import io.netty.handler.timeout.{IdleStateHandler, ReadTimeoutException, ReadTimeoutHandler, WriteTimeoutHandler}
 import rapid.task.Completable
+import scribe._
 import spice.http.content.FormDataEntry.{FileEntry, StringEntry}
 
 import java.io.{ByteArrayOutputStream, File, FileOutputStream}
@@ -154,6 +155,28 @@ class NettyHttpClientInstance(val client: HttpClient) extends HttpClientInstance
 
         // Response handler (not pooled)
         p.addLast("responseHandler", new NonPooledResponseHandler(task, client))
+        
+        // Add permanent exception handler as a safety net to catch any exceptions
+        // that might not be handled by the response handler (e.g., during channel close)
+        p.addLast("exceptionHandler", new ChannelDuplexHandler {
+          override def exceptionCaught(ctx: ChannelHandlerContext, cause: Throwable): Unit = {
+            // Only handle if it's a ReadTimeoutException and hasn't been handled already
+            // This acts as a safety net - the ResponseHandler should handle most exceptions
+            cause match {
+              case _: ReadTimeoutException =>
+                // Read timeout - close the channel gracefully
+                if (ctx.channel().isOpen) {
+                  ctx.close()
+                }
+              case _ =>
+                // Other exceptions - log if not already handled, but don't let it reach tail
+                if (ctx.channel().isOpen) {
+                  scribe.debug(s"Exception caught in pipeline (may already be handled): ${cause.getMessage}")
+                  ctx.close()
+                }
+            }
+          }
+        })
       }
     })
 
