@@ -4,7 +4,7 @@ import spice.net.ContentType
 
 import scala.collection.immutable.TreeMap
 
-case class Headers(map: TreeMap[String, List[String]] = TreeMap.empty(Ordering.by(_.toLowerCase))) {
+case class Headers(map: TreeMap[String, List[String]] = TreeMap.empty) {
   def first(key: HeaderKey): Option[String] = get(key).headOption
   def get(key: HeaderKey): List[String] = map.getOrElse(key.key, Nil)
   def contains(key: HeaderKey): Boolean = map.contains(key.key)
@@ -35,7 +35,9 @@ object Headers {
       DefaultUserAgent.map(Headers.Request.`User-Agent`.apply)
     ).flatten: _*)
 
-  def apply(map: Map[String, List[String]]): Headers = apply(TreeMap[String, List[String]](map.toList: _*)(Ordering.by(_.toLowerCase)))
+  def apply(map: Map[String, List[String]]): Headers = {
+    apply(TreeMap[String, List[String]](map.toList: _*))
+  }
 
   def `Cache-Control`: CacheControl.type = CacheControl
   case object `Connection` extends StringHeaderKey("Connection")
