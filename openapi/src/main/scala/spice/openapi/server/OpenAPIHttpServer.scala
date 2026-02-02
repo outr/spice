@@ -32,7 +32,7 @@ trait OpenAPIHttpServer extends MutableHttpServer {
     }
   }
 
-  def components: Map[String, OpenAPISchema] = VectorMap(componentsMap.toList.sortBy(_._1): _*)
+  def components: Map[String, OpenAPISchema] = VectorMap(componentsMap.toList.sortBy(_._1)*)
 
   private def determineAvailableName(fullName: String): String = {
     val index = fullName.lastIndexOf('.')

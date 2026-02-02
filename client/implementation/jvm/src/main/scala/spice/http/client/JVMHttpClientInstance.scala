@@ -95,7 +95,7 @@ class JVMHttpClientInstance(client: HttpClient) extends HttpClientInstance {
         }
         builder.headers(request.headers.map.toList.flatMap {
           case (key, values) => values.flatMap(value => List(key, value))
-        }: _*)
+        }*)
         builder.build()
       }
     } yield jvmRequest

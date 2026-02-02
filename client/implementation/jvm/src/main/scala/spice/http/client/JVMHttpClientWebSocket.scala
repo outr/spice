@@ -52,21 +52,21 @@ class JVMHttpClientWebSocket(url: URL, instance: JVMHttpClientInstance) extends 
 
   override def onText(webSocket: jvm.WebSocket,
                       data: CharSequence,
-                      last: Boolean): CompletionStage[_] = {
+                      last: Boolean): CompletionStage[?] = {
     receive.text @= data.toString
     super.onText(webSocket, data, last)
   }
 
   override def onBinary(webSocket: jvm.WebSocket,
                         data: ByteBuffer,
-                        last: Boolean): CompletionStage[_] = {
+                        last: Boolean): CompletionStage[?] = {
     receive.binary @= ByteBufferData(data)
     super.onBinary(webSocket, data, last)
   }
 
   override def onClose(webSocket: jvm.WebSocket,
                        statusCode: Int,
-                       reason: String): CompletionStage[_] = {
+                       reason: String): CompletionStage[?] = {
     _status @= ConnectionStatus.Closed
     super.onClose(webSocket, statusCode, reason)
   }

@@ -63,7 +63,7 @@ class JSWebSocketClient(url: URL) extends WebSocket {
       s != ConnectionStatus.Connecting
     }.andThen { result =>
       completable.complete(result)
-    }(ExecutionContext.global)
+    }(using ExecutionContext.global)
     completable
   }
 

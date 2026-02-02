@@ -11,7 +11,7 @@ case class BufferManager(checkEvery: FiniteDuration = 10.seconds,
                          checkFrequency: FiniteDuration = 1.second,
                          sendEmpty: Boolean = false,
                          logErrorAfter: Int = 3) {
-  private var queues = List.empty[BufferQueue[_]]
+  private var queues = List.empty[BufferQueue[?]]
   private val lastCheck = new AtomicLong(System.currentTimeMillis())
   private var keepAlive = true
 

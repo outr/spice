@@ -135,7 +135,7 @@ object OpenAPISchema {
       "nullable" -> nullable.json
     ) ++ discriminator.map(disc => "discriminator" -> disc.json).toList
     
-    obj(fields: _*)
+    obj(fields*)
   }
 
   private def notSchema(schema: OpenAPISchema, nullable: Option[Boolean]): Json = obj(

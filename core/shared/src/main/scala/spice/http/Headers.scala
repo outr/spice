@@ -4,7 +4,7 @@ import spice.net.ContentType
 
 import scala.collection.immutable.TreeMap
 
-case class Headers(map: TreeMap[String, List[String]] = TreeMap.empty) {
+case class Headers private(map: TreeMap[String, List[String]] = TreeMap.empty(using Headers.KeyOrdering)) {
   def first(key: HeaderKey): Option[String] = get(key).headOption
   def get(key: HeaderKey): List[String] = map.getOrElse(key.key, Nil)
   def contains(key: HeaderKey): Boolean = map.contains(key.key)
@@ -20,24 +20,23 @@ case class Headers(map: TreeMap[String, List[String]] = TreeMap.empty) {
   }
   def withHeader(key: String, value: String): Headers = withHeader(Header(new StringHeaderKey(key), value))
   def withHeaders(key: String, values: List[String]): Headers = copy(map + (key -> values))
-  def withHeaders(headers: Header*): Headers = copy(map ++ TreeMap(headers.map(h => h.key.key -> List(h.value)): _*))
+  def withHeaders(headers: Header*): Headers = copy(map ++ headers.iterator.map(h => h.key.key -> List(h.value)))
 
   def merge(headers: Headers): Headers = copy(map ++ headers.map)
 }
 
 object Headers {
+  val KeyOrdering: Ordering[String] = Ordering.comparatorToOrdering(using String.CASE_INSENSITIVE_ORDER)
+
   var DefaultUserAgent: Option[String] = Some("Spice-HttpClient")
 
   val empty: Headers = Headers()
-  def default: Headers = empty
-    .withHeaders(List(
-      Some(Headers.Request.`Accept`("*/*")),
-      DefaultUserAgent.map(Headers.Request.`User-Agent`.apply)
-    ).flatten: _*)
+  def default: Headers = empty.withHeaders(List(
+    Some(Headers.Request.`Accept`("*/*")),
+    DefaultUserAgent.map(Headers.Request.`User-Agent`.apply)
+  ).flatten*)
 
-  def apply(map: Map[String, List[String]]): Headers = {
-    apply(TreeMap[String, List[String]](map.toList: _*))
-  }
+  def apply(map: Map[String, List[String]]): Headers = Headers(TreeMap.empty(using KeyOrdering) ++ map)
 
   def `Cache-Control`: CacheControl.type = CacheControl
   case object `Connection` extends StringHeaderKey("Connection")

@@ -77,7 +77,7 @@ package object dsl {
 
   def allow(path: URLPath): ConnectionFilter = PathFilter(path)
 
-  def last(filters: ConnectionFilter*): ConnectionFilter = LastConnectionFilter(filters: _*)
+  def last(filters: ConnectionFilter*): ConnectionFilter = LastConnectionFilter(filters*)
 
   def respond(content: Content, status: HttpStatus = HttpStatus.OK): ContentHandler = {
     ContentHandler(content, status)

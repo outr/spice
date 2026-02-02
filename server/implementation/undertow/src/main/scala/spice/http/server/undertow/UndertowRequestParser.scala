@@ -37,7 +37,7 @@ object UndertowRequestParser {
               val headers = parseHeaders(entry.getHeaders)
               if (entry.isFileItem) {
                 val path = entry.getFileItem.getFile
-                val file = File.createTempFile("spice", entry.getFileName)
+                val file = File.createTempFile("spice-form", entry.getFileName)
                 path.toFile.renameTo(file)
                 FileEntry(entry.getFileName, file, headers)
               } else {

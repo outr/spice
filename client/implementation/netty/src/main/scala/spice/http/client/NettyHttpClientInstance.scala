@@ -390,7 +390,7 @@ class NettyHttpClientInstance(val client: HttpClient) extends HttpClientInstance
     private var headers: Headers = Headers.empty
     private var contentType: ContentType = ContentType.`application/octet-stream`
     private var contentLength: Option[Long] = None
-    private var accumulator: ContentAccumulator = _
+    private var accumulator: ContentAccumulator = scala.compiletime.uninitialized
     @volatile private var completed: Boolean = false
 
     override def channelRead0(ctx: ChannelHandlerContext, msg: HttpObject): Unit = {

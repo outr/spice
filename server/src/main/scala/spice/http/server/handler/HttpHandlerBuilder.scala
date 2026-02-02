@@ -109,7 +109,7 @@ case class HttpHandlerBuilder(server: MutableHttpServer,
         case HttpMethod.Get => {
           Some(obj(exchange.request.url.parameters.entries.map {
             case (key, param) => key -> str(param.value)
-          }: _*))
+          }*))
         }
         case _ => exchange.request.content match {
           case Some(content) => content match {

@@ -236,7 +236,7 @@ object Restful {
       case (key, param) =>
         val values = param.values
         val valuesJson = if (values.length > 1) {
-          arr(values.map(str): _*)
+          arr(values.map(str)*)
         } else {
           str(values.head)
         }

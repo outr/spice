@@ -11,7 +11,7 @@ object OpenAPIContent {
   implicit val rw: RW[OpenAPIContent] = RW.from(
     r = c => obj(c.content.map {
       case (ct, oct) => ct.toString -> oct.json
-    }: _*),
+    }*),
     w = j => OpenAPIContent(j.asMap.map {
       case (ct, oct) => ContentType.parse(ct) -> oct.as[OpenAPIContentType]
     }.toList),

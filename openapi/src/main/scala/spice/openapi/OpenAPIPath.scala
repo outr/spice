@@ -13,7 +13,7 @@ object OpenAPIPath {
     r = path => obj(
       "parameters" -> path.parameters.json :: path.methods.toList.map {
         case (method, entry) => method.value.toLowerCase -> entry.json
-      }: _*
+      }*
     ),
     w = json => OpenAPIPath(
       parameters = json.get("parameters").map(_.as[List[OpenAPISchema]]).getOrElse(Nil),

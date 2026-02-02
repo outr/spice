@@ -14,7 +14,7 @@ trait SharedContentHelpers {
     json(obj(
       "query" -> str(query),
       "operationName" -> operationName.map(str).getOrElse(Null),
-      "variables" -> obj(variables: _*)
+      "variables" -> obj(variables*)
     ))
   }
 

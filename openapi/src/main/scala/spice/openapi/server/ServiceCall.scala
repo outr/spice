@@ -46,7 +46,7 @@ trait ServiceCall extends HttpHandler {
     val args = exchange.request.url.path.extractArguments(actualPath).toList.map {
       case (key, value) => key -> Try(JsonParser(value)).getOrElse(Str(value))
     }
-    val argsJson = obj(args: _*)
+    val argsJson = obj(args*)
     Restful.jsonFromExchange(exchange).flatMap { contentJson =>
       val requestJson = if (argsJson.isEmpty) {
         contentJson
@@ -98,7 +98,7 @@ trait ServiceCall extends HttpHandler {
               rt.contentType -> OpenAPIContentType(
                 schema = schemaFrom(responseRW.definition, responseSchema.getOrElse(Schema()), rt.format, nullable = None)
               )
-            }: _*
+            }*
           )
         )
         // TODO: Support errors

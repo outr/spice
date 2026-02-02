@@ -34,7 +34,7 @@ case class OpenAPIDartGenerator(api: OpenAPI, config: OpenAPIGeneratorConfig) ex
         case Some(_: OpenAPISchema.AllOf) => ref // Handle AllOf schemas
         case Some(_: OpenAPISchema.AnyOf) => ref // Handle AnyOf schemas
         case Some(_: OpenAPISchema.Not) => ref // Handle Not schemas
-        case None => ref
+        case _ => ref
       }
     }
     def type2File: String = {
@@ -553,6 +553,7 @@ case class OpenAPIDartGenerator(api: OpenAPI, config: OpenAPIGeneratorConfig) ex
                     case c: OpenAPISchema.Component =>
                       scribe.info(JsonFormatter.Default(c.json))
                       typeNameForComponent(c.`type`.dartType, c)
+                    case s => throw new UnsupportedOperationException(s"Failure: $s")
                   }
                   val parents: List[String] = refs.map(r => config.baseForTypeMap.getOrElse(r, throw new RuntimeException(s"No mapping defined for $r"))).distinct
                   val parentName = parents match {
