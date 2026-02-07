@@ -20,7 +20,7 @@ object Dependencies {
 
     val httpMime: String = "4.5.14"
     
-    val undertow: String = "2.3.22.Final"
+    val undertow: String = "2.3.23.Final"
     
     val moduload: String = "1.1.7"
 
