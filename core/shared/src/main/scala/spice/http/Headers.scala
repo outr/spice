@@ -12,6 +12,7 @@ case class Headers private(map: TreeMap[String, List[String]] = TreeMap.empty(us
     val list = get(header.key)
     copy(map + (header.key.key -> (list ::: List(header.value))))
   }
+  def withHeader(header: Option[Header]): Headers = header.map(withHeader).getOrElse(this)
   def setHeader(header: Header): Headers = {
     copy(map + (header.key.key -> List(header.value)))
   }
