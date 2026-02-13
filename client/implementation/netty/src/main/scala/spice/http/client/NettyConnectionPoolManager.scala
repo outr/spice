@@ -101,22 +101,25 @@ class NettyConnectionPoolManager(
 
           // HTTP codec
           p.addLast("httpCodec", new HttpClientCodec())
+          p.addLast("httpDecompressor", new HttpContentDecompressor(0))
           
           // Add permanent exception handler to catch ReadTimeoutException and other exceptions
           // This ensures exceptions never reach the tail of the pipeline
           p.addLast("exceptionHandler", new ChannelDuplexHandler {
             override def exceptionCaught(ctx: ChannelHandlerContext, cause: Throwable): Unit = {
-              // Handle ReadTimeoutException and other exceptions gracefully
+              // Never swallow exceptions; propagate so request-scoped handlers can complete the request.
               cause match {
                 case _: ReadTimeoutException =>
-                  // Read timeout - close the channel to prevent it from being reused
-                  ctx.close()
+                  if (ctx.channel().isOpen) {
+                    ctx.close()
+                  }
                 case _ =>
-                  // Other exceptions - log and close the channel
                   scribe.warn(s"Exception caught in pipeline for ${key.host}:${key.port}: ${cause.getMessage}", cause)
-                  ctx.close()
+                  if (ctx.channel().isOpen) {
+                    ctx.close()
+                  }
               }
-              // Prevent exception from propagating further
+              ctx.fireExceptionCaught(cause)
             }
           })
         }
