@@ -10,6 +10,8 @@ import io.undertow.websockets.spi.WebSocketHttpExchange
 import spice.http.server.HttpServer
 import spice.http._
 
+import java.net.SocketException
+import java.nio.channels.ClosedChannelException
 import scala.util.Try
 
 object UndertowWebSocketHandler {
@@ -45,8 +47,13 @@ object UndertowWebSocketHandler {
           }
 
           override def onError(channel: WebSocketChannel, error: Throwable): Unit = {
-            scribe.error(error)
-            webSocketListener.error @= error
+            val remote = Option(channel.getSourceAddress).map(_.toString).getOrElse("unknown")
+            if (isExpectedDisconnect(error)) {
+              scribe.debug(s"WebSocket disconnected by peer: remote=$remote reason=${rootMessage(error)}")
+            } else {
+              scribe.error(s"WebSocket error: remote=$remote reason=${rootMessage(error)}", error)
+              webSocketListener.error @= error
+            }
             super.onError(channel, error)
           }
 
@@ -68,5 +75,26 @@ object UndertowWebSocketHandler {
       handler.addExtension(new PerMessageDeflateHandshake)
     }
     handler.handleRequest(undertow)
+  }
+
+  private def isExpectedDisconnect(error: Throwable): Boolean = {
+    val message = Option(error.getMessage).getOrElse("").toLowerCase
+    error match {
+      case _: ClosedChannelException => true
+      case se: SocketException =>
+        message.contains("connection reset") || message.contains("broken pipe") || message.contains("connection closed")
+      case _ =>
+        Option(error.getCause).exists(isExpectedDisconnect)
+    }
+  }
+
+  private def rootMessage(error: Throwable): String = {
+    @annotation.tailrec
+    def loop(t: Throwable): Throwable = Option(t.getCause) match {
+      case Some(cause) => loop(cause)
+      case None => t
+    }
+    val root = loop(error)
+    Option(root.getMessage).filter(_.nonEmpty).getOrElse(root.getClass.getSimpleName)
   }
 }
