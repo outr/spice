@@ -79,6 +79,7 @@ class NettyHttpClientInstance(val client: HttpClient) extends HttpClientInstance
         val channel = future.getNow
 
         try {
+          bindActiveRequestTask(channel, task)
           // Create response handler with a unique name to allow safe removal
           val handlerName = s"responseHandler-${System.nanoTime()}"
           val responseHandler = new PooledResponseHandler(task, client, pool, channel, handlerName)
@@ -101,6 +102,7 @@ class NettyHttpClientInstance(val client: HttpClient) extends HttpClientInstance
           })
         } catch {
           case t: Throwable =>
+            clearActiveRequestTask(channel)
             try {
               pool.release(channel)
             } catch {
@@ -186,7 +188,6 @@ class NettyHttpClientInstance(val client: HttpClient) extends HttpClientInstance
                   ctx.close()
                 }
             }
-            ctx.fireExceptionCaught(cause)
           }
         })
       }
@@ -415,6 +416,7 @@ class NettyHttpClientInstance(val client: HttpClient) extends HttpClientInstance
     }
 
     private def releaseChannel(): Unit = {
+      clearActiveRequestTask(channel)
       try {
         pool.release(channel)
       } catch {
@@ -583,5 +585,17 @@ class NettyHttpClientInstance(val client: HttpClient) extends HttpClientInstance
   override def dispose(): Task[Unit] = Task {
     poolManager.close()
     eventLoopGroup.shutdownGracefully(0, 0, TimeUnit.MILLISECONDS).sync()
+  }
+
+  private def bindActiveRequestTask(channel: Channel, task: Completable[Try[HttpResponse]]): Unit = {
+    val previous = channel.attr(NettyConnectionPoolManager.ActiveRequestTaskKey).getAndSet(task)
+    if (previous != null && (previous ne task)) {
+      // This should never happen for a pooled channel; fail stale task defensively.
+      previous.success(Failure(new IllegalStateException("Previous pooled request task was still attached to channel.")))
+    }
+  }
+
+  private def clearActiveRequestTask(channel: Channel): Unit = {
+    channel.attr(NettyConnectionPoolManager.ActiveRequestTaskKey).set(null)
   }
 }

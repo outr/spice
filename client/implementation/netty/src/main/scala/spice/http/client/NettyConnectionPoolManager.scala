@@ -12,12 +12,16 @@ import io.netty.handler.proxy.{HttpProxyHandler, Socks5ProxyHandler}
 import io.netty.handler.ssl.SslContextBuilder
 import io.netty.handler.ssl.util.InsecureTrustManagerFactory
 import io.netty.handler.timeout.{IdleStateHandler, ReadTimeoutException, ReadTimeoutHandler, WriteTimeoutHandler}
+import io.netty.util.AttributeKey
 import io.netty.util.concurrent.Future
+import rapid.task.Completable
 import scribe._
+import spice.http.HttpResponse
 
 import java.net.InetSocketAddress
 import java.util.concurrent.{ConcurrentHashMap, TimeUnit}
 import scala.concurrent.duration.FiniteDuration
+import scala.util.{Failure, Try}
 
 /**
  * Connection pool manager for Netty HTTP client
@@ -107,7 +111,11 @@ class NettyConnectionPoolManager(
           // This ensures exceptions never reach the tail of the pipeline
           p.addLast("exceptionHandler", new ChannelDuplexHandler {
             override def exceptionCaught(ctx: ChannelHandlerContext, cause: Throwable): Unit = {
-              // Never swallow exceptions; propagate so request-scoped handlers can complete the request.
+              // Fail any in-flight pooled request bound to this channel before closing it.
+              val activeTask = ctx.channel().attr(NettyConnectionPoolManager.ActiveRequestTaskKey).getAndSet(null)
+              if (activeTask != null) {
+                activeTask.success(Failure(cause))
+              }
               cause match {
                 case _: ReadTimeoutException =>
                   if (ctx.channel().isOpen) {
@@ -119,7 +127,6 @@ class NettyConnectionPoolManager(
                     ctx.close()
                   }
               }
-              ctx.fireExceptionCaught(cause)
             }
           })
         }
@@ -149,4 +156,9 @@ class NettyConnectionPoolManager(
     }
     pools.clear()
   }
+}
+
+object NettyConnectionPoolManager {
+  private[client] val ActiveRequestTaskKey: AttributeKey[Completable[Try[HttpResponse]]] =
+    AttributeKey.valueOf[Completable[Try[HttpResponse]]]("spice.netty.activeRequestTask")
 }
