@@ -10,7 +10,7 @@ object Dependencies {
     
     val reactify: String = "4.2.0"
 
-    val rapid: String = "2.4.0"
+    val rapid: String = "2.7.0"
     
     val literally: String = "1.2.0"
     

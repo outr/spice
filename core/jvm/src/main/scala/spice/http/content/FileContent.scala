@@ -1,8 +1,8 @@
 package spice.http.content
 
-import rapid.Task
+import rapid.*
 import spice.net.ContentType
-import spice.streamer._
+import spice.streamer.*
 
 import java.io.File
 import scala.collection.mutable

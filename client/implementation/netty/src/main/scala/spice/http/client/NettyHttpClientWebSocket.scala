@@ -236,7 +236,7 @@ class NettyHttpClientWebSocket(url: URL, instance: NettyHttpClientInstance) exte
           send.binary.attach {
             case ByteBufferData(bb) =>
               if (ch.isActive) {
-                ch.writeAndFlush(new BinaryWebSocketFrame(Unpooled.wrappedBuffer(bb)))
+                ch.writeAndFlush(new BinaryWebSocketFrame(Unpooled.copiedBuffer(bb)))
               }
             case other =>
               throw UserException(s"Unsupported binary frame: $other")

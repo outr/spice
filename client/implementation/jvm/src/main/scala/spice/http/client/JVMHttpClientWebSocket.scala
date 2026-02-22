@@ -21,7 +21,11 @@ class JVMHttpClientWebSocket(url: URL, instance: JVMHttpClientInstance) extends 
       jvmWebSocket().foreach(ws => ws.sendText(text, true))
     }
     send.binary.attach {
-      case data: ByteBufferData => jvmWebSocket().foreach(ws => ws.sendBinary(data.bb, true))
+      case data: ByteBufferData =>
+        val copy = ByteBuffer.allocate(data.bb.remaining())
+        copy.put(data.bb)
+        copy.flip()
+        jvmWebSocket().foreach(ws => ws.sendBinary(copy, true))
       case data => throw UserException(s"Unsupported data type: $data")
     }
     send.close.on {
