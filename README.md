@@ -9,18 +9,18 @@ Add the dependencies you need to your `build.sbt`:
 
 ```scala
 // Core HTTP types and utilities
-libraryDependencies += "com.outr" %% "spice-core" % "1.0.0"
+libraryDependencies += "com.outr" %% "spice-core" % "1.0.0-SNAPSHOT"
 
 // HTTP client (pick one implementation)
-libraryDependencies += "com.outr" %% "spice-client-jvm" % "1.0.0"    // java.net.http
-libraryDependencies += "com.outr" %% "spice-client-okhttp" % "1.0.0" // OkHttp3
-libraryDependencies += "com.outr" %% "spice-client-netty" % "1.0.0"  // Netty
+libraryDependencies += "com.outr" %% "spice-client-jvm" % "1.0.0-SNAPSHOT"    // java.net.http
+libraryDependencies += "com.outr" %% "spice-client-okhttp" % "1.0.0-SNAPSHOT" // OkHttp3
+libraryDependencies += "com.outr" %% "spice-client-netty" % "1.0.0-SNAPSHOT"  // Netty
 
 // HTTP server (Undertow backend)
-libraryDependencies += "com.outr" %% "spice-server-undertow" % "1.0.0"
+libraryDependencies += "com.outr" %% "spice-server-undertow" % "1.0.0-SNAPSHOT"
 
 // OpenAPI spec generation
-libraryDependencies += "com.outr" %% "spice-openapi" % "1.0.0"
+libraryDependencies += "com.outr" %% "spice-openapi" % "1.0.0-SNAPSHOT"
 ```
 
 Spice uses the `rapid` library for async operations via `Task`, and `fabric` for JSON serialization.
@@ -30,7 +30,7 @@ Spice uses the `rapid` library for async operations via `Task`, and `fabric` for
 Spice provides compile-time validated URL literals and a full URL parser:
 
 ```scala
-import spice.net._
+import spice.net.*
 
 // Compile-time validated URL literal
 val google = url"https://www.google.com"
@@ -122,12 +122,13 @@ ukUrl.domain
 Spice servers use a composable filter DSL. Filters are chained with `/` and requests flow through them in order:
 
 ```scala
-import rapid._
-import spice.http.server._
-import spice.http.server.dsl._
+import rapid.*
+import spice.http.server.*
+import spice.http.server.dsl.*
+import spice.http.server.dsl.given
 import spice.http.{HttpExchange, HttpMethod}
 import spice.http.content.Content
-import spice.net._
+import spice.net.*
 
 object MyServer extends MutableHttpServer {
   // Simple route: GET /hello -> "Hello, World!"
@@ -142,13 +143,14 @@ object MyServer extends MutableHttpServer {
 For more complex routing, use `StaticHttpServer` with the `filters` function:
 
 ```scala
-import rapid._
-import spice.http.server._
-import spice.http.server.dsl._
+import rapid.*
+import spice.http.server.*
+import spice.http.server.dsl.*
+import spice.http.server.dsl.given
 import spice.http.server.handler.HttpHandler
 import spice.http.{HttpExchange, HttpMethod}
 import spice.http.content.Content
-import spice.net._
+import spice.net.*
 
 object ApiServer extends StaticHttpServer {
   override protected val handler: HttpHandler = filters(
@@ -167,14 +169,15 @@ object ApiServer extends StaticHttpServer {
 ### Starting a Server
 
 ```scala
-import rapid._
-import spice.http.server._
-import spice.http.server.dsl._
-import spice.http.server.config._
+import rapid.*
+import spice.http.server.*
+import spice.http.server.dsl.*
+import spice.http.server.dsl.given
+import spice.http.server.config.*
 import spice.http.server.handler.HttpHandler
 import spice.http.content.Content
 import spice.http.HttpMethod
-import spice.net._
+import spice.net.*
 
 object WebServer extends StaticHttpServer {
   // Configure listeners
@@ -198,12 +201,13 @@ WebServer.whileRunning().sync()
 Mix in `CORSSupport` for full CORS handling with automatic preflight responses:
 
 ```scala
-import spice.http.server._
-import spice.http.server.dsl._
+import spice.http.server.*
+import spice.http.server.dsl.*
+import spice.http.server.dsl.given
 import spice.http.server.handler.HttpHandler
 import spice.http.content.Content
 import spice.http.HttpMethod
-import spice.net._
+import spice.net.*
 
 object CorsServer extends StaticHttpServer with CORSSupport {
   override protected def allowOrigin: String = "https://myapp.com"
@@ -222,10 +226,10 @@ object CorsServer extends StaticHttpServer with CORSSupport {
 The HTTP client uses an immutable builder pattern:
 
 ```scala
-import rapid._
-import fabric.rw._
+import rapid.*
+import fabric.rw.*
 import spice.http.client.HttpClient
-import spice.net._
+import spice.net.*
 
 // Simple GET request
 val response = HttpClient
@@ -239,7 +243,7 @@ println(s"Status: ${response.status}")
 // POST with JSON body and type-safe response parsing
 case class Todo(userId: Int, id: Int, title: String, completed: Boolean)
 object Todo {
-  implicit val rw: RW[Todo] = RW.gen
+  given rw: RW[Todo] = RW.gen
 }
 
 val todo = HttpClient
@@ -256,19 +260,19 @@ println(s"Todo: ${todo.title}")
 For typed request/response patterns:
 
 ```scala
-import rapid._
-import fabric.rw._
+import rapid.*
+import fabric.rw.*
 import spice.http.client.HttpClient
-import spice.net._
+import spice.net.*
 
 case class CreatePost(title: String, body: String, userId: Int)
 object CreatePost {
-  implicit val rw: RW[CreatePost] = RW.gen
+  given rw: RW[CreatePost] = RW.gen
 }
 
 case class PostResponse(id: Int, title: String, body: String, userId: Int)
 object PostResponse {
-  implicit val rw: RW[PostResponse] = RW.gen
+  given rw: RW[PostResponse] = RW.gen
 }
 
 val result = HttpClient
@@ -282,10 +286,10 @@ val result = HttpClient
 ### Client Configuration
 
 ```scala
-import scala.concurrent.duration._
+import scala.concurrent.duration.*
 import spice.http.client._
 import spice.http.client.intercept.Interceptor
-import spice.net._
+import spice.net.*
 
 val client = HttpClient
   .url(url"https://api.example.com")
@@ -302,8 +306,8 @@ Spice provides production-ready middleware as composable `ConnectionFilter` inst
 ### Authentication
 
 ```scala
-import rapid._
-import spice.http.server.middleware._
+import rapid.*
+import spice.http.server.middleware.*
 
 // Basic Auth
 val basicAuth = AuthenticationFilter(
@@ -329,7 +333,7 @@ val bearerAuth = AuthenticationFilter(
 ### Security Headers
 
 ```scala
-import spice.http.server.middleware._
+import spice.http.server.middleware.*
 
 // Use sensible defaults (HSTS, X-Frame-Options: DENY, X-Content-Type-Options: nosniff)
 val securityHeaders = SecurityHeadersFilter.Default
@@ -345,7 +349,7 @@ val customSecurity = SecurityHeadersFilter(
 ### Rate Limiting
 
 ```scala
-import spice.http.server.middleware._
+import spice.http.server.middleware.*
 
 // 100 requests per minute per IP
 val rateLimiter = RateLimitFilter(
@@ -366,7 +370,7 @@ val apiKeyLimiter = RateLimitFilter(
 ### Request Size Limits
 
 ```scala
-import spice.http.server.middleware._
+import spice.http.server.middleware.*
 
 // Reject requests larger than 10MB
 val sizeLimit = MaxContentLengthFilter(10L * 1024L * 1024L)
@@ -375,7 +379,7 @@ val sizeLimit = MaxContentLengthFilter(10L * 1024L * 1024L)
 ### ETag / Conditional Requests
 
 ```scala
-import spice.http.server.middleware._
+import spice.http.server.middleware.*
 
 // Automatically generates ETags and handles If-None-Match for 304 responses
 val etag = ETagFilter()
@@ -386,13 +390,14 @@ val etag = ETagFilter()
 Middleware composes with the `/` operator, same as routing filters:
 
 ```scala
-import spice.http.server._
-import spice.http.server.dsl._
+import spice.http.server.*
+import spice.http.server.dsl.*
+import spice.http.server.dsl.given
 import spice.http.server.handler.HttpHandler
-import spice.http.server.middleware._
+import spice.http.server.middleware.*
 import spice.http.content.Content
 import spice.http.HttpMethod
-import spice.net._
+import spice.net.*
 
 object SecureServer extends StaticHttpServer with CORSSupport {
   val auth = AuthenticationFilter(
@@ -449,22 +454,22 @@ Spice generates OpenAPI 3.0.3 specs from type-safe service definitions and autom
 ### Defining Services
 
 ```scala
-import rapid._
-import fabric.rw._
+import rapid.*
+import fabric.rw.*
 import spice.http.HttpMethod
 import spice.http.server.config.HttpsServerListener
-import spice.net._
-import spice.openapi.server._
+import spice.net.*
+import spice.openapi.server.*
 
 // Define your request/response types with fabric RW derivation
 case class User(name: String, email: String)
 object User {
-  implicit val rw: RW[User] = RW.gen
+  given rw: RW[User] = RW.gen
 }
 
 case class CreateUserRequest(name: String, email: String, password: String)
 object CreateUserRequest {
-  implicit val rw: RW[CreateUserRequest] = RW.gen
+  given rw: RW[CreateUserRequest] = RW.gen
 }
 
 // Define the OpenAPI server
@@ -505,19 +510,19 @@ object ApiServer extends OpenAPIHttpServer {
 For simpler typed services, use `RestService`:
 
 ```scala
-import rapid._
-import fabric.rw._
-import spice.net._
-import spice.openapi.server._
+import rapid.*
+import fabric.rw.*
+import spice.net.*
+import spice.openapi.server.*
 
 case class ReverseRequest(text: String)
 object ReverseRequest {
-  implicit val rw: RW[ReverseRequest] = RW.gen
+  given rw: RW[ReverseRequest] = RW.gen
 }
 
 case class ReverseResponse(result: String)
 object ReverseResponse {
-  implicit val rw: RW[ReverseResponse] = RW.gen
+  given rw: RW[ReverseResponse] = RW.gen
 }
 
 object MyAPI extends OpenAPIHttpServer {
@@ -543,10 +548,11 @@ object MyAPI extends OpenAPIHttpServer {
 ### Server-Side WebSocket Handler
 
 ```scala
-import rapid._
+import rapid.*
 import spice.http.{HttpExchange, WebSocketListener}
-import spice.http.server._
-import spice.http.server.dsl._
+import spice.http.server.*
+import spice.http.server.dsl.*
+import spice.http.server.dsl.given
 import spice.http.server.handler.{HttpHandler, WebSocketHandler}
 
 // Define a WebSocket handler
@@ -571,9 +577,9 @@ object WsServer extends StaticHttpServer {
 ### Client-Side WebSocket
 
 ```scala
-import rapid._
+import rapid.*
 import spice.http.client.HttpClient
-import spice.net._
+import spice.net.*
 
 val ws = HttpClient
   .url(url"ws://localhost:8080/ws/echo")
@@ -602,11 +608,11 @@ val textContent = Content.string("Hello!", ContentType.`text/plain`)
 // textContent: Content = StringContent(
 //   value = "Hello!",
 //   contentType = ContentType(type = "text", subType = "plain", extras = Map()),
-//   lastModified = 1771770964071L
+//   lastModified = 1771775387181L
 // )
 
 // JSON content
-import fabric._
+import fabric.*
 val jsonContent = Content.json(obj("message" -> str("Hello"), "count" -> num(42)))
 // jsonContent: Content = JsonContent(
 //   json = {"message": "Hello", "count": 42},
@@ -616,7 +622,7 @@ val jsonContent = Content.json(obj("message" -> str("Hello"), "count" -> num(42)
 //     subType = "json",
 //     extras = Map()
 //   ),
-//   lastModified = 1771770964075L
+//   lastModified = 1771775387184L
 // )
 ```
 
@@ -635,8 +641,8 @@ The `spice-core` and `spice-client` modules cross-compile to Scala.js. The JS cl
 
 ```scala
 // In Scala.js code
-libraryDependencies += "com.outr" %%% "spice-core" % "1.0.0"
-libraryDependencies += "com.outr" %%% "spice-client" % "1.0.0"
+libraryDependencies += "com.outr" %%% "spice-core" % "1.0.0-SNAPSHOT"
+libraryDependencies += "com.outr" %%% "spice-client" % "1.0.0-SNAPSHOT"
 ```
 
 URL parsing, content types, headers, and all core HTTP types work identically on both platforms.
