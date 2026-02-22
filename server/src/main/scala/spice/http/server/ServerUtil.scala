@@ -1,6 +1,6 @@
 package spice.http.server
 
-import rapid._
+import rapid.*
 
 import java.net.{BindException, InetAddress, ServerSocket}
 import spice.net.IP

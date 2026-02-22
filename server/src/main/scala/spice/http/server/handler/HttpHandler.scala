@@ -9,7 +9,7 @@ import spice.http.{HttpExchange, HttpStatus, StringHeaderKey}
 trait HttpHandler extends Ordered[HttpHandler] {
   def priority: Priority = Priority.Normal
 
-  def handle(exchange: HttpExchange)(implicit mdc: MDC): Task[HttpExchange]
+  def handle(exchange: HttpExchange)(using mdc: MDC): Task[HttpExchange]
 
   override def compare(that: HttpHandler): Int = Priority.PriorityOrdering.compare(this.priority, that.priority)
 }

@@ -1,6 +1,6 @@
 package spice.http.server
 
-import rapid._
+import rapid.*
 import spice.http.HttpExchange
 import spice.http.server.config.{ServerConfig, ServerSocketListener}
 import spice.http.server.handler.{HttpHandler, LifecycleHandler}

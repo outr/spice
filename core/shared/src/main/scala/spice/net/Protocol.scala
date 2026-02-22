@@ -1,6 +1,6 @@
 package spice.net
 
-import fabric.rw._
+import fabric.rw.*
 
 case class Protocol private(scheme: String, description: String, rfc: String, defaultPort: Option[Int] = None) {
   Protocol.schemeMap += scheme -> this
@@ -9,7 +9,7 @@ case class Protocol private(scheme: String, description: String, rfc: String, de
 }
 
 object Protocol {
-  implicit val rw: RW[Protocol] = RW.gen
+  given rw: RW[Protocol] = RW.gen
 
   private var schemeMap = Map.empty[String, Protocol]
 

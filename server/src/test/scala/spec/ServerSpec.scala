@@ -1,19 +1,20 @@
 package spec
 
-import rapid._
+import rapid.*
 import fabric.{Str, obj}
-import fabric.rw._
+import fabric.rw.*
 import org.scalatest.matchers.should.Matchers
 import org.scalatest.wordspec.{AnyWordSpec, AsyncWordSpec}
 import scribe.mdc.MDC
 import spice.{ExceptionType, UserException, ValidationError}
 import spice.http.content.{Content, FormDataContent, JsonContent, StringContent}
-import spice.http.server.dsl._
+import spice.http.server.dsl.*
+import spice.http.server.dsl.given
 import spice.http.server.handler.HttpHandler
 import spice.http.{HttpExchange, HttpMethod, HttpRequest, HttpStatus, paths}
 import spice.http.server.{HttpServer, MutableHttpServer}
 import spice.http.server.rest.{FileUpload, MultipartRequest, Restful, RestfulResponse}
-import spice.net._
+import spice.net.*
 
 import java.io.File
 
@@ -23,7 +24,7 @@ class ServerSpec extends AnyWordSpec with Matchers {
   "TestHttpApplication" should {
     "configure the TestServer" in {
       server.handler.matcher(paths.exact("/test.html")).wrap(new HttpHandler {
-        override def handle(exchange: HttpExchange)(implicit mdc: MDC): Task[HttpExchange] = {
+        override def handle(exchange: HttpExchange)(using mdc: MDC): Task[HttpExchange] = {
           exchange.modify { response =>
             Task(response.withContent(Content.string("test!", ContentType.`text/plain`)))
           }
@@ -165,18 +166,18 @@ class ServerSpec extends AnyWordSpec with Matchers {
   case class ReverseRequest(value: String)
 
   object ReverseRequest {
-    implicit val rw: RW[ReverseRequest] = RW.gen
+    given rw: RW[ReverseRequest] = RW.gen
   }
 
   case class ReverseResponse(reversed: Option[String], errors: List[ValidationError])
 
   object ReverseResponse {
-    implicit val rw: RW[ReverseResponse] = RW.gen
+    given rw: RW[ReverseResponse] = RW.gen
   }
 
   object ReverseService extends Restful[ReverseRequest, ReverseResponse] {
     override def apply(exchange: HttpExchange, request: ReverseRequest)
-                      (implicit mdc: MDC): Task[RestfulResponse[ReverseResponse]] = Task {
+                      (using mdc: MDC): Task[RestfulResponse[ReverseResponse]] = Task {
       val result = request.value match {
         case "info" => throw UserException("Info Test")
         case "warn" => throw UserException("Warn Test", `type` = ExceptionType.Warn)
@@ -192,7 +193,7 @@ class ServerSpec extends AnyWordSpec with Matchers {
   }
 
   object ServerTimeService extends Restful[Unit, Long] {
-    override def apply(exchange: HttpExchange, request: Unit)(implicit mdc: MDC): Task[RestfulResponse[Long]] = {
+    override def apply(exchange: HttpExchange, request: Unit)(using mdc: MDC): Task[RestfulResponse[Long]] = {
       Task.pure(RestfulResponse(System.currentTimeMillis(), HttpStatus.OK))
     }
 
@@ -204,7 +205,7 @@ class ServerSpec extends AnyWordSpec with Matchers {
   object FileUploadService extends Restful[FileInfo, String] {
     override def apply(exchange: HttpExchange,
                        request: FileInfo)
-                      (implicit mdc: MDC): Task[RestfulResponse[String]] = Task {
+                      (using mdc: MDC): Task[RestfulResponse[String]] = Task {
       val fileEntry = request.file
       assert(fileEntry.file.length() == 33404)
       ok(request.fileName)
@@ -216,6 +217,6 @@ class ServerSpec extends AnyWordSpec with Matchers {
   case class FileInfo(fileName: String, description: String, file: FileUpload)
 
   object FileInfo {
-    implicit val rw: RW[FileInfo] = RW.gen
+    given rw: RW[FileInfo] = RW.gen
   }
 }

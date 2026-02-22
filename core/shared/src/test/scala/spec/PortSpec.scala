@@ -3,9 +3,9 @@ package spec
 import org.scalatest.matchers.should.Matchers
 import org.scalatest.wordspec.AnyWordSpec
 
-import spice.net._
-import fabric._
-import fabric.rw._
+import spice.net.*
+import fabric.*
+import fabric.rw.*
 
 class PortSpec extends AnyWordSpec with Matchers {
   "Port" should {

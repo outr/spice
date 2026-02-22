@@ -1,6 +1,6 @@
 package spice.http
 
-import spice.http.cookie._
+import spice.http.cookie.*
 
 object CookieHeader extends ListTypedHeaderKey[Cookie.Request] {
   override def key: String = "Cookie"

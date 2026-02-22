@@ -1,9 +1,9 @@
 package spice.openapi
 
-import fabric.rw._
+import fabric.rw.*
 
 case class OpenAPIRequestBody(required: Boolean, content: OpenAPIContent)
 
 object OpenAPIRequestBody {
-  implicit val rw: RW[OpenAPIRequestBody] = RW.gen
+  given rw: RW[OpenAPIRequestBody] = RW.gen
 }

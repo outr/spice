@@ -1,11 +1,11 @@
 package spec
 
-import rapid._
-import fabric.rw._
+import rapid.*
+import fabric.rw.*
 import org.scalatest.matchers.should.Matchers
 import org.scalatest.wordspec.{AnyWordSpec, AsyncWordSpec}
 import spice.http.server.rest.FileUpload
-import spice.net._
+import spice.net.*
 import spice.openapi.generator.OpenAPIGeneratorConfig
 import spice.openapi.generator.dart.OpenAPIDartGenerator
 import spice.openapi.server.{OpenAPIHttpServer, RestService, Service}
@@ -67,31 +67,31 @@ class OpenAPIHttpServerSpec extends AnyWordSpec with Matchers {
   case class ReverseRequest(auth: Auth, text: String)
 
   object ReverseRequest {
-    implicit val rw: RW[ReverseRequest] = RW.gen
+    given rw: RW[ReverseRequest] = RW.gen
   }
 
   case class Auth(username: String, password: String)
 
   object Auth {
-    implicit val rw: RW[Auth] = RW.gen
+    given rw: RW[Auth] = RW.gen
   }
 
   case class ReverseResponse(text: Option[String], error: Option[String])
 
   object ReverseResponse {
-    implicit val rw: RW[ReverseResponse] = RW.gen
+    given rw: RW[ReverseResponse] = RW.gen
   }
 
   case class CombineRequest(auth: Auth, map: Map[String, NumEnum])
 
   object CombineRequest {
-    implicit val rw: RW[CombineRequest] = RW.gen
+    given rw: RW[CombineRequest] = RW.gen
   }
 
   sealed trait NumEnum
 
   object NumEnum {
-    implicit val rw: RW[NumEnum] = RW.enumeration[NumEnum](List(One, Two, Three))
+    given rw: RW[NumEnum] = RW.enumeration[NumEnum](List(One, Two, Three))
 
     case object One extends NumEnum
     case object Two extends NumEnum
@@ -101,18 +101,18 @@ class OpenAPIHttpServerSpec extends AnyWordSpec with Matchers {
   case class CombineResponse(list: List[NumEnum], error: Option[String])
 
   object CombineResponse {
-    implicit val rw: RW[CombineResponse] = RW.gen
+    given rw: RW[CombineResponse] = RW.gen
   }
 
   case class FileUploadRequest(userId: String, file: FileUpload)
 
   object FileUploadRequest {
-    implicit val rw: RW[FileUploadRequest] = RW.gen
+    given rw: RW[FileUploadRequest] = RW.gen
   }
 
   case class FileUploadResponse(userId: String, length: Long)
 
   object FileUploadResponse {
-    implicit val rw: RW[FileUploadResponse] = RW.gen
+    given rw: RW[FileUploadResponse] = RW.gen
   }
 }

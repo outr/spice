@@ -1,8 +1,8 @@
 package spice.http.server.config
 
-import fabric.rw._
+import fabric.rw.*
 import spice.http.server.ServerUtil
-import spice.net._
+import spice.net.*
 
 case class HttpsServerListener(host: String = "127.0.0.1",
                                port: Option[Int] = Some(443),
@@ -22,5 +22,5 @@ case class HttpsServerListener(host: String = "127.0.0.1",
 }
 
 object HttpsServerListener {
-  implicit val rw: RW[HttpsServerListener] = RW.gen
+  given rw: RW[HttpsServerListener] = RW.gen
 }

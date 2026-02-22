@@ -2,9 +2,9 @@ package spice.http.server.undertow
 
 import io.undertow.io.IoCallback
 import io.undertow.server.handlers.cache.ResponseCache
-import io.undertow.server.handlers.resource._
+import io.undertow.server.handlers.resource.*
 import io.undertow.server.{HttpHandler, HttpServerExchange}
-import io.undertow.util._
+import io.undertow.util.*
 import spice.http.content.FileContent
 
 import java.io.File

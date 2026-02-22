@@ -1,7 +1,7 @@
 package spice.http
 
 class DateHeaderKey(val key: String, val commaSeparated: Boolean = false) extends TypedHeaderKey[Long] {
-  import DateHeaderKey._
+  import DateHeaderKey.*
 
   override def value(headers: Headers): Option[Long] = get(headers).flatMap(parse)
 

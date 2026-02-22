@@ -1,17 +1,18 @@
 package spec
 
-import rapid._
+import rapid.*
 import org.scalatest.matchers.should.Matchers
 import org.scalatest.wordspec.{AnyWordSpec, AsyncWordSpec}
 import spice.ValidationError
 import spice.http.content.Content
 import spice.http.server.{DefaultErrorHandler, HttpServer, MutableHttpServer, StaticHttpServer}
 import spice.http.{HttpExchange, HttpMethod, HttpRequest, HttpStatus}
-import spice.http.server.dsl._
+import spice.http.server.dsl.*
+import spice.http.server.dsl.given
 import spice.http.server.handler.{HttpHandler, LifecycleHandler}
 import spice.http.server.rest.{Restful, RestfulResponse}
-import spice.net._
-import fabric.rw._
+import spice.net.*
+import fabric.rw.*
 
 class ServerDSLSpec extends AnyWordSpec with Matchers {
   private lazy val text = "Hello, World!".withContentType(ContentType.`text/plain`)

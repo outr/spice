@@ -32,8 +32,11 @@ object URLParser {
         if (url.ip.isEmpty && url.host.count(_ == ':') > 1) {
           Left(URLParseFailure(s"Invalid host: ${url.host}", URLParseFailure.InvalidHost))
         } else if (validateTLD) {
-          url.tld match {
-            case Some(tld) if !TopLevelDomains.isValid(tld) => Left(URLParseFailure(s"Invalid top-level domain: [$tld] for supplied URL: [$s]", URLParseFailure.InvalidTopLevelDomain))
+          // For multi-part TLDs like co.uk, validate the actual TLD (last part)
+          val actualTld = url.hostParts.lastOption
+          actualTld match {
+            case Some(tld) if url.ip.isEmpty && url.hostParts.length > 1 && !TopLevelDomains.isValid(tld) =>
+              Left(URLParseFailure(s"Invalid top-level domain: [$tld] for supplied URL: [$s]", URLParseFailure.InvalidTopLevelDomain))
             case _ => Right(url)
           }
         } else {

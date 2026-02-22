@@ -1,6 +1,6 @@
 package spice.http.client
 
-import rapid._
+import rapid.*
 import spice.http.{HttpRequest, HttpResponse}
 
 import scala.concurrent.duration.FiniteDuration
@@ -42,9 +42,15 @@ object RetryManager {
                        retry: Task[Try[HttpResponse]],
                        failures: Int,
                        throwable: Throwable): Task[Try[HttpResponse]] = delay(failures) match {
-      case Some(d) => for {
-        // TODO: Only include stack trace when not a timeout
-        _ <- logger.warn(s"Request to ${request.url} failed (${throwable.getLocalizedMessage}, ${throwable.getClass.getSimpleName}, failures: $failures). Retrying after $d...", throwable).when(warnRetries)
+      case Some(d) =>
+        val isTimeout = throwable.isInstanceOf[java.util.concurrent.TimeoutException] ||
+          throwable.isInstanceOf[java.net.SocketTimeoutException]
+        for {
+        _ <- (if (isTimeout) {
+          logger.warn(s"Request to ${request.url} timed out (${throwable.getLocalizedMessage}, failures: $failures). Retrying after $d...")
+        } else {
+          logger.warn(s"Request to ${request.url} failed (${throwable.getLocalizedMessage}, ${throwable.getClass.getSimpleName}, failures: $failures). Retrying after $d...", throwable)
+        }).when(warnRetries)
         _ <- Task.sleep(d)
         response <- retry
       } yield response

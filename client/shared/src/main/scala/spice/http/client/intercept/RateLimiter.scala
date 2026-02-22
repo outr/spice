@@ -3,7 +3,7 @@ package spice.http.client.intercept
 import rapid.Task
 import spice.http.HttpRequest
 
-import scala.concurrent.duration._
+import scala.concurrent.duration.*
 
 // use per: Int, elapsed: Long - List[Long]
 case class RateLimiter(perRequestDelay: FiniteDuration) extends InterceptorAdapter { self =>

@@ -7,3 +7,5 @@ addSbtPlugin("org.xerial.sbt" % "sbt-sonatype" % "3.12.2")
 addSbtPlugin("com.github.sbt" % "sbt-pgp" % "2.3.1")
 
 addSbtPlugin("io.spray" % "sbt-revolver" % "0.10.0")
+
+addSbtPlugin("org.scalameta" % "sbt-mdoc" % "2.8.2")

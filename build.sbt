@@ -1,6 +1,6 @@
 name := "spice"
 ThisBuild / organization := "com.outr"
-ThisBuild / version := "0.12.3-SNAPSHOT"
+ThisBuild / version := "1.0.0-SNAPSHOT"
 
 val scala3: String = "3.8.1"
 
@@ -171,4 +171,17 @@ lazy val openAPI = project
 		libraryDependencies ++= Seq(
 			dep.scalaTest
 		)
+	)
+
+lazy val docs = project
+	.in(file("documentation"))
+	.dependsOn(serverImplementationUndertow, clientImplementationJVM, openAPI)
+	.enablePlugins(MdocPlugin)
+	.settings(
+		name := "spice-docs",
+		mdocIn := file("documentation/docs"),
+		mdocVariables := Map("VERSION" -> version.value),
+		mdocOut := file("."),
+		publish := {},
+		publishLocal := {}
 	)

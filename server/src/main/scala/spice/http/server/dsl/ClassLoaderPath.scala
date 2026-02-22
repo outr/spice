@@ -16,7 +16,7 @@ case class ClassLoaderPath(classPathRoot: String = "",
   }
 
   override def apply(exchange: HttpExchange)
-                    (implicit mdc: MDC): Task[FilterResponse] = if (exchange.response.content.isEmpty || replaceExistingContent) {
+                    (using mdc: MDC): Task[FilterResponse] = if (exchange.response.content.isEmpty || replaceExistingContent) {
     val path = pathTransform(exchange.request.url.path.decoded)
     val resourcePath = s"$dir$path" match {
       case s if s.startsWith("/") => s.substring(1)

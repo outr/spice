@@ -1,6 +1,6 @@
 package spice.net
 
-import fabric.rw._
+import fabric.rw.*
 import spice.UserException
 
 class EmailAddress private(val value: String) {
@@ -36,7 +36,7 @@ class EmailAddress private(val value: String) {
 }
 
 object EmailAddress {
-  implicit val rw: RW[EmailAddress] = RW.string(
+  given rw: RW[EmailAddress] = RW.string(
     asString = _.value,
     fromString = new EmailAddress(_)
   )

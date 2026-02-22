@@ -1,6 +1,6 @@
 package spice.http.server.validation
 
-import rapid._
+import rapid.*
 import spice.http.{HttpExchange, HttpStatus}
 import spice.net.IP
 

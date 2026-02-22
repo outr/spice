@@ -1,10 +1,11 @@
 package spice.openapi.server
 
-import rapid._
-import fabric.rw._
+import rapid.*
+import fabric.rw.*
 import scribe.mdc.MDC
 import spice.http.HttpMethod
 import spice.net.ContentType
+import spice.openapi.OpenAPIResponse
 
 case class TypedServiceCall[Req, Res](call: ServiceRequest[Req] => Task[ServiceResponse[Res]],
                                       method: HttpMethod,
@@ -18,10 +19,11 @@ case class TypedServiceCall[Req, Res](call: ServiceRequest[Req] => Task[ServiceR
                                       requestRW: RW[Req],
                                       responseRW: RW[Res],
                                       requestSchema: Option[Schema],
-                                      responseSchema: Option[Schema]) extends ServiceCall {
+                                      responseSchema: Option[Schema],
+                                      override val errorResponses: Map[String, OpenAPIResponse] = Map.empty) extends ServiceCall {
   override type Request = Req
   override type Response = Res
 
   override def apply(request: ServiceRequest[Request])
-                    (implicit mdc: MDC): Task[ServiceResponse[Response]] = call(request)
+                    (using mdc: MDC): Task[ServiceResponse[Response]] = call(request)
 }

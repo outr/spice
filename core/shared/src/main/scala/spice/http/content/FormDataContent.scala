@@ -3,7 +3,7 @@ package spice.http.content
 import fabric.define.DefType
 import fabric.{Json, Null}
 import fabric.io.JsonParser
-import fabric.rw._
+import fabric.rw.*
 import rapid.Task
 
 import java.io.File
@@ -60,7 +60,7 @@ case class FormDataContent(entries: Map[String, FormDataEntry]) extends Content 
 }
 
 object FormDataContent extends FormDataContent(Map.empty) {
-  implicit val rw: RW[FormDataContent] = RW.from[FormDataContent](
+  given rw: RW[FormDataContent] = RW.from[FormDataContent](
     r = _ => Null,
     w = _ => this,
     d = DefType.Null

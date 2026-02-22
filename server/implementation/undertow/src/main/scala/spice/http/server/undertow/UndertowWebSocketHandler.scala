@@ -1,6 +1,6 @@
 package spice.http.server.undertow
 
-import rapid._
+import rapid.*
 import io.undertow.Handlers
 import io.undertow.server.HttpServerExchange
 import io.undertow.websockets.WebSocketConnectionCallback
@@ -8,7 +8,7 @@ import io.undertow.websockets.core.{AbstractReceiveListener, BufferedBinaryMessa
 import io.undertow.websockets.extensions.PerMessageDeflateHandshake
 import io.undertow.websockets.spi.WebSocketHttpExchange
 import spice.http.server.HttpServer
-import spice.http._
+import spice.http.*
 
 import java.net.SocketException
 import java.nio.channels.ClosedChannelException

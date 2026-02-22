@@ -1,17 +1,17 @@
 package spec
 
-import fabric.rw._
+import fabric.rw.*
 import moduload.Moduload
 import org.scalatest.matchers.should.Matchers
 import org.scalatest.wordspec.AnyWordSpec
-import rapid._
-import spice.http._
+import rapid.*
+import spice.http.*
 import spice.http.client.{HttpClient, NettyHttpClientImplementation}
 import spice.http.client.intercept.Interceptor
-import spice.http.content._
-import spice.net._
+import spice.http.content.*
+import spice.net.*
 
-import scala.concurrent.duration._
+import scala.concurrent.duration.*
 
 class NettyHttpClientSpec extends AnyWordSpec with Matchers {
   "NettyHttpClient" should {
@@ -98,6 +98,6 @@ class NettyHttpClientSpec extends AnyWordSpec with Matchers {
   case class Placeholder(userId: Int, id: Int, title: String, completed: Boolean)
 
   object Placeholder {
-    implicit val rw: RW[Placeholder] = RW.gen
+    given rw: RW[Placeholder] = RW.gen
   }
 }

@@ -1,9 +1,9 @@
 package spice.openapi
 
-import fabric._
+import fabric.*
 import fabric.filter.{RemoveEmptyFilter, RemoveNullsFilter}
 import fabric.io.{JsonFormatter, YamlFormatter}
-import fabric.rw._
+import fabric.rw.*
 
 case class OpenAPI(openapi: String = "3.0.3",
                    info: OpenAPIInfo,
@@ -24,7 +24,7 @@ case class OpenAPI(openapi: String = "3.0.3",
 }
 
 object OpenAPI {
-  implicit val rw: RW[OpenAPI] = RW.gen
+  given rw: RW[OpenAPI] = RW.gen
 
   private def asJson(api: OpenAPI): Json = api
     .json

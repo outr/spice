@@ -1,6 +1,6 @@
 package spice.http.client
 
-import rapid._
+import rapid.*
 
 import scala.concurrent.duration.FiniteDuration
 

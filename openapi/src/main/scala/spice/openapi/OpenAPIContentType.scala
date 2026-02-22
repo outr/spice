@@ -1,11 +1,11 @@
 package spice.openapi
 
-import fabric.rw._
+import fabric.rw.*
 
 case class OpenAPIContentType(schema: OpenAPISchema,
                               example: Option[String] = None,
                               examples: Map[String, OpenAPIValue] = Map.empty)
 
 object OpenAPIContentType {
-  implicit val rw: RW[OpenAPIContentType] = RW.gen
+  given rw: RW[OpenAPIContentType] = RW.gen
 }

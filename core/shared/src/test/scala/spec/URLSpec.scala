@@ -2,7 +2,7 @@ package spec
 
 import org.scalatest.matchers.should.Matchers
 import org.scalatest.wordspec.AnyWordSpec
-import spice.net._
+import spice.net.*
 
 class URLSpec extends AnyWordSpec with Matchers {
   "URL" when {
@@ -66,10 +66,26 @@ class URLSpec extends AnyWordSpec with Matchers {
         url.path.encoded should be("/android_asset/www/app/test.js")
         url.toString should be("file:///android_asset/www/app/test.js")
       }
-      //      "properly parse a UK domain" in {
-      //        val url = URL("https://google.co.uk")
-      //        url.tld should be(Some("co.uk"))
-      //      }
+      "properly parse a UK domain with multi-part TLD" in {
+        val url = URL.parse("https://google.co.uk")
+        url.tld should be(Some("co.uk"))
+        url.domain should be("google.co.uk")
+      }
+      "properly parse an Australian domain with multi-part TLD" in {
+        val url = URL.parse("https://example.com.au")
+        url.tld should be(Some("com.au"))
+        url.domain should be("example.com.au")
+      }
+      "properly parse a subdomain with multi-part TLD" in {
+        val url = URL.parse("https://www.example.co.uk")
+        url.tld should be(Some("co.uk"))
+        url.domain should be("example.co.uk")
+      }
+      "properly parse a single-part TLD" in {
+        val url = URL.parse("https://www.example.com")
+        url.tld should be(Some("com"))
+        url.domain should be("example.com")
+      }
       "properly parse a URL without the protocol defined" in {
         val url = URL.parse("//cdn.framework7.io/i/share-banner.jpg")
         url.toString should be("https://cdn.framework7.io/i/share-banner.jpg")

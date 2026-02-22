@@ -1,9 +1,9 @@
 package spice.openapi
 
-import fabric._
+import fabric.*
 import fabric.define.DefType
-import fabric.rw._
-import fabric.dsl._
+import fabric.rw.*
+import fabric.dsl.*
 import spice.openapi.server.Schema
 
 sealed trait OpenAPISchema {
@@ -54,7 +54,7 @@ object OpenAPISchema {
   }
 
   object Component {
-    implicit val rw: RW[Component] = RW.gen
+    given rw: RW[Component] = RW.gen
   }
 
   case class Ref(ref: String, nullable: Option[Boolean] = None) extends OpenAPISchema {
@@ -64,7 +64,7 @@ object OpenAPISchema {
   }
 
   object Ref {
-    implicit val rw: RW[Ref] = RW.from(
+    given rw: RW[Ref] = RW.from(
       r = s => obj("$ref" -> str(s.ref), "nullable" -> s.nullable.json),
       w = j => Ref(j("$ref").asString, j.get("nullable").map(_.as[Boolean])),
       d = DefType.Obj(Some("Ref"), "$ref" -> DefType.Str, "nullable" -> DefType.Opt(DefType.Bool))
@@ -107,7 +107,7 @@ object OpenAPISchema {
                           mapping: Map[String, String] = Map.empty)
 
   object Discriminator {
-    implicit val rw: RW[Discriminator] = RW.gen
+    given rw: RW[Discriminator] = RW.gen
   }
 
   case class XML(name: Option[String] = None,
@@ -117,13 +117,13 @@ object OpenAPISchema {
                  wrapped: Option[Boolean] = None)
 
   object XML {
-    implicit val rw: RW[XML] = RW.gen
+    given rw: RW[XML] = RW.gen
   }
 
   case class ExternalDocs(url: String, description: Option[String] = None)
 
   object ExternalDocs {
-    implicit val rw: RW[ExternalDocs] = RW.gen
+    given rw: RW[ExternalDocs] = RW.gen
   }
 
   private def multi(`type`: String,
@@ -143,7 +143,7 @@ object OpenAPISchema {
     "nullable" -> nullable.json
   )
 
-  implicit val rw: RW[OpenAPISchema] = RW.from[OpenAPISchema](
+  given rw: RW[OpenAPISchema] = RW.from[OpenAPISchema](
     r = {
       case s: Component => Component.rw.read(s)
       case s: Ref => Ref.rw.read(s)

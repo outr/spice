@@ -1,9 +1,9 @@
 package spice.http.server.handler
 
-import rapid._
-import fabric._
+import rapid.*
+import fabric.*
 import fabric.io.{JsonFormatter, JsonParser}
-import fabric.rw._
+import fabric.rw.*
 import scribe.Priority
 import scribe.mdc.MDC
 import spice.http.content.{Content, StringContent}
@@ -83,7 +83,7 @@ case class HttpHandlerBuilder(server: MutableHttpServer,
   }*/
 
   def handle(f: HttpExchange => Task[HttpExchange]): HttpHandler = wrap(new HttpHandler {
-    override def handle(exchange: HttpExchange)(implicit mdc: MDC): Task[HttpExchange] = f(exchange)
+    override def handle(exchange: HttpExchange)(using mdc: MDC): Task[HttpExchange] = f(exchange)
   })
 
   def validation(validator: HttpExchange => Task[ValidationResult]): HttpHandler = validation(new Validator {
@@ -103,7 +103,7 @@ case class HttpHandlerBuilder(server: MutableHttpServer,
   }
 
   def restful[Request, Response](handler: Request => Response)
-                                (implicit requestRW: RW[Request], responseRW: RW[Response]): HttpHandler = {
+                                (using requestRW: RW[Request], responseRW: RW[Response]): HttpHandler = {
     handle { exchange =>
       val jsonOption: Option[Json] = exchange.request.method match {
         case HttpMethod.Get => {
@@ -139,7 +139,7 @@ case class HttpHandlerBuilder(server: MutableHttpServer,
     val wrapper = new HttpHandler {
       override def priority: Priority = p
 
-      override def handle(exchange: HttpExchange)(implicit mdc: MDC): Task[HttpExchange] = {
+      override def handle(exchange: HttpExchange)(using mdc: MDC): Task[HttpExchange] = {
         if (urlMatcher.forall(_.matches(exchange.request.url)) && requestMatchers.forall(_(exchange.request))) {
           ValidatorHttpHandler.validate(exchange, validators).flatMap {
             case ValidationResult.Continue(c) => handler.handle(c)

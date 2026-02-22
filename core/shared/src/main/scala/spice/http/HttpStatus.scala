@@ -1,6 +1,6 @@
 package spice.http
 
-import fabric.rw._
+import fabric.rw.*
 import spice.UserException
 
 case class HttpStatus(code: Int, message: String) extends Ordered[HttpStatus] {
@@ -33,7 +33,7 @@ case class HttpStatus(code: Int, message: String) extends Ordered[HttpStatus] {
 object HttpStatus {
   private var codeMap = Map.empty[Int, HttpStatus]
 
-  implicit val rw: RW[HttpStatus] = RW.gen
+  given rw: RW[HttpStatus] = RW.gen
 
   val Continue: HttpStatus = HttpStatus(100, "Continue")
   val SwitchingProtocols: HttpStatus = HttpStatus(101, "Switching Protocols")

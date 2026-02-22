@@ -2,14 +2,14 @@ package spice.openapi
 
 import fabric.define.DefType
 import fabric.obj
-import fabric.rw._
+import fabric.rw.*
 import spice.http.HttpMethod
 
 case class OpenAPIPath(parameters: List[OpenAPISchema] = Nil,
                        methods: Map[HttpMethod, OpenAPIPathEntry] = Map.empty)
 
 object OpenAPIPath {
-  implicit val rw: RW[OpenAPIPath] = RW.from[OpenAPIPath](
+  given rw: RW[OpenAPIPath] = RW.from[OpenAPIPath](
     r = path => obj(
       "parameters" -> path.parameters.json :: path.methods.toList.map {
         case (method, entry) => method.value.toLowerCase -> entry.json

@@ -7,8 +7,8 @@ import java.net.URL
 import scala.language.implicitConversions
 
 trait ContentHelpers extends SharedContentHelpers {
-  implicit def file2Content(file: File): Content = this.file(file)
-  implicit def url2Content(url: java.net.URL): Content = this.url(url)
+  given Conversion[File, Content] = file => this.file(file)
+  given Conversion[java.net.URL, Content] = url => this.url(url)
 
   override def file(file: File): Content = FileContent(file, ContentType.byFileName(file.getName))
   override def file(file: File, contentType: ContentType): Content = FileContent(file, contentType)

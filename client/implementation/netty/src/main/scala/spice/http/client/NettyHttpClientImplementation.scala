@@ -2,7 +2,7 @@ package spice.http.client
 
 import moduload.Moduload
 import rapid.Task
-import spice.http._
+import spice.http.*
 import java.util.concurrent.atomic.AtomicLong
 import scala.concurrent.duration.FiniteDuration
 import scala.util.{Failure, Success, Try}

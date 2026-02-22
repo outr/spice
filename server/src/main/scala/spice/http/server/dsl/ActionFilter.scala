@@ -5,7 +5,7 @@ import scribe.mdc.MDC
 import spice.http.HttpExchange
 
 class ActionFilter(f: HttpExchange => Task[HttpExchange]) extends ConnectionFilter {
-  override def apply(exchange: HttpExchange)(implicit mdc: MDC): Task[FilterResponse] = {
+  override def apply(exchange: HttpExchange)(using mdc: MDC): Task[FilterResponse] = {
     f(exchange).map(FilterResponse.Continue.apply)
   }
 }

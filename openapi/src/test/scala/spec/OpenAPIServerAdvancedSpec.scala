@@ -1,23 +1,49 @@
 package spec
 
-import fabric.dsl._
+import fabric.*
+import fabric.dsl.*
 import fabric.io.JsonFormatter
-import fabric.rw._
+import fabric.rw.*
 import org.scalatest.matchers.should.Matchers
 import org.scalatest.wordspec.{AnyWordSpec, AsyncWordSpec}
 import spice.http.HttpMethod
-import spice.net.{URLPath, _}
+import spice.net.{URLPath, *}
+import spice.openapi.{OpenAPIContent, OpenAPIContentType, OpenAPIResponse, OpenAPISchema}
 import spice.openapi.server.{OpenAPIHttpServer, Schema, Service, ServiceCall}
 
 class OpenAPIServerAdvancedSpec extends AnyWordSpec with Matchers {
   "OpenAPIServer Advanced" should {
-    "validate a proper swagger.yml file" in {
-      val expected = TestUtils.loadJson("openapi-tictactoe.json")
+    "generate OpenAPI spec with path parameters" in {
       val json = AdvancedOpenAPIServer.api.asJson
-//      println(JsonFormatter.Default(json))
-      // TODO: Finish support
-//      json should be(expected)
-      succeed
+      // Verify path parameters are generated for /board/{row}/{column}
+      val boardSquarePath = json("paths")("/board/{row}/{column}")
+      val params = boardSquarePath("parameters")
+      params.isArr should be(true)
+      params.asVector.length should be(2)
+      params.asVector.head("$ref").asString should be("#/components/parameters/rowParam")
+      params.asVector(1)("$ref").asString should be("#/components/parameters/columnParam")
+
+      // Verify component parameters are generated
+      val components = json("components")("parameters")
+      components("rowParam")("name").asString should be("row")
+      components("rowParam")("in").asString should be("path")
+      components("rowParam")("required").asBoolean should be(true)
+      components("rowParam")("schema")("type").asString should be("integer")
+      components("columnParam")("name").asString should be("column")
+      components("columnParam")("in").asString should be("path")
+      components("columnParam")("schema")("type").asString should be("integer")
+
+      // Verify /board has no parameters
+      val boardPath = json("paths")("/board")
+      boardPath.get("parameters").forall(p => p.isArr && p.asVector.isEmpty) should be(true)
+    }
+
+    "generate OpenAPI spec with error responses" in {
+      val json = AdvancedOpenAPIServer.api.asJson
+      // Verify error response on boardSquare GET
+      val getResponses = json("paths")("/board/{row}/{column}")("get")("responses")
+      getResponses("200")("description").asString should be("OK")
+      getResponses("400")("description").asString should be("The provided parameters are incorrect")
     }
   }
 
@@ -85,7 +111,17 @@ class OpenAPIServerAdvancedSpec extends AnyWordSpec with Matchers {
           responseSchema = Some(Schema(
             description = Some("Possible values for a board square. `.` means empty square."),
             example = Some(".")
-          ))
+          )),
+          errorResponses = Map(
+            "400" -> OpenAPIResponse(
+              description = "The provided parameters are incorrect",
+              content = OpenAPIContent(
+                ContentType.`text/html` -> OpenAPIContentType(
+                  schema = OpenAPISchema.Component(`type` = "string", maxLength = Some(256))
+                )
+              )
+            )
+          )
         ) { request =>
           request.response(Mark.`.`)
         }
@@ -99,13 +135,13 @@ class OpenAPIServerAdvancedSpec extends AnyWordSpec with Matchers {
     case class Status(winner: Winner, board: List[List[Mark]])
 
     object Status {
-      implicit val rw: RW[Status] = RW.gen
+      given rw: RW[Status] = RW.gen
     }
 
     case class Winner(value: String)
 
     object Winner {
-      implicit val rw: RW[Winner] = RW.enumeration(
+      given rw: RW[Winner] = RW.enumeration(
         list = List(`.`, X, O),
         asString = (w: Winner) => w.value,
         caseSensitive = false
@@ -119,7 +155,7 @@ class OpenAPIServerAdvancedSpec extends AnyWordSpec with Matchers {
     case class Mark(value: String)
 
     object Mark {
-      implicit val rw: RW[Mark] = RW.enumeration(
+      given rw: RW[Mark] = RW.enumeration(
         list = List(`.`, X, O),
         asString = (m: Mark) => m.value,
         caseSensitive = false
@@ -133,7 +169,7 @@ class OpenAPIServerAdvancedSpec extends AnyWordSpec with Matchers {
     case class Square(row: Int, column: Int)
 
     object Square {
-      implicit val rw: RW[Square] = RW.gen
+      given rw: RW[Square] = RW.gen
     }
   }
 }

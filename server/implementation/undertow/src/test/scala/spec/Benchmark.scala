@@ -1,13 +1,13 @@
 package spec
 
 import profig.Profig
-import rapid._
+import rapid.*
 import scribe.mdc.MDC
 import spice.http.{HttpExchange, HttpStatus}
 import spice.http.content.Content
 import spice.http.server.StaticHttpServer
 import spice.http.server.handler.HttpHandler
-import spice.net._
+import spice.net.*
 import spice.http.client.HttpClient
 
 import java.util.concurrent.atomic.AtomicLong
@@ -61,7 +61,7 @@ object Benchmark {
       private lazy val content = Content.string("Hello, World!", ContentType.`text/plain`)
 
       override def handle(exchange: HttpExchange)
-                         (implicit mdc: MDC): Task[HttpExchange] = exchange.modify { response =>
+                         (using mdc: MDC): Task[HttpExchange] = exchange.modify { response =>
         Task(response.withContent(content))
       }
     }

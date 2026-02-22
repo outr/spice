@@ -1,10 +1,10 @@
 package spice.http.server
 
-import fabric.rw._
+import fabric.rw.*
 import rapid.Task
 import scribe.mdc.MDC
 import spice.http.content.Content
-import spice.http.server.handler._
+import spice.http.server.handler.*
 import spice.http.server.rest.Restful
 import spice.http.server.validation.{ValidationResult, Validator}
 import spice.http.{HttpExchange, HttpMethod, HttpStatus}
@@ -15,10 +15,10 @@ import scala.language.implicitConversions
 package object dsl {
   private[spice] val DeltaKey: String = "deltas"
 
-  implicit class ValidatorFilter(val validator: Validator) extends ConnectionFilter {
+  given Conversion[Validator, ConnectionFilter] = validator => new ConnectionFilter {
     private lazy val list = List(validator)
 
-    override def apply(exchange: HttpExchange)(implicit mdc: MDC): Task[FilterResponse] = {
+    override def apply(exchange: HttpExchange)(using mdc: MDC): Task[FilterResponse] = {
       ValidatorHttpHandler.validate(exchange, list).map {
         case ValidationResult.Continue(c) => FilterResponse.Continue(c)
         case vr => FilterResponse.Stop(vr.exchange)
@@ -26,9 +26,9 @@ package object dsl {
     }
   }
 
-  implicit class MethodConnectionFilter(val method: HttpMethod) extends ConditionalFilter(_.request.method == method)
+  given Conversion[HttpMethod, ConnectionFilter] = method => new ConditionalFilter(_.request.method == method)
 
-  implicit def handler2Filter(handler: HttpHandler): ConnectionFilter = ActionFilter { exchange =>
+  given handler2Filter: Conversion[HttpHandler, ConnectionFilter] = handler => ActionFilter { exchange =>
     if (PathPart.fulfilled(exchange)) {
       handler.handle(exchange)
     } else {
@@ -36,20 +36,10 @@ package object dsl {
     }
   }
 
-  implicit class CachingManagerFilter(val caching: CachingManager) extends LastConnectionFilter(handler2Filter(caching))
+  given Conversion[CachingManager, ConnectionFilter] = caching => new LastConnectionFilter(handler2Filter(caching))
 
-//  implicit class DeltasFilter(val deltas: List[Delta]) extends ActionFilter(exchange => Task {
-//    exchange.deltas ++= deltas
-//    exchange
-//  })
-//
-//  implicit class DeltaFilter(delta: Delta) extends ActionFilter(exchange => Task {
-//    exchange.deltas += delta
-//    exchange
-//  })
-
-  implicit class StringFilter(val s: String) extends ConnectionFilter {
-    override def apply(exchange: HttpExchange)(implicit mdc: MDC): Task[FilterResponse] = Task {
+  given Conversion[String, ConnectionFilter] = s => new ConnectionFilter {
+    override def apply(exchange: HttpExchange)(using mdc: MDC): Task[FilterResponse] = Task {
       val path = if (s.startsWith("/")) {
         s
       } else {
@@ -62,13 +52,13 @@ package object dsl {
     }
   }
 
-  implicit class URLMatcherFilter(val matcher: URLMatcher) extends ConditionalFilter(c => matcher.matches(c.request.url))
+  given Conversion[URLMatcher, ConnectionFilter] = matcher => new ConditionalFilter(c => matcher.matches(c.request.url))
 
-  implicit def content2Filter(content: Content): ConnectionFilter = handler2Filter(ContentHandler(content, HttpStatus.OK))
+  given content2Filter: Conversion[Content, ConnectionFilter] = content => handler2Filter(ContentHandler(content, HttpStatus.OK))
 
-  implicit def path2AllowFilter(path: URLPath): ConnectionFilter = PathFilter(path)
+  given path2AllowFilter: Conversion[URLPath, ConnectionFilter] = path => PathFilter(path)
 
-  implicit def connectionFilters2ConnectionFilter(list: List[ConnectionFilter]): ConnectionFilter =
+  given connectionFilters2ConnectionFilter: Conversion[List[ConnectionFilter], ConnectionFilter] = list =>
     ListConnectionFilter(list.sorted)
 
   def filters(filters: ConnectionFilter*): ConnectionFilter = ListConnectionFilter(filters.toList)
@@ -84,12 +74,12 @@ package object dsl {
   }
 
   def redirect(path: URLPath): ConnectionFilter = new ConnectionFilter {
-    override def apply(exchange: HttpExchange)(implicit mdc: MDC): Task[FilterResponse] = {
+    override def apply(exchange: HttpExchange)(using mdc: MDC): Task[FilterResponse] = {
       HttpHandler.redirect(exchange, path.encoded).map { redirected =>
         FilterResponse.Continue(redirected)
       }
     }
   }
 
-  implicit def string2Content(value: String): Content = Content.string(value, ContentType.`text/plain`)
+  given string2Content: Conversion[String, Content] = value => Content.string(value, ContentType.`text/plain`)
 }

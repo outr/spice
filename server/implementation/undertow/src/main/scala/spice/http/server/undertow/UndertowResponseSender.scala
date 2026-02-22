@@ -1,6 +1,6 @@
 package spice.http.server.undertow
 
-import rapid._
+import rapid.*
 import io.undertow.io.{IoCallback, Sender}
 import io.undertow.server.HttpServerExchange
 import io.undertow.server.handlers.resource.URLResource
@@ -131,6 +131,6 @@ object UndertowResponseSender {
       response = response.withHeader(Headers.Response.`Server`(server.config.name()))
     }
 
-    exchange.response
+    response
   }
 }

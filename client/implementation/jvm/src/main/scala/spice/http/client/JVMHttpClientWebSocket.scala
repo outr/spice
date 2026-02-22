@@ -6,7 +6,7 @@ import spice.UserException
 import spice.http.{ByteBufferData, ConnectionStatus, WebSocket}
 import spice.net.URL
 
-import java.net.{URI, http => jvm}
+import java.net.{URI, http as jvm}
 import java.nio.ByteBuffer
 import java.util.concurrent.CompletionStage
 import scala.concurrent.duration.DurationInt

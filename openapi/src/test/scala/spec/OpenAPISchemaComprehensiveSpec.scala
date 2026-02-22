@@ -1,7 +1,7 @@
 package spec
 
-import fabric._
-import fabric.dsl._
+import fabric.*
+import fabric.dsl.*
 import fabric.rw.Convertible
 import org.scalatest.matchers.should.Matchers
 import org.scalatest.wordspec.AnyWordSpec

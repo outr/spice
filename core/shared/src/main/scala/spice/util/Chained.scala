@@ -3,7 +3,7 @@ package spice.util
 import rapid.Task
 
 import java.util.concurrent.atomic.AtomicBoolean
-import scala.concurrent.duration._
+import scala.concurrent.duration.*
 
 /**
  * Provides a single-chain of tasks so only one IO can run at a time blocking the others until it completes.

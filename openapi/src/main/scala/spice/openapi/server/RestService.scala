@@ -1,7 +1,7 @@
 package spice.openapi.server
 
-import rapid._
-import fabric.rw._
+import rapid.*
+import fabric.rw.*
 import spice.http.HttpMethod
 import spice.http.content.Content
 import spice.net.{ContentType, URLPath}
@@ -12,9 +12,9 @@ abstract class RestService extends Service {
 
   protected def responseTypes: List[ResponseType] = List(ResponseType(ContentType.`application/json`))
 
-  implicit def requestRW: RW[Request]
+  given requestRW: RW[Request]
 
-  implicit def responseRW: RW[Response]
+  given responseRW: RW[Response]
 
   override val calls: List[ServiceCall] = List(
     serviceCall[Request, Response](
@@ -47,7 +47,7 @@ object RestService {
                       serviceSummary: String,
                       types: List[ResponseType] = List(ResponseType(ContentType.`application/json`)))
                      (f: Req => Task[Res])
-                     (implicit reqRW: RW[Req], resRW: RW[Res]): TypedRestService[Req, Res] = TypedRestService[Req, Res](
+                     (using reqRW: RW[Req], resRW: RW[Res]): TypedRestService[Req, Res] = TypedRestService[Req, Res](
     server = server,
     path = urlPath,
     summary = serviceSummary,

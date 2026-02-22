@@ -1,13 +1,14 @@
 package spice.delta
 
 import spice.http.content.{Content, FileContent, StringContent, URLContent}
-import spice.streamer._
+import spice.streamer.*
+import spice.streamer.given
 
 import java.io.{File, FileInputStream, InputStream}
 import java.net.URL
 import java.util.concurrent.ConcurrentHashMap
 import scala.annotation.tailrec
-import scala.jdk.CollectionConverters._
+import scala.jdk.CollectionConverters.*
 
 object HTMLParser {
   private val SelfClosingTagRegex = """(?s)<(\S+)(.*)/>""".r
@@ -101,7 +102,7 @@ object HTMLParser {
 }
 
 class HTMLParser(input: InputStream) {
-  import HTMLParser._
+  import HTMLParser.*
 
   private var position = 0
   private val b = new StringBuilder

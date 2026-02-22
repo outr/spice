@@ -4,10 +4,11 @@ import fabric.io.JsonFormatter
 import okhttp3.{Authenticator, Request, Response, Route}
 import rapid.Task
 import spice.http.content.FormDataEntry.{FileEntry, StringEntry}
-import spice.http.content._
-import spice.http._
+import spice.http.content.*
+import spice.http.*
 import spice.net.{ContentType, URL}
-import spice.streamer._
+import spice.streamer.*
+import spice.streamer.given
 
 import java.io.{File, IOException}
 import java.net.{InetAddress, InetSocketAddress, Socket}
@@ -15,8 +16,8 @@ import java.security.SecureRandom
 import java.security.cert.X509Certificate
 import java.util
 import java.util.concurrent.TimeUnit
-import javax.net.ssl._
-import scala.jdk.CollectionConverters._
+import javax.net.ssl.*
+import scala.jdk.CollectionConverters.*
 import scala.util.{Failure, Success, Try}
 
 /**

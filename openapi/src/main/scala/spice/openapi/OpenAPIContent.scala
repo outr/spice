@@ -1,14 +1,14 @@
 package spice.openapi
 
-import fabric._
+import fabric.*
 import fabric.define.DefType
-import fabric.rw._
+import fabric.rw.*
 import spice.net.ContentType
 
 case class OpenAPIContent(content: List[(ContentType, OpenAPIContentType)])
 
 object OpenAPIContent {
-  implicit val rw: RW[OpenAPIContent] = RW.from(
+  given rw: RW[OpenAPIContent] = RW.from(
     r = c => obj(c.content.map {
       case (ct, oct) => ct.toString -> oct.json
     }*),

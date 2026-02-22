@@ -21,9 +21,9 @@ class MutableHttpServer extends HttpServer {
 
   object handlers extends ItemContainer[HttpHandler]
 
-  override final def apply(exchange: HttpExchange)(implicit mdc: MDC): Task[HttpExchange] = handleInternal(exchange)
+  override final def apply(exchange: HttpExchange)(using mdc: MDC): Task[HttpExchange] = handleInternal(exchange)
 
-  protected def handleInternal(exchange: HttpExchange)(implicit mdc: MDC): Task[HttpExchange] = {
+  protected def handleInternal(exchange: HttpExchange)(using mdc: MDC): Task[HttpExchange] = {
     handleRecursive(exchange, handlers()).flatMap { updated =>
       // NotFound handling
       if (updated.response.content.isEmpty && updated.response.status == HttpStatus.OK) {
@@ -39,7 +39,7 @@ class MutableHttpServer extends HttpServer {
   }
 
   private def handleRecursive(exchange: HttpExchange, handlers: List[HttpHandler])
-                             (implicit mdc: MDC): Task[HttpExchange] = {
+                             (using mdc: MDC): Task[HttpExchange] = {
     if (exchange.finished || handlers.isEmpty) {
       Task.pure(exchange) // Finished
     } else {

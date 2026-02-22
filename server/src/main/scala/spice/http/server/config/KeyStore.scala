@@ -1,11 +1,11 @@
 package spice.http.server.config
 
-import fabric.rw._
+import fabric.rw.*
 
 import java.io.File
 
 object KeyStore {
-  implicit val rw: RW[KeyStore] = RW.gen
+  given rw: RW[KeyStore] = RW.gen
 }
 
 case class KeyStore(path: String = "keystore.jks", password: String = "password") {

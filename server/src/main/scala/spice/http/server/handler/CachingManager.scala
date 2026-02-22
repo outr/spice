@@ -1,6 +1,6 @@
 package spice.http.server.handler
 
-import rapid._
+import rapid.*
 import scribe.mdc.MDC
 import spice.http.{CacheControl, Headers, HttpExchange, HttpStatus}
 
@@ -8,17 +8,17 @@ sealed trait CachingManager extends HttpHandler
 
 object CachingManager {
   case object Default extends CachingManager {
-    override def handle(exchange: HttpExchange)(implicit mdc: MDC): Task[HttpExchange] = Task.pure(exchange)
+    override def handle(exchange: HttpExchange)(using mdc: MDC): Task[HttpExchange] = Task.pure(exchange)
   }
   case object NotCached extends CachingManager {
-    override def handle(exchange: HttpExchange)(implicit mdc: MDC): Task[HttpExchange] = exchange.modify { response =>
+    override def handle(exchange: HttpExchange)(using mdc: MDC): Task[HttpExchange] = exchange.modify { response =>
       Task(response.withHeader(Headers.`Cache-Control`(CacheControl.NoCache, CacheControl.NoStore)))
     }
   }
   case class LastModified(publicCache: Boolean = true) extends CachingManager {
     val visibility: CacheControl = if (publicCache) CacheControl.Public else CacheControl.Private
 
-    override def handle(exchange: HttpExchange)(implicit mdc: MDC): Task[HttpExchange] = {
+    override def handle(exchange: HttpExchange)(using mdc: MDC): Task[HttpExchange] = {
       exchange.modify { response =>
         response.content match {
           case Some(content) => Task {
@@ -37,7 +37,7 @@ object CachingManager {
     }
   }
   case class MaxAge(seconds: Long) extends CachingManager {
-    override def handle(exchange: HttpExchange)(implicit mdc: MDC): Task[HttpExchange] = exchange.modify { response =>
+    override def handle(exchange: HttpExchange)(using mdc: MDC): Task[HttpExchange] = exchange.modify { response =>
       Task(response.withHeader(Headers.`Cache-Control`(CacheControl.MaxAge(seconds))))
     }
   }

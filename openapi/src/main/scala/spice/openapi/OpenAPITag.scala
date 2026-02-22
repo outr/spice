@@ -1,9 +1,9 @@
 package spice.openapi
 
-import fabric.rw._
+import fabric.rw.*
 
 case class OpenAPITag(name: String)
 
 object OpenAPITag {
-  implicit val rw: RW[OpenAPITag] = RW.gen
+  given rw: RW[OpenAPITag] = RW.gen
 }

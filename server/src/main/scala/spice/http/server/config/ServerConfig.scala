@@ -1,8 +1,8 @@
 package spice.http.server.config
 
-import fabric.rw._
-import profig._
-import reactify._
+import fabric.rw.*
+import profig.*
+import reactify.*
 import spice.http.cookie.SameSite
 import spice.http.server.HttpServer
 import java.util.concurrent.TimeUnit
@@ -51,7 +51,7 @@ class ServerConfig(server: HttpServer) {
                              sameSite: String = "strict")
 
     object SessionConfig {
-      implicit val rw: RW[SessionConfig] = RW.gen
+      given rw: RW[SessionConfig] = RW.gen
     }
   }
 

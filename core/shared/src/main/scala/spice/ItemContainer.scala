@@ -2,7 +2,7 @@ package spice
 
 import reactify.{Val, Var}
 
-class ItemContainer[T](implicit ord: Ordering[T]) extends Iterable[T] {
+class ItemContainer[T](using ord: Ordering[T]) extends Iterable[T] {
   private val list = Var[List[T]](Nil)
   val items: Val[List[T]] = list
 

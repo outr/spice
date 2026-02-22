@@ -2,7 +2,8 @@ package spec
 
 import fabric.Json
 import fabric.io.{JsonParser, YamlParser}
-import spice.streamer._
+import spice.streamer.*
+import spice.streamer.given
 
 import scala.collection.mutable
 

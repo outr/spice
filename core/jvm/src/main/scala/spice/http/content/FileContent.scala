@@ -3,6 +3,7 @@ package spice.http.content
 import rapid.*
 import spice.net.ContentType
 import spice.streamer.*
+import spice.streamer.given
 
 import java.io.File
 import scala.collection.mutable

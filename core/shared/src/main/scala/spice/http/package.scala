@@ -1,8 +1,6 @@
 package spice
 
-import spice.net._
-
-import scala.language.implicitConversions
+import spice.net.*
 
 package object http {
   object combined {

@@ -8,7 +8,7 @@ import spice.http.server.validation.ValidationResult.{Continue, Redirect}
 import spice.http.server.validation.{ValidationResult, Validator}
 
 class ValidatorHttpHandler(validators: List[Validator]) extends HttpHandler {
-  override def handle(exchange: HttpExchange)(implicit mdc: MDC): Task[HttpExchange] = {
+  override def handle(exchange: HttpExchange)(using mdc: MDC): Task[HttpExchange] = {
     ValidatorHttpHandler.validate(exchange, validators).map(_.exchange)
   }
 }

@@ -2,7 +2,8 @@ package spice.http.content
 
 import rapid.Task
 import spice.net.ContentType
-import spice.streamer._
+import spice.streamer.*
+import spice.streamer.given
 
 import java.io.OutputStream
 import java.util.zip.{ZipEntry, ZipOutputStream}

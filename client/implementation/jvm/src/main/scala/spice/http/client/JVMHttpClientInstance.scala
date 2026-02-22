@@ -12,13 +12,13 @@ import java.net.http.HttpClient.{Redirect, Version}
 import java.net.http.HttpRequest.BodyPublishers
 import java.net.http.HttpResponse.BodyHandlers
 import scala.util.{Failure, Random, Success, Try}
-import java.net.{InetSocketAddress, ProxySelector, URI, http => jvm}
+import java.net.{InetSocketAddress, ProxySelector, URI, http as jvm}
 import java.nio.channels.{Channels, Pipe}
 import java.nio.file.Files
 import java.time.Duration
 import java.util.concurrent.{CompletableFuture, CompletionException}
-import scala.jdk.CollectionConverters._
-import scala.jdk.FutureConverters._
+import scala.jdk.CollectionConverters.*
+import scala.jdk.FutureConverters.*
 
 class JVMHttpClientInstance(client: HttpClient) extends HttpClientInstance {
   private lazy val proxy = client.proxy match {

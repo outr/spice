@@ -4,7 +4,7 @@ import org.scalajs.dom
 import org.scalajs.dom.{ProgressEvent, XMLHttpRequest}
 import rapid.Task
 import rapid.task.Completable
-import reactify._
+import reactify.*
 import spice.UserException
 import spice.http.HttpMethod
 import spice.net.URL

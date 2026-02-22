@@ -1,11 +1,11 @@
 package spice.openapi
 
-import fabric.rw._
+import fabric.rw.*
 
 case class OpenAPIInfo(title: String,
                        version: String,
                        description: Option[String] = None)
 
 object OpenAPIInfo {
-  implicit val rw: RW[OpenAPIInfo] = RW.gen
+  given rw: RW[OpenAPIInfo] = RW.gen
 }

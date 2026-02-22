@@ -2,7 +2,7 @@ package spice.ajax
 
 import org.scalajs.dom.XMLHttpRequest
 import rapid.Task
-import reactify._
+import reactify.*
 
 import scala.util.Try
 
@@ -28,6 +28,17 @@ class AjaxAction(request: AjaxRequest) {
     }
   }
 
-  // TODO: dequeue if not already running
-  def cancel(): Unit = request.cancel()     // TODO: does cancel fire onComplete with a failure?
+  /**
+   * Cancels this action. If the action is still enqueued (not yet running),
+   * it will be marked as cancelled so it won't start. If already running,
+   * the underlying XHR abort is called. Note: XHR abort triggers the
+   * onreadystatechange handler with readyState=4 and status=0, which
+   * results in the completable receiving a Failure.
+   */
+  def cancel(): Unit = {
+    request.cancel()
+    if (state() == ActionState.Enqueued) {
+      _state @= ActionState.Finished
+    }
+  }
 }

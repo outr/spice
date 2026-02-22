@@ -1,6 +1,6 @@
 package spice.http.content
 
-import fabric.rw._
+import fabric.rw.*
 import fabric.{Json, Null, obj, str}
 import spice.net.ContentType
 

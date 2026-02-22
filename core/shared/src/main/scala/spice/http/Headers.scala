@@ -59,6 +59,7 @@ object Headers {
     case object `Authorization` extends StringHeaderKey("Authorization")
     def `Cookie`: CookieHeader.type = CookieHeader
     case object `If-Modified-Since` extends DateHeaderKey("If-Modified-Since")
+    case object `If-None-Match` extends StringHeaderKey("If-None-Match")
     case object `Origin` extends StringHeaderKey("Origin")
     case object `User-Agent` extends StringHeaderKey("User-Agent", commaSeparated = false)
     case object `X-Forwarded-For` extends StringHeaderKey("X-Forwarded-For")
@@ -92,12 +93,24 @@ object Headers {
       }
     }
 
+    case object `ETag` extends StringHeaderKey("ETag")
     case object `Expires` extends DateHeaderKey("Expires")
     case object `Last-Modified` extends DateHeaderKey("Last-Modified")
     case object `Location` extends StringHeaderKey("Location")
+    case object `Vary` extends StringHeaderKey("Vary")
+    case object `Retry-After` extends StringHeaderKey("Retry-After")
+    // CORS headers
     case object `Access-Control-Allow-Origin` extends StringHeaderKey("Access-Control-Allow-Origin")
     case object `Access-Control-Allow-Credentials` extends BooleanHeaderKey("Access-Control-Allow-Credentials")
     case object `Access-Control-Allow-Headers` extends StringHeaderKey("Access-Control-Allow-Headers")
     case object `Access-Control-Allow-Methods` extends StringHeaderKey("Access-Control-Allow-Methods")
+    case object `Access-Control-Max-Age` extends StringHeaderKey("Access-Control-Max-Age")
+    case object `Access-Control-Expose-Headers` extends StringHeaderKey("Access-Control-Expose-Headers")
+    // Security headers
+    case object `Strict-Transport-Security` extends StringHeaderKey("Strict-Transport-Security")
+    case object `X-Frame-Options` extends StringHeaderKey("X-Frame-Options")
+    case object `X-Content-Type-Options` extends StringHeaderKey("X-Content-Type-Options")
+    case object `Content-Security-Policy` extends StringHeaderKey("Content-Security-Policy")
+    case object `WWW-Authenticate` extends StringHeaderKey("WWW-Authenticate")
   }
 }

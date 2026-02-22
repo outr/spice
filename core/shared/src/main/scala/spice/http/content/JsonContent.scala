@@ -2,7 +2,7 @@ package spice.http.content
 
 import fabric.Json
 import fabric.io.JsonFormatter
-import fabric.rw._
+import fabric.rw.*
 import rapid.Task
 import spice.net.ContentType
 

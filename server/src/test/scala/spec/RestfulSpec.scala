@@ -1,10 +1,10 @@
 package spec
 
-import fabric._
+import fabric.*
 import org.scalatest.matchers.should.Matchers
 import org.scalatest.wordspec.AnyWordSpec
 import spice.http.server.rest.Restful
-import spice.net._
+import spice.net.*
 
 class RestfulSpec extends AnyWordSpec with Matchers {
   "Restful" when {

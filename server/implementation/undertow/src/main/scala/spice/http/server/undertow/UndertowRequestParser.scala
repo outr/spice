@@ -1,6 +1,6 @@
 package spice.http.server.undertow
 
-import rapid._
+import rapid.*
 import io.undertow.server.HttpServerExchange
 import io.undertow.server.handlers.form.{FormDataParser, FormParserFactory}
 import io.undertow.util.HeaderMap

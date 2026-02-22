@@ -1,17 +1,17 @@
 package spec
 
-import rapid._
-import fabric.rw._
+import rapid.*
+import fabric.rw.*
 import moduload.Moduload
 import org.scalatest.matchers.should.Matchers
 import org.scalatest.wordspec.AnyWordSpec
-import spice.http._
+import spice.http.*
 import spice.http.client.intercept.Interceptor
 import spice.http.client.{HttpClient, OkHttpClientImplementation}
-import spice.http.content._
-import spice.net._
+import spice.http.content.*
+import spice.net.*
 
-import scala.concurrent.duration._
+import scala.concurrent.duration.*
 
 class OkHttpClientSpec extends AnyWordSpec with Matchers {
   "OkHttpClient" should {
@@ -81,6 +81,6 @@ class OkHttpClientSpec extends AnyWordSpec with Matchers {
   case class Placeholder(userId: Int, id: Int, title: String, completed: Boolean)
 
   object Placeholder {
-    implicit val rw: RW[Placeholder] = RW.gen
+    given rw: RW[Placeholder] = RW.gen
   }
 }

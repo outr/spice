@@ -1,11 +1,12 @@
 package spice.openapi.server
 
+import fabric.define.DefType
 import rapid.Task
 import spice.http.paths
 import spice.http.content.Content
 import spice.http.server.MutableHttpServer
-import spice.net._
-import spice.openapi.{OpenAPI, OpenAPIComponents, OpenAPIInfo, OpenAPIPath, OpenAPISchema, OpenAPIServer, OpenAPITag}
+import spice.net.*
+import spice.openapi.{OpenAPI, OpenAPIComponents, OpenAPIInfo, OpenAPIParameter, OpenAPIPath, OpenAPISchema, OpenAPIServer, OpenAPITag}
 
 import scala.annotation.tailrec
 import scala.collection.immutable.VectorMap
@@ -62,30 +63,60 @@ trait OpenAPIHttpServer extends MutableHttpServer {
   def description: Option[String] = None
   def tags: List[String] = Nil
 
-  def api: OpenAPI = OpenAPI(
-    openapi = openAPIVersion,
-    info = OpenAPIInfo(
-      title = title,
-      version = version,
-      description = description
-    ),
-    tags = tags.map(OpenAPITag.apply),
-    servers = config.listeners() flatMap { server =>
-      server.urls.map { url =>
-        OpenAPIServer(url = url, description = server.description)
+  def api: OpenAPI = {
+    var pathParametersMap = Map.empty[String, OpenAPIParameter]
+
+    val paths = services.map { service =>
+      val pathParams = service.path.arguments.map { argName =>
+        val paramType = service.calls.headOption.flatMap { call =>
+          call.requestRW.definition match {
+            case DefType.Obj(map, _) => map.get(argName)
+            case _ => None
+          }
+        }
+        val openAPIType = paramType match {
+          case Some(DefType.Int) => "integer"
+          case Some(DefType.Dec) => "number"
+          case Some(DefType.Bool) => "boolean"
+          case _ => "string"
+        }
+        val paramKey = s"${argName}Param"
+        pathParametersMap += paramKey -> OpenAPIParameter(
+          description = argName,
+          name = argName,
+          in = "path",
+          required = true,
+          schema = OpenAPISchema.Component(`type` = openAPIType)
+        )
+        OpenAPISchema.Ref(s"#/components/parameters/$paramKey", None)
       }
-    },
-    paths = services.map { service =>
+
       service.path.toString -> OpenAPIPath(
-        parameters = Nil, // TODO: Implement
+        parameters = pathParams,
         methods = service.calls.flatMap(sc => sc.openAPI.map(sc.method -> _)).toMap
       )
-    }.toMap,
-    components = Some(OpenAPIComponents(
-      parameters = Map.empty,
-      schemas = components
-    ))
-  )
+    }.toMap
+
+    OpenAPI(
+      openapi = openAPIVersion,
+      info = OpenAPIInfo(
+        title = title,
+        version = version,
+        description = description
+      ),
+      tags = tags.map(OpenAPITag.apply),
+      servers = config.listeners() flatMap { server =>
+        server.urls.map { url =>
+          OpenAPIServer(url = url, description = server.description)
+        }
+      },
+      paths = paths,
+      components = Some(OpenAPIComponents(
+        parameters = pathParametersMap,
+        schemas = components
+      ))
+    )
+  }
 
   def services: List[Service]
 

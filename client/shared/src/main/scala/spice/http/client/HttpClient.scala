@@ -2,9 +2,9 @@ package spice.http.client
 
 import fabric.Json
 import fabric.io.{Format, JsonFormatter, JsonParser}
-import fabric.rw._
+import fabric.rw.*
 import rapid.Task
-import spice.http._
+import spice.http.*
 import spice.http.client.intercept.Interceptor
 import spice.http.content.{Content, StringContent}
 import spice.http.cookie.Cookie

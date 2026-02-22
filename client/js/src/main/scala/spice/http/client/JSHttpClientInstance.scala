@@ -11,7 +11,7 @@ import scala.concurrent.duration.FiniteDuration
 import scala.util.{Failure, Success, Try}
 
 class JSHttpClientInstance(client: HttpClient) extends HttpClientInstance {
-  assert(client.proxy.isEmpty, "Proxy is not supported in JSHttpClientImplementation")
+  assert(client.proxy.isEmpty, "Proxy is not supported in the browser JS client. Proxy configuration is ignored.")
 
   private val HeaderRegex = """(.+)[:](.+)""".r
 
@@ -22,10 +22,11 @@ class JSHttpClientInstance(client: HttpClient) extends HttpClientInstance {
       case None => Task.pure(None)
     }
     contentString.flatMap { data =>
+      val timeoutMs = client.timeout.toMillis.toInt
       val ajaxRequest = new AjaxRequest(
         url = request.url,
         data = data,
-        timeout = 0,
+        timeout = timeoutMs,
         headers = request.headers.map.flatMap(t => t._2.map(value => t._1 -> value)),
         withCredentials = true,
         responseType = ""
@@ -40,11 +41,9 @@ class JSHttpClientInstance(client: HttpClient) extends HttpClientInstance {
           }.groupBy(_._1).map {
             case (key, array) => key -> array.toList.map(_._2)
           }
-          val content = xmlHttpRequest.responseType match {
-            case null => None
-            case _ =>
-              val `type` = if (xmlHttpRequest.responseType == "") ContentType.`text/plain` else ContentType.parse(xmlHttpRequest.responseType)
-              Some(Content.string(xmlHttpRequest.responseText, `type`))
+          val responseContentType = headers.get("Content-Type").flatMap(_.headOption).map(ContentType.parse)
+          val content = Option(xmlHttpRequest.responseText).filter(_.nonEmpty).map { text =>
+            Content.string(text, responseContentType.getOrElse(ContentType.`text/plain`))
           }
           Success(HttpResponse(
             status = HttpStatus(xmlHttpRequest.status, xmlHttpRequest.statusText),

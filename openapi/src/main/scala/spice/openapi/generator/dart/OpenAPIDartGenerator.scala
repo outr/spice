@@ -7,7 +7,8 @@ import spice.http.HttpMethod
 import spice.net.ContentType
 import spice.openapi.{OpenAPI, OpenAPIContent, OpenAPISchema}
 import spice.openapi.generator.{OpenAPIGenerator, OpenAPIGeneratorConfig, SourceFile}
-import spice.streamer._
+import spice.streamer.*
+import spice.streamer.given
 import spice.util.NumberToWords
 
 import scala.collection.mutable
@@ -23,10 +24,10 @@ case class OpenAPIDartGenerator(api: OpenAPI, config: OpenAPIGeneratorConfig) ex
 
   override protected def generatedComment: String = "/// GENERATED CODE: Do not edit!"
 
-  private implicit class StringExtras(s: String) {
-    def ref: String = s.substring(s.lastIndexOf('/') + 1)
+  extension (s: String) {
+    private def ref: String = s.substring(s.lastIndexOf('/') + 1)
 
-    def ref2Type: String = {
+    private def ref2Type: String = {
       api.componentByRef(s) match {
         case Some(c: OpenAPISchema.Component) => typeNameForComponent(ref, c)
         case Some(_: OpenAPISchema.Ref) => ref // Handle nested refs
@@ -37,7 +38,7 @@ case class OpenAPIDartGenerator(api: OpenAPI, config: OpenAPIGeneratorConfig) ex
         case _ => ref
       }
     }
-    def type2File: String = {
+    private def type2File: String = {
       val s = ref2Type
       val pre = s.charAt(0).toLower
       val suffix = "\\p{Lu}".r.replaceAllIn(s.substring(1), m => {
@@ -45,7 +46,7 @@ case class OpenAPIDartGenerator(api: OpenAPI, config: OpenAPIGeneratorConfig) ex
       })
       s"$pre$suffix".replace(" ", "")
     }
-    def dartType: String = s match {
+    private def dartType: String = s match {
       case "string" => "String"
       case "boolean" => "bool"
       case "integer" => "int"
@@ -53,24 +54,24 @@ case class OpenAPIDartGenerator(api: OpenAPI, config: OpenAPIGeneratorConfig) ex
       case "json" => "Map<String, dynamic>"
       case _ => throw new RuntimeException(s"Unsupported dart type: [$s]")
     }
-    def param: String = s"this.$prop"
-    def prop: String = renameMap.getOrElse(s, s)
+    private def param: String = s"this.$prop"
+    private def prop: String = renameMap.getOrElse(s, s)
   }
 
-  private implicit class OpenAPIContentExtras(content: OpenAPIContent) {
-    def ref: OpenAPISchema.Ref = content
+  extension (content: OpenAPIContent) {
+    private def ref: OpenAPISchema.Ref = content
       .content
       .head
       ._2
       .schema
       .asInstanceOf[OpenAPISchema.Ref]
 
-    def refType: String = {
+    private def refType: String = {
       val t = ref.ref.ref2Type
       typeNameForComponent(t, component)
     }
 
-    def component: OpenAPISchema.Component = api.componentByRef(ref.ref).get match {
+    private def component: OpenAPISchema.Component = api.componentByRef(ref.ref).get match {
       case c: OpenAPISchema.Component => c
       case _ => throw new RuntimeException(s"Expected Component schema but got: ${api.componentByRef(ref.ref)}")
     }

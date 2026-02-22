@@ -1,12 +1,13 @@
 package spice.openapi.server
 
-import rapid._
-import fabric.rw._
+import rapid.*
+import fabric.rw.*
 import scribe.mdc.MDC
 import spice.http.content.Content
 import spice.http.server.handler.HttpHandler
 import spice.http.{HttpExchange, HttpMethod}
 import spice.net.{ContentType, URLPath}
+import spice.openapi.OpenAPIResponse
 
 trait Service extends HttpHandler {
   def server: OpenAPIHttpServer
@@ -14,7 +15,7 @@ trait Service extends HttpHandler {
   val path: URLPath
   val calls: List[ServiceCall]
 
-  override def handle(exchange: HttpExchange)(implicit mdc: MDC): Task[HttpExchange] = apply(exchange) match {
+  override def handle(exchange: HttpExchange)(using mdc: MDC): Task[HttpExchange] = apply(exchange) match {
     case Some(sc) => sc.handle(exchange)
     case None => Task.pure(exchange)
   }
@@ -35,9 +36,10 @@ trait Service extends HttpHandler {
                                      tags: List[String] = Nil,
                                      operationId: Option[String] = None,
                                      requestSchema: Option[Schema] = None,
-                                     responseSchema: Option[Schema] = None)
+                                     responseSchema: Option[Schema] = None,
+                                     errorResponses: Map[String, OpenAPIResponse] = Map.empty)
                                     (call: ServiceRequest[Request] => Task[ServiceResponse[Response]])
-                                    (implicit requestRW: RW[Request], responseRW: RW[Response]): ServiceCall = {
+                                    (using requestRW: RW[Request], responseRW: RW[Response]): ServiceCall = {
     TypedServiceCall[Request, Response](
       call = call,
       method = method,
@@ -51,7 +53,8 @@ trait Service extends HttpHandler {
       requestRW = requestRW,
       responseRW = responseRW,
       requestSchema = requestSchema,
-      responseSchema = responseSchema
+      responseSchema = responseSchema,
+      errorResponses = errorResponses
     )
   }
 }

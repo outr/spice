@@ -6,7 +6,7 @@ import spice.http.HttpExchange
 import spice.net.URLPath
 
 case class PathFilter(path: URLPath) extends ConnectionFilter {
-  override def apply(exchange: HttpExchange)(implicit mdc: MDC): Task[FilterResponse] = Task {
+  override def apply(exchange: HttpExchange)(using mdc: MDC): Task[FilterResponse] = Task {
     if (path == exchange.request.url.path) {
       val args = path.extractArguments(exchange.request.url.path)
       if (args.nonEmpty) {

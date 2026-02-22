@@ -1,7 +1,7 @@
 package spice.net
 
-import fabric.rw._
-import spice.net.URLPathPart._
+import fabric.rw.*
+import spice.net.URLPathPart.*
 
 import java.util.regex.Pattern
 
@@ -95,7 +95,7 @@ case class URLPath(parts: List[URLPathPart]) {
 }
 
 object URLPath {
-  implicit val rw: RW[URLPath] = RW.string[URLPath](
+  given rw: RW[URLPath] = RW.string[URLPath](
     asString = _.encoded,
     fromString = (s: String) => parse(s)
   )

@@ -3,7 +3,7 @@ package spice.net
 import fabric.define.DefType
 
 import scala.util.matching.Regex
-import fabric.rw._
+import fabric.rw.*
 
 import scala.collection.mutable
 
@@ -16,15 +16,30 @@ case class URL(protocol: Protocol = Protocol.Http,
   lazy val hostParts: Vector[String] = host.split('.').toVector
   lazy val ip: Option[IP] = IP.fromString(host)
   lazy val tld: Option[String] = if (hostParts.length > 1 && ip.isEmpty) {
-    Some(hostParts.last)
+    // Check for multi-part TLDs like co.uk, com.au, org.uk
+    if (hostParts.length > 2) {
+      val secondToLast = hostParts(hostParts.length - 2)
+      val last = hostParts.last
+      if (URL.SecondLevelPrefixes.contains(secondToLast.toLowerCase) && TopLevelDomains.isValid(last)) {
+        Some(s"$secondToLast.$last")
+      } else {
+        Some(last)
+      }
+    } else {
+      Some(hostParts.last)
+    }
   } else {
     None
   }
-  // TODO: Update domain to properly represent hostname when tld is longer than one part
   lazy val domain: String = if (ip.nonEmpty) {
     host
   } else {
-    hostParts.takeRight(2).mkString(".")
+    tld match {
+      case Some(t) =>
+        val tldParts = t.count(_ == '.') + 1
+        hostParts.takeRight(tldParts + 1).mkString(".")
+      case None => host
+    }
   }
 
   def replaceBase(base: String): URL = URL.parse(s"$base${encoded.pathAndArgs}")
@@ -140,7 +155,7 @@ case class URL(protocol: Protocol = Protocol.Http,
 }
 
 object URL {
-  implicit val rw: RW[URL] = RW.from(_.toString.json, v => parse(v.asStr.value), DefType.Str)
+  given rw: RW[URL] = RW.from(_.toString.json, v => parse(v.asStr.value), DefType.Str)
 
   def build(protocol: String,
             host: String,
@@ -165,6 +180,13 @@ object URL {
     s = url,
     validateTLD = validateTLD,
     defaultProtocol = defaultProtocol
+  )
+
+  // Common second-level domain prefixes that form multi-part TLDs (e.g., co.uk, com.au)
+  private[net] val SecondLevelPrefixes: Set[String] = Set(
+    "co", "com", "org", "net", "gov", "edu", "ac", "mil", "gen", "nom",
+    "sch", "biz", "info", "pro", "int", "coop", "jobs", "mobi", "travel",
+    "idv", "game", "club", "or", "ne", "go", "gob", "nic"
   )
 
   private val unreservedCharacters = Set('A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M', 'N', 'O', 'P',

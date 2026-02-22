@@ -1,8 +1,8 @@
 package spice.http
 
-import fabric._
+import fabric.*
 import fabric.define.DefType
-import fabric.rw._
+import fabric.rw.*
 import spice.UserException
 
 sealed abstract class HttpMethod private(val value: String) {
@@ -20,7 +20,7 @@ sealed abstract class HttpMethod private(val value: String) {
 object HttpMethod {
   private var map = Map.empty[String, HttpMethod]
 
-  implicit val rw: RW[HttpMethod] = RW.string(
+  given rw: RW[HttpMethod] = RW.string(
     asString = _.value,
     fromString = apply
   )

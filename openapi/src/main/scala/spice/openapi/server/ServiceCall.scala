@@ -1,16 +1,16 @@
 package spice.openapi.server
 
-import rapid._
-import fabric._
+import rapid.*
+import fabric.*
 import fabric.define.DefType
 import fabric.io.JsonParser
-import fabric.rw._
+import fabric.rw.*
 import scribe.mdc.MDC
 import spice.http.{HttpExchange, HttpMethod}
 import spice.http.server.BasePath
 import spice.http.server.handler.HttpHandler
 import spice.http.server.rest.Restful
-import spice.net._
+import spice.net.*
 import spice.openapi.{OpenAPIContent, OpenAPIContentType, OpenAPIPathEntry, OpenAPIRequestBody, OpenAPIResponse, OpenAPISchema}
 
 import scala.util.Try
@@ -26,18 +26,19 @@ trait ServiceCall extends HttpHandler {
   def tags: List[String] = Nil
   def operationId: Option[String] = None
   def successDescription: String
+  def errorResponses: Map[String, OpenAPIResponse] = Map.empty
 
   def service: Service
 
-  implicit def requestRW: RW[Request]
-  implicit def responseRW: RW[Response]
+  given requestRW: RW[Request]
+  given responseRW: RW[Response]
 
   def requestSchema: Option[Schema]
   def responseSchema: Option[Schema]
 
-  def apply(request: ServiceRequest[Request])(implicit mdc: MDC): Task[ServiceResponse[Response]]
+  def apply(request: ServiceRequest[Request])(using mdc: MDC): Task[ServiceResponse[Response]]
 
-  override def handle(exchange: HttpExchange)(implicit mdc: MDC): Task[HttpExchange] = {
+  override def handle(exchange: HttpExchange)(using mdc: MDC): Task[HttpExchange] = {
     // Merge the base path of the listener (if defined) to the service path
     val actualPath = BasePath.get(exchange) match {
       case Some(basePath) => basePath.merge(service.path)
@@ -101,8 +102,7 @@ trait ServiceCall extends HttpHandler {
             }*
           )
         )
-        // TODO: Support errors
-      )
+      ) ++ errorResponses
     ))
   }
 

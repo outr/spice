@@ -1,6 +1,6 @@
 package spice.openapi
 
-import fabric.rw._
+import fabric.rw.*
 
 case class OpenAPIPathEntry(summary: String,
                             description: String,
@@ -10,5 +10,5 @@ case class OpenAPIPathEntry(summary: String,
                             responses: Map[String, OpenAPIResponse])
 
 object OpenAPIPathEntry {
-  implicit val rw: RW[OpenAPIPathEntry] = RW.gen
+  given rw: RW[OpenAPIPathEntry] = RW.gen
 }

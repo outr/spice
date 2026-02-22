@@ -2,9 +2,10 @@ package spice.http.client
 
 import moduload.Moduload
 import rapid.Task
-import spice.http._
-import spice.http.content._
-import spice.streamer._
+import spice.http.*
+import spice.http.content.*
+import spice.streamer.*
+import spice.streamer.given
 
 import java.util.concurrent.atomic.AtomicLong
 import scala.collection.mutable

@@ -1,6 +1,6 @@
 package spice.openapi
 
-import fabric.rw._
+import fabric.rw.*
 
 case class OpenAPIParameter(description: String,
                             name: String,
@@ -9,5 +9,5 @@ case class OpenAPIParameter(description: String,
                             schema: OpenAPISchema)
 
 object OpenAPIParameter {
-  implicit val rw: RW[OpenAPIParameter] = RW.gen
+  given rw: RW[OpenAPIParameter] = RW.gen
 }

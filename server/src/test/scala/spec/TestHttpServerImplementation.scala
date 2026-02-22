@@ -1,6 +1,6 @@
 package spec
 
-import rapid._
+import rapid.*
 import moduload.Moduload
 import spice.http.server.{HttpServer, HttpServerImplementation, HttpServerImplementationManager}
 

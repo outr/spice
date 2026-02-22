@@ -1,9 +1,9 @@
 package spice.util
 
-import rapid._
+import rapid.*
 
 import java.util.concurrent.atomic.AtomicLong
-import scala.concurrent.duration._
+import scala.concurrent.duration.*
 
 case class BufferManager(checkEvery: FiniteDuration = 10.seconds,
                          triggerAfter: Int = 100,

@@ -2,7 +2,7 @@ package spec
 
 import org.scalatest.matchers.should.Matchers
 import org.scalatest.wordspec.AnyWordSpec
-import spice.net._
+import spice.net.*
 
 class EmailAddressSpec extends AnyWordSpec with Matchers {
   "EmailAddress" when {

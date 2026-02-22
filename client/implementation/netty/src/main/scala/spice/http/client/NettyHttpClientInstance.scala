@@ -1,15 +1,15 @@
 package spice.http.client
 
 import io.netty.buffer.{ByteBuf, Unpooled}
-import io.netty.channel._
+import io.netty.channel.*
 import io.netty.channel.nio.NioIoHandler
 import io.netty.channel.pool.SimpleChannelPool
 import io.netty.handler.proxy.{HttpProxyHandler, Socks5ProxyHandler}
-import io.netty.handler.codec.http.{DefaultFullHttpRequest, HttpClientCodec, HttpContent, HttpContentDecompressor, HttpHeaderNames, HttpHeaderValues, HttpHeaders, HttpObject, HttpVersion, LastHttpContent, HttpMethod => NettyHttpMethod, HttpRequest => NettyHttpRequest, HttpResponse => NettyHttpResponse}
-import io.netty.util.concurrent.{Future => NettyFuture}
+import io.netty.handler.codec.http.{DefaultFullHttpRequest, HttpClientCodec, HttpContent, HttpContentDecompressor, HttpHeaderNames, HttpHeaderValues, HttpHeaders, HttpObject, HttpVersion, LastHttpContent, HttpMethod as NettyHttpMethod, HttpRequest as NettyHttpRequest, HttpResponse as NettyHttpResponse}
+import io.netty.util.concurrent.{Future as NettyFuture}
 import rapid.Task
-import spice.http.{HttpRequest, HttpResponse, _}
-import spice.http.content._
+import spice.http.{HttpRequest, HttpResponse, *}
+import spice.http.content.*
 import spice.net.{ContentType, Protocol, URL}
 import fabric.io.JsonFormatter
 import io.netty.bootstrap.Bootstrap
@@ -18,7 +18,7 @@ import io.netty.handler.ssl.SslContextBuilder
 import io.netty.handler.ssl.util.InsecureTrustManagerFactory
 import io.netty.handler.timeout.{IdleStateEvent, IdleStateHandler, ReadTimeoutException, ReadTimeoutHandler, WriteTimeoutHandler}
 import rapid.task.Completable
-import scribe._
+import scribe.*
 import spice.http.content.FormDataEntry.{FileEntry, StringEntry}
 
 import java.io.{ByteArrayOutputStream, File, FileOutputStream}
@@ -27,7 +27,7 @@ import java.nio.charset.StandardCharsets
 import java.util.concurrent.TimeoutException
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.TimeUnit
-import scala.jdk.CollectionConverters._
+import scala.jdk.CollectionConverters.*
 import scala.util.{Failure, Success, Try}
 
 class NettyHttpClientInstance(val client: HttpClient) extends HttpClientInstance {

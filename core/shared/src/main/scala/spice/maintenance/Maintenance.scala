@@ -3,7 +3,7 @@ package spice.maintenance
 import rapid.Task
 
 import java.util.{Calendar, TimeZone}
-import scala.concurrent.duration._
+import scala.concurrent.duration.*
 
 object Maintenance {
   def schedule(name: String,

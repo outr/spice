@@ -1,20 +1,21 @@
 package spec
 
-import rapid._
-import fabric.rw._
+import rapid.*
+import fabric.rw.*
 import org.scalatest.matchers.should.Matchers
 import org.scalatest.wordspec.{AnyWordSpec, AsyncWordSpec}
 import profig.Profig
 import scribe.mdc.MDC
 import spice.ValidationError
 import spice.http.client.HttpClient
-import spice.http._
+import spice.http.*
 import spice.http.content.Content
 import spice.http.server.MutableHttpServer
 import spice.http.server.config.HttpServerListener
-import spice.http.server.dsl._
+import spice.http.server.dsl.*
+import spice.http.server.dsl.given
 import spice.http.server.rest.{Restful, RestfulResponse}
-import spice.net._
+import spice.net.*
 
 class UndertowServerSpec extends AnyWordSpec with Matchers {
   "UndertowServerSpec" should {
@@ -135,18 +136,18 @@ class UndertowServerSpec extends AnyWordSpec with Matchers {
   case class ReverseRequest(value: String)
 
   object ReverseRequest {
-    implicit val rw: RW[ReverseRequest] = RW.gen
+    given rw: RW[ReverseRequest] = RW.gen
   }
 
   case class ReverseResponse(reversed: Option[String], errors: List[ValidationError])
 
   object ReverseResponse {
-    implicit val rw: RW[ReverseResponse] = RW.gen
+    given rw: RW[ReverseResponse] = RW.gen
   }
 
   object ReverseService extends Restful[ReverseRequest, ReverseResponse] {
     override def apply(exchange: HttpExchange, request: ReverseRequest)
-                      (implicit mdc: MDC): Task[RestfulResponse[ReverseResponse]] = {
+                      (using mdc: MDC): Task[RestfulResponse[ReverseResponse]] = {
       Task.pure(RestfulResponse(ReverseResponse(Some(request.value.reverse), Nil), HttpStatus.OK))
     }
 
@@ -157,7 +158,7 @@ class UndertowServerSpec extends AnyWordSpec with Matchers {
 
   object LettersOnlyService extends Restful[String, String] {
     override def apply(exchange: HttpExchange, text: String)
-                      (implicit mdc: MDC): Task[RestfulResponse[String]] = {
+                      (using mdc: MDC): Task[RestfulResponse[String]] = {
       Task.pure(RestfulResponse[String](text.filter((c: Char) => c.isLetter), HttpStatus.OK))
     }
 
@@ -167,7 +168,7 @@ class UndertowServerSpec extends AnyWordSpec with Matchers {
 
   object ServerTimeService extends Restful[Unit, Long] {
     override def apply(exchange: HttpExchange, request: Unit)
-                      (implicit mdc: MDC): Task[RestfulResponse[Long]] = {
+                      (using mdc: MDC): Task[RestfulResponse[Long]] = {
       Task.pure(RestfulResponse(System.currentTimeMillis(), HttpStatus.OK))
     }
 

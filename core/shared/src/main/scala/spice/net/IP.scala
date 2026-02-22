@@ -1,6 +1,6 @@
 package spice.net
 
-import fabric.rw._
+import fabric.rw.*
 import spice.UserException
 
 import scala.util.Try
@@ -19,7 +19,7 @@ sealed trait IP {
 }
 
 object IP {
-  implicit val rw: RW[IP] = RW.string[IP](
+  given rw: RW[IP] = RW.string[IP](
     asString = (ip: IP) => ip.addressString,
     fromString = (s: String) => fromString(s).getOrElse(throw UserException(s"Invalid IP address: $s"))
   )

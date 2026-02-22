@@ -9,7 +9,7 @@ case class SenderHandler(content: Content,
                          length: Option[Long] = None,
                          caching: CachingManager = CachingManager.Default,
                          replace: Boolean = false) extends HttpHandler {
-  override def handle(exchange: HttpExchange)(implicit mdc: MDC): Task[HttpExchange] =
+  override def handle(exchange: HttpExchange)(using mdc: MDC): Task[HttpExchange] =
     SenderHandler.handle(exchange, content, length, caching, replace)
 }
 

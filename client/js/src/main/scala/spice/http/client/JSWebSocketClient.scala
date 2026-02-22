@@ -1,13 +1,13 @@
 package spice.http.client
 
-import org.scalajs.dom.{Blob, Event, MessageEvent, WebSocket => WS}
+import org.scalajs.dom.{Blob, Event, MessageEvent, WebSocket as WS}
 import rapid.{Fiber, Task}
 import spice.http.{ByteBufferData, ConnectionStatus, WebSocket}
 import spice.net.URL
 
 import scala.concurrent.ExecutionContext
-import scala.scalajs.js.typedarray.TypedArrayBufferOps._
-import scala.scalajs.js.typedarray._
+import scala.scalajs.js.typedarray.TypedArrayBufferOps.*
+import scala.scalajs.js.typedarray.*
 
 class JSWebSocketClient(url: URL) extends WebSocket {
   private lazy val webSocket: WS = new WS(url.toString)

@@ -1,12 +1,12 @@
 package spice.http.server.undertow
 
-import rapid._
+import rapid.*
 import io.undertow.{Undertow, UndertowOptions}
 import io.undertow.predicate.Predicates
-import io.undertow.server.{HttpServerExchange, HttpHandler => UndertowHttpHandler}
+import io.undertow.server.{HttpServerExchange, HttpHandler as UndertowHttpHandler}
 import io.undertow.server.handlers.encoding.{ContentEncodingRepository, DeflateEncodingProvider, EncodingHandler, GzipEncodingProvider}
 import moduload.Moduload
-import reactify._
+import reactify.*
 import scribe.Logger
 import spice.http.server.config.{HttpServerListener, HttpsServerListener}
 import spice.http.{HttpExchange, HttpResponse}
@@ -107,7 +107,8 @@ class UndertowServerImplementation(server: HttpServer) extends HttpServerImpleme
 
       undertow.dispatch(new Runnable {
         override def run(): Unit = {
-          MDC { implicit mdc =>
+          MDC { mdc =>
+            given MDC = mdc
             mdc("url") = url
             val io = UndertowRequestParser(undertow, url).flatMap { request =>
               val exchange = HttpExchange(request)

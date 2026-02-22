@@ -3,7 +3,7 @@ package spice.http.client
 import okhttp3.{OkHttpClient, Request, Response, WebSocketListener}
 import okio.ByteString
 import rapid.Task
-import spice.http._
+import spice.http.*
 import spice.net.URL
 
 import scala.concurrent.duration.DurationInt

@@ -1,7 +1,7 @@
 package spice.http.server.handler
 
-import fabric._
-import fabric.rw._
+import fabric.*
+import fabric.rw.*
 import rapid.{Task, logger}
 import scribe.mdc.MDC
 import spice.{ExceptionType, UserException}
@@ -12,7 +12,7 @@ import spice.net.ContentType
 trait LifecycleHandler extends HttpHandler {
   protected def preHandle(exchange: HttpExchange): Task[HttpExchange]
 
-  protected def apply(exchange: HttpExchange)(implicit mdc: MDC): Task[HttpExchange]
+  protected def apply(exchange: HttpExchange)(using mdc: MDC): Task[HttpExchange]
 
   protected def postHandle(exchange: HttpExchange): Task[HttpExchange]
 
@@ -44,7 +44,7 @@ trait LifecycleHandler extends HttpHandler {
 
   protected def notFoundContent: Task[Content] = Task.pure(LifecycleHandler.DefaultNotFound)
 
-  override final def handle(exchange: HttpExchange)(implicit mdc: MDC): Task[HttpExchange] = {
+  override final def handle(exchange: HttpExchange)(using mdc: MDC): Task[HttpExchange] = {
     var currentExchange = exchange
     var state: LifecycleState = LifecycleState.Pre
     preHandle(exchange).flatMap { e =>

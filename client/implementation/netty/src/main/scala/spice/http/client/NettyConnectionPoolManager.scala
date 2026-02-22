@@ -1,13 +1,13 @@
 package spice.http.client
 
-import io.netty.channel.pool._
+import io.netty.channel.pool.*
 import io.netty.bootstrap.Bootstrap
-import io.netty.channel._
+import io.netty.channel.*
 import io.netty.channel.MultiThreadIoEventLoopGroup
 import io.netty.channel.nio.NioIoHandler
 import io.netty.channel.pool.FixedChannelPool.AcquireTimeoutAction
 import io.netty.channel.socket.nio.NioSocketChannel
-import io.netty.handler.codec.http._
+import io.netty.handler.codec.http.*
 import io.netty.handler.proxy.{HttpProxyHandler, Socks5ProxyHandler}
 import io.netty.handler.ssl.SslContextBuilder
 import io.netty.handler.ssl.util.InsecureTrustManagerFactory
@@ -15,7 +15,7 @@ import io.netty.handler.timeout.{IdleStateHandler, ReadTimeoutException, ReadTim
 import io.netty.util.AttributeKey
 import io.netty.util.concurrent.Future
 import rapid.task.Completable
-import scribe._
+import scribe.*
 import spice.http.HttpResponse
 
 import java.net.InetSocketAddress
@@ -150,7 +150,7 @@ class NettyConnectionPoolManager(
   }
 
   def close(): Unit = {
-    import scala.jdk.CollectionConverters._
+    import scala.jdk.CollectionConverters.*
     pools.values().asScala.foreach { pool =>
       pool.close()
     }

@@ -8,7 +8,7 @@ import scala.collection.mutable
 import scala.language.implicitConversions
 
 package object streamer {
-  implicit class InputStreamReader(input: InputStream) extends Reader {
+  class InputStreamReader(input: InputStream) extends Reader {
     override def length: Option[Long] = None
 
     override def read(buffer: Array[Byte]): Int = input.read(buffer)
@@ -16,7 +16,9 @@ package object streamer {
     override def close(): Unit = input.close()
   }
 
-  implicit def javaReader2Reader(reader: java.io.Reader): Reader = new Reader {
+  given Conversion[InputStream, InputStreamReader] = input => new InputStreamReader(input)
+
+  given Conversion[java.io.Reader, Reader] = reader => new Reader {
     override def length: Option[Long] = None
 
     override def read(buffer: Array[Byte]): Int = {
@@ -31,15 +33,15 @@ package object streamer {
     override def close(): Unit = reader.close()
   }
 
-  implicit def array2Reader(array: Array[Byte]): InputStreamReader = new InputStreamReader(new ByteArrayInputStream(array))
+  given array2Reader: Conversion[Array[Byte], InputStreamReader] = array => new InputStreamReader(new ByteArrayInputStream(array))
 
-  implicit def file2Reader(file: File): InputStreamReader = new InputStreamReader(new FileInputStream(file)) {
+  given file2Reader: Conversion[File, InputStreamReader] = file => new InputStreamReader(new FileInputStream(file)) {
     override def length: Option[Long] = Some(file.length())
   }
 
-  implicit def path2Reader(path: Path): InputStreamReader = file2Reader(path.toFile)
+  given path2Reader: Conversion[Path, InputStreamReader] = path => file2Reader(path.toFile)
 
-  implicit def url2Reader(url: URL): InputStreamReader = urlInputStream(url, Set.empty)
+  given url2Reader: Conversion[URL, InputStreamReader] = url => urlInputStream(url, Set.empty)
 
   @tailrec
   private def urlInputStream(url: URL, redirects: Set[String]): InputStreamReader = {
@@ -69,13 +71,13 @@ package object streamer {
     }
   }
 
-  implicit def youiURL2Reader(url: net.URL): InputStreamReader = url2Reader(new URI(url.toString).toURL)
+  given youiURL2Reader: Conversion[net.URL, InputStreamReader] = url => url2Reader(new URI(url.toString).toURL)
 
-  implicit def string2Reader(s: String): InputStreamReader = new InputStreamReader(new ByteArrayInputStream(s.getBytes)) {
+  given string2Reader: Conversion[String, InputStreamReader] = s => new InputStreamReader(new ByteArrayInputStream(s.getBytes)) {
     override def length: Option[Long] = Some(s.length)
   }
 
-  implicit class OutputStreamWriter(output: OutputStream) extends Writer {
+  class OutputStreamWriter(output: OutputStream) extends Writer {
     override def write(buffer: Array[Byte], offset: Int, length: Int): Unit = output.write(buffer, offset, length)
 
     override def flush(): Unit = output.flush()
@@ -85,7 +87,9 @@ package object streamer {
     override def complete(): Unit = {}
   }
 
-  implicit def file2Writer(file: File): OutputStreamWriter = {
+  given Conversion[OutputStream, OutputStreamWriter] = output => new OutputStreamWriter(output)
+
+  given file2Writer: Conversion[File, OutputStreamWriter] = file => {
     val temp = new File(file.getParentFile, s".${file.getName}.temp")
     new OutputStreamWriter(new FileOutputStream(temp)) {
       override def complete(): Unit = {
@@ -97,9 +101,9 @@ package object streamer {
     }
   }
 
-  implicit def path2Writer(path: Path): OutputStreamWriter = file2Writer(path.toFile)
+  given path2Writer: Conversion[Path, OutputStreamWriter] = path => file2Writer(path.toFile)
 
-  implicit class StringBuilderWriter(sb: mutable.StringBuilder) extends Writer {
+  class StringBuilderWriter(sb: mutable.StringBuilder) extends Writer {
     override def write(buffer: Array[Byte], offset: Int, length: Int): Unit = {
       sb.append(new String(buffer, offset, length))
     }
@@ -112,4 +116,6 @@ package object streamer {
 
     override def toString: String = sb.toString
   }
+
+  given Conversion[mutable.StringBuilder, StringBuilderWriter] = sb => new StringBuilderWriter(sb)
 }

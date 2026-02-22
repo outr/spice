@@ -3,10 +3,10 @@ package spec
 import org.scalatest.matchers.should.Matchers
 import org.scalatest.wordspec.AnyWordSpec
 
-import spice.net._
+import spice.net.*
 
-import fabric._
-import fabric.rw._
+import fabric.*
+import fabric.rw.*
 
 class IPSpec extends AnyWordSpec with Matchers {
   "IP" should {

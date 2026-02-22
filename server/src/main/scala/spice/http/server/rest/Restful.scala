@@ -1,8 +1,8 @@
 package spice.http.server.rest
 
-import rapid._
+import rapid.*
 import fabric.io.JsonParser
-import fabric.rw._
+import fabric.rw.*
 import fabric.{Json, Obj, Str, arr, obj, str}
 import profig.Profig
 import scribe.mdc.MDC
@@ -15,16 +15,17 @@ import spice.http.{HttpExchange, HttpMethod, HttpStatus}
 import spice.net.{ContentType, URL, URLPath}
 
 import scala.collection.mutable.ListBuffer
+import scala.concurrent.TimeoutException
 import scala.concurrent.duration.{Duration, DurationInt, FiniteDuration}
 import scala.language.experimental.macros
 
-abstract class Restful[Request, Response](implicit val requestRW: RW[Request],
+abstract class Restful[Request, Response](using val requestRW: RW[Request],
                                           val responseRW: RW[Response]) extends ConnectionFilter {
   protected def allowGet: Boolean = true
 
   def pathOption: Option[URLPath] = None
 
-  def apply(exchange: HttpExchange, request: Request)(implicit mdc: MDC): Task[RestfulResponse[Response]]
+  def apply(exchange: HttpExchange, request: Request)(using mdc: MDC): Task[RestfulResponse[Response]]
 
   def validations: List[RestfulValidation[Request]] = Nil
 
@@ -50,7 +51,7 @@ abstract class Restful[Request, Response](implicit val requestRW: RW[Request],
     RestfulResponse(response, status)
   }
 
-  override def apply(exchange: HttpExchange)(implicit mdc: MDC): Task[FilterResponse] = if (accept(exchange)) {
+  override def apply(exchange: HttpExchange)(using mdc: MDC): Task[FilterResponse] = if (accept(exchange)) {
     handle(exchange).map { e =>
       FilterResponse.Continue(e)
     }
@@ -72,7 +73,7 @@ abstract class Restful[Request, Response](implicit val requestRW: RW[Request],
     }
   }
 
-  override def handle(exchange: HttpExchange)(implicit mdc: MDC): Task[HttpExchange] = if (accept(exchange)) {
+  override def handle(exchange: HttpExchange)(using mdc: MDC): Task[HttpExchange] = if (accept(exchange)) {
     if (exchange.request.method == HttpMethod.Options) {
       exchange.modify { response =>
         Task {
@@ -105,8 +106,7 @@ abstract class Restful[Request, Response](implicit val requestRW: RW[Request],
                 case r: ExchangeRequest => r.withExchange(exchange).asInstanceOf[Request]
                 case _ => updatedRequest
               }
-              apply(exchange, updatedRequest)
-//                .timeout(timeout)                 // TODO: Fix!
+              Restful.withTimeout(apply(exchange, updatedRequest), timeout)
                 .handleError { throwable =>
                   Task(error(exchange, throwable))
                 }
@@ -152,7 +152,7 @@ object Restful {
       override def pathOption: Option[URLPath] = path
 
       override def apply(exchange: HttpExchange, request: Request)
-                        (implicit mdc: MDC): Task[RestfulResponse[Response]] = handler(request)
+                        (using mdc: MDC): Task[RestfulResponse[Response]] = handler(request)
         .map { response =>
           ok(response)
         }
@@ -228,6 +228,16 @@ object Restful {
           }
           json
       }
+  }
+
+  def withTimeout[T](task: Task[T], duration: FiniteDuration): Task[T] = {
+    val deadline = System.currentTimeMillis() + duration.toMillis
+    task.map { result =>
+      if (System.currentTimeMillis() > deadline) {
+        throw new TimeoutException(s"Task timed out after $duration")
+      }
+      result
+    }
   }
 
   def jsonFromURL(url: URL): Json = {

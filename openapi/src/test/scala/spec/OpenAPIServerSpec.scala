@@ -1,14 +1,14 @@
 package spec
 
-import fabric._
+import fabric.*
 import fabric.io.{JsonFormatter, JsonParser}
-import fabric.rw._
+import fabric.rw.*
 import org.scalatest.matchers.should.Matchers
 import org.scalatest.wordspec.{AnyWordSpec, AsyncWordSpec}
 import spice.http.content.JsonContent
 import spice.http.server.config.HttpsServerListener
 import spice.http.{HttpExchange, HttpMethod, HttpRequest}
-import spice.net._
+import spice.net.*
 import spice.openapi.server.{OpenAPIHttpServer, Service, ServiceCall}
 
 import java.nio.file.{Files, Paths}
@@ -95,13 +95,13 @@ class OpenAPIServerSpec extends AnyWordSpec with Matchers {
   case class User(name: String, `type`: UserType)
 
   object User {
-    implicit val rw: RW[User] = RW.gen
+    given rw: RW[User] = RW.gen
   }
 
   sealed trait UserType
 
   object UserType {
-    implicit val rw: RW[UserType] = RW.enumeration(List(Admin, Basic))
+    given rw: RW[UserType] = RW.enumeration(List(Admin, Basic))
 
     case object Admin extends UserType
     case object Basic extends UserType

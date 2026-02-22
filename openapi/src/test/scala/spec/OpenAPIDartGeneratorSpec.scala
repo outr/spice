@@ -1,10 +1,10 @@
 package spec
 
-import rapid._
-import fabric.rw._
+import rapid.*
+import fabric.rw.*
 import org.scalatest.matchers.should.Matchers
 import org.scalatest.wordspec.AnyWordSpec
-import spice.net._
+import spice.net.*
 import spice.openapi.generator.OpenAPIGeneratorConfig
 import spice.openapi.generator.dart.OpenAPIDartGenerator
 import spice.openapi.server.{OpenAPIHttpServer, RestService, Service}
@@ -140,25 +140,25 @@ class OpenAPIDartGeneratorSpec extends AnyWordSpec with Matchers {
   case class ListRequest(filter: Option[Filter], direction: SortDirection)
 
   object ListRequest {
-    implicit val rw: RW[ListRequest] = RW.gen
+    given rw: RW[ListRequest] = RW.gen
   }
 
   case class ListResponse(results: List[String])
 
   object ListResponse {
-    implicit val rw: RW[ListResponse] = RW.gen
+    given rw: RW[ListResponse] = RW.gen
   }
 
   case class Filter(regex: String)
 
   object Filter {
-    implicit val rw: RW[Filter] = RW.gen
+    given rw: RW[Filter] = RW.gen
   }
 
   sealed trait SortDirection
 
   object SortDirection {
-    implicit val rw: RW[SortDirection] = RW.enumeration(List(Ascending, Descending))
+    given rw: RW[SortDirection] = RW.enumeration(List(Ascending, Descending))
 
     case object Ascending extends SortDirection
     case object Descending extends SortDirection

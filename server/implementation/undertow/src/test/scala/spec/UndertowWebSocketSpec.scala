@@ -1,7 +1,7 @@
 package spec
 
-import rapid._
-import org.scalatest.concurrent.Eventually._
+import rapid.*
+import org.scalatest.concurrent.Eventually.*
 import org.scalatest.matchers.should.Matchers
 import org.scalatest.time.{Seconds, Span}
 import org.scalatest.wordspec.{AnyWordSpec, AsyncWordSpec}
@@ -9,9 +9,10 @@ import spice.http.client.HttpClient
 import spice.http.{ConnectionStatus, HttpExchange, WebSocket, WebSocketListener}
 import spice.http.server.StaticHttpServer
 import spice.http.server.config.HttpServerListener
-import spice.http.server.dsl._
+import spice.http.server.dsl.*
+import spice.http.server.dsl.given
 import spice.http.server.handler.{HttpHandler, WebSocketHandler}
-import spice.net._
+import spice.net.*
 
 class UndertowWebSocketSpec extends AnyWordSpec with Matchers {
   private var webSocketClient: WebSocket = _

@@ -15,7 +15,7 @@ object UserException {
   def apply(message: String,
             code: Option[Int] = None,
             `type`: ExceptionType = ExceptionType.Warn,
-            cause: Throwable = null)(implicit file: sourcecode.File,
+            cause: Throwable = null)(using file: sourcecode.File,
                                      line: sourcecode.Line,
                                      enclosing: sourcecode.Enclosing): UserException = {
     val caller = s"${file.value}:${line.value} (${enclosing.value})"

@@ -2,11 +2,11 @@ package spice.http.client
 
 import io.netty.bootstrap.Bootstrap
 import io.netty.buffer.Unpooled
-import io.netty.channel._
+import io.netty.channel.*
 import io.netty.channel.nio.NioIoHandler
 import io.netty.channel.socket.nio.NioSocketChannel
-import io.netty.handler.codec.http._
-import io.netty.handler.codec.http.websocketx._
+import io.netty.handler.codec.http.*
+import io.netty.handler.codec.http.websocketx.*
 import io.netty.handler.ssl.SslContextBuilder
 import io.netty.handler.ssl.util.InsecureTrustManagerFactory
 import io.netty.handler.codec.http.websocketx.WebSocketClientProtocolHandler.ClientHandshakeStateEvent
