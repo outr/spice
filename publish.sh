@@ -2,8 +2,8 @@
 
 set -e
 
-sbt +clean
-sbt +compile
-sbt +test
-sbt +publishSigned
+sbt clean
+sbt Test/compile
+sbt test
+sbt publishSigned
 sbt sonatypeBundleRelease

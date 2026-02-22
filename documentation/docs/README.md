@@ -569,12 +569,3 @@ libraryDependencies += "com.outr" %%% "spice-client" % "@VERSION@"
 ```
 
 URL parsing, content types, headers, and all core HTTP types work identically on both platforms.
-
-## 1.0 Checklist
-
-- [X] OpenAPI-focused DSL for endpoints
-  - [X] Practical example application fully tested
-- [X] Production middleware (CORS, auth, rate limiting, security headers)
-- [X] Structured error handling with content negotiation
-- [X] Multi-part TLD support in URL parsing
-- [X] MDoc documentation
