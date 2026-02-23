@@ -14,7 +14,7 @@ object Encoder {
     'w', 'x', 'y', 'z', '0', '1', '2', '3', '4', '5', '6', '7', '8', '9',
     '-', '_', '.', '~',                       // unreserved
     '!', '$', '&', '\'', '(', ')', '*', '+',  // sub-delims
-    ',', ';', '=',                             // sub-delims (continued)
+    ';', '=',                                   // sub-delims (continued)
     ':', '@',                                  // pchar extras
     '{', '}'                                   // URI template support
   )
