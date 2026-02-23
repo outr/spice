@@ -1,6 +1,6 @@
 package spice.ajax
 
-import org.scalajs.dom.XMLHttpRequest
+import org.scalajs.dom.{FormData, XMLHttpRequest}
 import rapid.Task
 import scribe.Logging
 import spice.http.HttpMethod
@@ -19,7 +19,7 @@ class AjaxManager(val maxConcurrent: Int) extends Logging {
 
   def enqueue(url: URL,
               method: HttpMethod = HttpMethod.Post,
-              data: Option[String] = None,
+              data: Option[FormData | String] = None,
               timeout: Int = 0,
               headers: Map[String, String] = Map.empty,
               withCredentials: Boolean = true,

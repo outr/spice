@@ -1,7 +1,7 @@
 package spice.ajax
 
 import org.scalajs.dom
-import org.scalajs.dom.{ProgressEvent, XMLHttpRequest}
+import org.scalajs.dom.{FormData, ProgressEvent, XMLHttpRequest}
 import rapid.Task
 import rapid.task.Completable
 import reactify.*
@@ -14,7 +14,7 @@ import scala.util.{Failure, Success, Try}
 
 class AjaxRequest(url: URL,
                   method: HttpMethod = HttpMethod.Post,
-                  data: Option[String] = None,
+                  data: Option[FormData | String] = None,
                   timeout: Int = 0,
                   headers: Map[String, String] = Map.empty,
                   withCredentials: Boolean = true,
