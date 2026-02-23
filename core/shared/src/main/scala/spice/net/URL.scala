@@ -2,7 +2,6 @@ package spice.net
 
 import fabric.define.DefType
 
-import scala.util.matching.Regex
 import fabric.rw.*
 
 import scala.collection.mutable
@@ -189,33 +188,9 @@ object URL {
     "idv", "game", "club", "or", "ne", "go", "gob", "nic"
   )
 
-  private val unreservedCharacters = Set('A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M', 'N', 'O', 'P',
-    'Q', 'R', 'S', 'T', 'U', 'V', 'W', 'X', 'Y', 'Z', 'a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'k', 'l', 'm',
-    'n', 'o', 'p', 'q', 'r', 's', 't', 'u', 'v', 'w', 'x', 'y', 'z', '0', '1', '2', '3', '4', '5', '6', '7', '8', '9',
-    '-', '_', '.', '~', '+', '='
-  )
+  def encode(part: String): String = Encoder(part)
 
-  private val encodedRegex = """%([a-zA-Z0-9]{2})""".r
-
-  def encode(part: String): String = part.map {
-    case c if unreservedCharacters.contains(c) => c
-    case c => s"%${c.toLong.toHexString.toUpperCase}"
-  }.mkString
-
-  def decode(part: String): String = try {
-    encodedRegex.replaceAllIn(part.replace("\\", "\\\\"), (m: Regex.Match) => {
-      val g = m.group(1)
-      val code = Integer.parseInt(g, 16)
-      val c = code.toChar
-      if (c == '\\') {
-        "\\\\"
-      } else {
-        c.toString
-      }
-    })
-  } catch {
-    case t: Throwable => throw new RuntimeException(s"Failed to decode: [$part]", t)
-  }
+  def decode(part: String): String = Decoder(part)
 
   def unapply(url: String): Option[URL] = get(url).toOption
 }
