@@ -190,10 +190,13 @@ object WebServer extends StaticHttpServer {
   )
 }
 
-// Start the server
-WebServer.start().sync()
-// Block until the server stops
-WebServer.whileRunning().sync()
+// Start the server and block until it stops (JVM only)
+val program = for {
+  _ <- WebServer.start()
+  _ <- WebServer.whileRunning()
+} yield ()
+
+program.sync()
 ```
 
 ### CORS Support
@@ -232,28 +235,32 @@ import spice.http.client.HttpClient
 import spice.net.*
 
 // Simple GET request
-val response = HttpClient
+HttpClient
   .url(url"https://httpbin.org/get")
   .get
   .send()
-  .sync()
+  .map { response =>
+    println(s"Status: ${response.status}")
+  }
+  .start()
 
-println(s"Status: ${response.status}")
-
-// POST with JSON body and type-safe response parsing
+// Typed response with for-comprehension
 case class Todo(userId: Int, id: Int, title: String, completed: Boolean)
 object Todo {
   given rw: RW[Todo] = RW.gen
 }
 
-val todo = HttpClient
-  .url(url"https://jsonplaceholder.typicode.com/todos/1")
-  .get
-  .call[Todo]
-  .sync()
-
-println(s"Todo: ${todo.title}")
+val fiber = (for {
+  todo <- HttpClient
+    .url(url"https://jsonplaceholder.typicode.com/todos/1")
+    .get
+    .call[Todo]
+} yield {
+  println(s"Todo: ${todo.title}")
+}).start()
 ```
+
+> **Note:** `.start()` launches the task asynchronously and works on both JVM and Scala.js. Use `.sync()` only on the JVM when you need to block the current thread (e.g., keeping a server's main thread alive).
 
 ### Restful Client Calls
 
@@ -275,12 +282,15 @@ object PostResponse {
   given rw: RW[PostResponse] = RW.gen
 }
 
-val result = HttpClient
+HttpClient
   .url(url"https://jsonplaceholder.typicode.com/posts")
   .restful[CreatePost, PostResponse](
     CreatePost("My Post", "Post content", 1)
   )
-  .sync()
+  .map { result =>
+    println(s"Created post with id: ${result.id}")
+  }
+  .start()
 ```
 
 ### Client Configuration
@@ -424,6 +434,70 @@ object SecureServer extends StaticHttpServer with CORSSupport {
     }
   )
 }
+```
+
+### Full-Stack Authentication Example
+
+**Server (JVM):**
+
+```scala
+import rapid.*
+import spice.http.server.*
+import spice.http.server.dsl.*
+import spice.http.server.dsl.given
+import spice.http.server.handler.HttpHandler
+import spice.http.server.middleware.*
+import spice.http.content.Content
+import spice.http.HttpMethod
+import spice.net.*
+
+object AuthServer extends StaticHttpServer {
+  val bearerAuth = AuthenticationFilter(
+    BearerAuthenticator { token =>
+      // Look up user by token — return Some(principal) if valid
+      Task.pure(if (token == "my-secret-token") Some("alice") else None)
+    }
+  )
+
+  override protected val handler: HttpHandler = filters(
+    // Public endpoint
+    HttpMethod.Get / "health" / Content.string("ok", ContentType.`text/plain`),
+
+    // Protected endpoint — requires valid bearer token
+    bearerAuth / HttpMethod.Get / "api" / "profile" / ActionFilter { exchange =>
+      val user = AuthenticationFilter.principal(exchange).getOrElse("unknown")
+      exchange.modify { response =>
+        Task.pure(response.withContent(
+          Content.string(s"""{"user":"$user"}""", ContentType.`application/json`)
+        ))
+      }
+    }
+  )
+}
+```
+
+**Client (Scala.js or JVM):**
+
+```scala
+import rapid.*
+import fabric.rw.*
+import spice.http.client.HttpClient
+import spice.net.*
+
+case class Profile(user: String)
+object Profile {
+  given rw: RW[Profile] = RW.gen
+}
+
+HttpClient
+  .url(url"http://localhost:8080/api/profile")
+  .header("Authorization", "Bearer my-secret-token")
+  .get
+  .call[Profile]
+  .map { profile =>
+    println(s"Logged in as: ${profile.user}")
+  }
+  .start()
 ```
 
 ### Metrics Hooks
@@ -590,9 +664,10 @@ ws.receive.text.attach { message =>
   println(s"Received: $message")
 }
 
-// Connect and send
-ws.connect().sync()
-ws.send.text @= "Hello, WebSocket!"
+// Connect and send a message
+ws.connect().map { _ =>
+  ws.send.text @= "Hello, WebSocket!"
+}.start()
 ```
 
 ## Content Types
@@ -608,7 +683,7 @@ val textContent = Content.string("Hello!", ContentType.`text/plain`)
 // textContent: Content = StringContent(
 //   value = "Hello!",
 //   contentType = ContentType(type = "text", subType = "plain", extras = Map()),
-//   lastModified = 1771861930792L
+//   lastModified = 1772027335673L
 // )
 
 // JSON content
@@ -622,7 +697,7 @@ val jsonContent = Content.json(obj("message" -> str("Hello"), "count" -> num(42)
 //     subType = "json",
 //     extras = Map()
 //   ),
-//   lastModified = 1771861930796L
+//   lastModified = 1772027335677L
 // )
 ```
 
@@ -646,3 +721,52 @@ libraryDependencies += "com.outr" %%% "spice-client" % "1.1.0"
 ```
 
 URL parsing, content types, headers, and all core HTTP types work identically on both platforms.
+
+### Making HTTP Requests from Scala.js
+
+Client code uses `.start()` to run tasks asynchronously, which works on both JVM and Scala.js:
+
+```scala
+import rapid.*
+import fabric.rw.*
+import spice.http.client.HttpClient
+import spice.net.*
+
+case class Todo(userId: Int, id: Int, title: String, completed: Boolean)
+object Todo {
+  given rw: RW[Todo] = RW.gen
+}
+
+// GET with typed response
+HttpClient
+  .url(url"https://jsonplaceholder.typicode.com/todos/1")
+  .get
+  .call[Todo]
+  .map { todo =>
+    println(s"Todo: ${todo.title}, completed: ${todo.completed}")
+  }
+  .start()
+
+// POST with JSON body
+case class CreatePost(title: String, body: String, userId: Int)
+object CreatePost {
+  given rw: RW[CreatePost] = RW.gen
+}
+
+case class PostResponse(id: Int, title: String, body: String, userId: Int)
+object PostResponse {
+  given rw: RW[PostResponse] = RW.gen
+}
+
+HttpClient
+  .url(url"https://jsonplaceholder.typicode.com/posts")
+  .restful[CreatePost, PostResponse](
+    CreatePost("My Post", "Post content", 1)
+  )
+  .map { post =>
+    println(s"Created post #${post.id}: ${post.title}")
+  }
+  .start()
+```
+
+> **Note:** `.sync()` blocks the current thread and will throw on Scala.js for async tasks (like HTTP requests). Use `.start()` for cross-platform code. Only use `.sync()` on the JVM when you need to block (e.g., keeping a server's main thread alive).
