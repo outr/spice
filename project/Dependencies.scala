@@ -10,7 +10,7 @@ object Dependencies {
     
     val reactify: String = "4.2.0"
 
-    val rapid: String = "2.7.1"
+    val rapid: String = "2.8.0"
     
     val literally: String = "1.2.0"
     
@@ -35,7 +35,6 @@ object Dependencies {
 	val fabricParse: ModuleID = "org.typelevel" %% "fabric-io" % version.fabric
 	val reactify: ModuleID = "com.outr" %% "reactify" % version.reactify
   val rapid: ModuleID = "com.outr" %% "rapid-core" % version.rapid
-  val rapidScribe: ModuleID = "com.outr" %% "rapid-scribe" % version.rapid
 	val literally: ModuleID = "org.typelevel" %% "literally" % version.literally
 	val okHttp: ModuleID = "com.squareup.okhttp3" % "okhttp-jvm" % version.okHttp
   val nettyCodecHttp: ModuleID = "io.netty" % "netty-codec-http" % version.netty

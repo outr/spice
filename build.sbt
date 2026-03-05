@@ -1,6 +1,6 @@
 name := "spice"
 ThisBuild / organization := "com.outr"
-ThisBuild / version := "1.2.0"
+ThisBuild / version := "1.2.1"
 
 val scala3: String = "3.8.2"
 
@@ -60,7 +60,7 @@ lazy val core = crossProject(JSPlatform, JVMPlatform)
 		name := "spice-core",
 		description := "Core functionality leveraged and shared by most other sub-projects of Spice.",
 		libraryDependencies ++= Seq(
-			dep.profig, dep.scribe, dep.fabricParse, dep.reactify, dep.rapid, dep.rapidScribe,
+			dep.profig, dep.scribe, dep.fabricParse, dep.reactify, dep.rapid,
 			dep.literally, dep.moduload,
 			dep.scalaTest
 		)
