@@ -392,7 +392,7 @@ case class OpenAPIDartGenerator(api: OpenAPI, config: OpenAPIGeneratorConfig) ex
         case Some(_) =>
           s"""@override Map<String, dynamic> toJson() {
              |    Map<String, dynamic> map = _$$${typeName}ToJson(this);
-             |    map['type'] = '$rawTypeName';
+             |    map['type'] = '${config.discriminatorValue(rawTypeName)}';
              |    return map;
              |  }""".stripMargin
         case None => s"Map<String, dynamic> toJson() => _$$${typeName}ToJson(this);"
@@ -590,7 +590,8 @@ case class OpenAPIDartGenerator(api: OpenAPI, config: OpenAPIGeneratorConfig) ex
         }.mkString("\n")
         val fromJson = children.zip(typedChildren).map {
           case (child, typed) =>
-            s"""if (t == '$child') {
+            val discriminator = config.discriminatorValue(child)
+            s"""if (t == '$discriminator') {
                |      return $typed.fromJson(json);
                |    }""".stripMargin
         }.mkString("    ", " else ",

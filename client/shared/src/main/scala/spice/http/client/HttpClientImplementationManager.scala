@@ -1,5 +1,0 @@
-package spice.http.client
-
-import spice.ImplementationManager
-
-object HttpClientImplementationManager extends ImplementationManager[HttpClientImplementation, Unit]

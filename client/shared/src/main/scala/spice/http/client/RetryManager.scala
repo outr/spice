@@ -44,18 +44,23 @@ object RetryManager {
                        throwable: Throwable): Task[Try[HttpResponse]] = delay(failures) match {
       case Some(d) =>
         val isTimeout = throwable.isInstanceOf[java.util.concurrent.TimeoutException] ||
-          throwable.isInstanceOf[java.net.SocketTimeoutException]
+          throwable.getClass.getName == "java.net.SocketTimeoutException"
+        val logTask = Task {
+          if (warnRetries) {
+            if (isTimeout) {
+              scribe.warn(s"Request to ${request.url} timed out (${throwable.getLocalizedMessage}, failures: $failures). Retrying after $d...")
+            } else {
+              scribe.warn(s"Request to ${request.url} failed (${throwable.getLocalizedMessage}, ${throwable.getClass.getSimpleName}, failures: $failures). Retrying after $d...")
+            }
+          }
+        }
         for {
-        _ <- (if (isTimeout) {
-          logger.warn(s"Request to ${request.url} timed out (${throwable.getLocalizedMessage}, failures: $failures). Retrying after $d...")
-        } else {
-          logger.warn(s"Request to ${request.url} failed (${throwable.getLocalizedMessage}, ${throwable.getClass.getSimpleName}, failures: $failures). Retrying after $d...", throwable)
-        }).when(warnRetries)
-        _ <- Task.sleep(d)
-        response <- retry
-      } yield response
+          _ <- logTask
+          _ <- Task.sleep(d)
+          response <- retry
+        } yield response
       case None =>
-        logger.error(s"Request to ${request.url} permanently failed (${throwable.getMessage}, failures: $failures).")
+        scribe.error(s"Request to ${request.url} permanently failed (${throwable.getMessage}, failures: $failures).")
         Task.pure(Failure(throwable))
     }
   }

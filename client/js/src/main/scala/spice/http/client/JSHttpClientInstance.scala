@@ -1,6 +1,5 @@
 package spice.http.client
 
-import moduload.Moduload
 import rapid.Task
 import spice.ajax.{AjaxAction, AjaxRequest}
 import spice.http.content.{Content, StringContent}
@@ -45,8 +44,14 @@ class JSHttpClientInstance(client: HttpClient) extends HttpClientInstance {
           val content = Option(xmlHttpRequest.responseText).filter(_.nonEmpty).map { text =>
             Content.string(text, responseContentType.getOrElse(ContentType.`text/plain`))
           }
+          val status = {
+            val code = xmlHttpRequest.status
+            val text = xmlHttpRequest.statusText
+            if (text.trim.nonEmpty) HttpStatus(code, text)
+            else HttpStatus.getByCode(code).getOrElse(HttpStatus(code, s"HTTP $code"))
+          }
           Success(HttpResponse(
-            status = HttpStatus(xmlHttpRequest.status, xmlHttpRequest.statusText),
+            status = status,
             headers = Headers(headers),
             content = content
           ))

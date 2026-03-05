@@ -1,6 +1,6 @@
 name := "spice"
 ThisBuild / organization := "com.outr"
-ThisBuild / version := "1.1.0"
+ThisBuild / version := "1.2.0-SNAPSHOT"
 
 val scala3: String = "3.8.1"
 
@@ -46,7 +46,8 @@ lazy val root = project.in(file("."))
 		clientJS, clientJVM, clientImplementationOkHttp, clientImplementationJVM, clientImplementationNetty,
 		delta,
 		server, serverImplementationUndertow,
-		openAPI
+		openAPI,
+		apiJS, apiJVM
 	)
 	.settings(
 		publish := {},
@@ -172,6 +173,23 @@ lazy val openAPI = project
 			dep.scalaTest
 		)
 	)
+
+lazy val api = crossProject(JSPlatform, JVMPlatform)
+	.in(file("api"))
+	.dependsOn(client)
+	.jvmConfigure(_.dependsOn(server, serverImplementationUndertow % "test", clientImplementationJVM % "test"))
+	.settings(
+		name := "spice-api",
+		libraryDependencies ++= Seq(
+			dep.scalaTest
+		)
+	)
+	.jvmSettings(
+		fork := true
+	)
+
+lazy val apiJS = api.js
+lazy val apiJVM = api.jvm
 
 lazy val docs = project
 	.in(file("documentation"))
