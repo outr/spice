@@ -106,6 +106,7 @@ object ApiServerRuntime {
 
   private def errorContent(throwable: Throwable): Content = {
     val message = Option(throwable.getMessage).getOrElse("Internal server error")
+    scribe.error(s"API error: ${throwable.getClass.getName}: $message", throwable)
     Content.json(obj(
       "error" -> obj(
         "message" -> message.json,

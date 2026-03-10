@@ -21,6 +21,8 @@ object UndertowWebSocketHandler {
             webSocketListener: WebSocketListener): Task[Unit] = Task {
     val handler = Handlers.websocket(new WebSocketConnectionCallback {
       override def onConnect(exchange: WebSocketHttpExchange, channel: WebSocketChannel): Unit = {
+        // Disable Undertow's idle timeout — application-level heartbeats handle liveness
+        channel.setIdleTimeout(-1L)
         // Handle sending messages
         webSocketListener.send.text.attach { message =>
           WebSockets.sendText(message, channel, null)

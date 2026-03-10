@@ -99,7 +99,7 @@ class URLSpec extends AnyWordSpec with Matchers {
         url.toString should be("https://www.spice.io/testing/1/favicon-32x32.png?arg1=true&v=0.7.0-1586440828356")
       }
       "properly detect an invalid TLD" in {
-        val url = URL.get("event.which")
+        val url = URL.get("event.which", tldValidation = TLDValidation.ExternalOnly)
         url should be(Left(URLParseFailure(s"Invalid top-level domain: [which] for supplied URL: [event.which]", URLParseFailure.InvalidTopLevelDomain)))
       }
       "properly unapply from a String" in {

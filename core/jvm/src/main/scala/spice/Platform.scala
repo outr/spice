@@ -4,6 +4,9 @@ import java.text.SimpleDateFormat
 import java.util.Locale
 
 object Platform {
+  val defaultUserAgent: Option[String] = Some("Spice-HttpClient")
+
+
   def parseHTTPDate(date: String): Option[Long] = {
     val parser = new SimpleDateFormat("EEE, dd MMMM yyyy HH:mm:ss zzz", Locale.ENGLISH)
     try {

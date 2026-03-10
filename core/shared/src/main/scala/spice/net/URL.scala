@@ -167,17 +167,17 @@ object URL {
   }
 
   def parse(url: String,
-            validateTLD: Boolean = true,
-            defaultProtocol: Protocol = Protocol.Https): URL = get(url, validateTLD, defaultProtocol) match {
+            tldValidation: TLDValidation = TLDValidation.Warn,
+            defaultProtocol: Protocol = Protocol.Https): URL = get(url, tldValidation, defaultProtocol) match {
     case Left(parseFailure) => throw MalformedURLException(s"Unable to parse URL: [$url] (${parseFailure.message})", url, parseFailure.cause)
     case Right(url) => url
   }
 
   def get(url: String,
-          validateTLD: Boolean = true,
+          tldValidation: TLDValidation = TLDValidation.Warn,
           defaultProtocol: Protocol = Protocol.Https): Either[URLParseFailure, URL] = URLParser(
     s = url,
-    validateTLD = validateTLD,
+    tldValidation = tldValidation,
     defaultProtocol = defaultProtocol
   )
 

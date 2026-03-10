@@ -9,6 +9,6 @@ trait WebSocketHandler extends HttpHandler {
 
   override def handle(exchange: HttpExchange)
                      (using mdc: MDC): Task[HttpExchange] = exchange.withWebSocketListener().flatMap {
-    case (exchange, listener) => connect(exchange, listener).map(_ => exchange)
+    case (exchange, listener) => connect(exchange, listener).map(_ => exchange.finish())
   }
 }

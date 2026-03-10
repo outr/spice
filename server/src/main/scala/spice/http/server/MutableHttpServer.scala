@@ -44,7 +44,12 @@ class MutableHttpServer extends HttpServer {
       Task.pure(exchange) // Finished
     } else {
       val handler = handlers.head
+      val startMs = System.currentTimeMillis()
       handler.handle(exchange).flatMap { updated =>
+        val elapsed = System.currentTimeMillis() - startMs
+        if (elapsed > 100) {
+          scribe.warn(s"Slow handler: ${handler.getClass.getName} took ${elapsed}ms for ${exchange.request.url.path}")
+        }
         handleRecursive(updated, handlers.tail)
       }
     }

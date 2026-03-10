@@ -4,7 +4,7 @@ import scala.util.Try
 
 object URLParser {
   def apply(s: String,
-            validateTLD: Boolean = true,
+            tldValidation: TLDValidation = TLDValidation.Warn,
             defaultProtocol: Protocol = Protocol.Https): Either[URLParseFailure, URL] = {
     if ((s.contains('.') || s.contains(":")) && !s.startsWith(":") && !s.endsWith(".")) {
       val (protocolOption, stage1) = extractProtocol(s)
@@ -31,16 +31,25 @@ object URLParser {
 
         if (url.ip.isEmpty && url.host.count(_ == ':') > 1) {
           Left(URLParseFailure(s"Invalid host: ${url.host}", URLParseFailure.InvalidHost))
-        } else if (validateTLD) {
-          // For multi-part TLDs like co.uk, validate the actual TLD (last part)
-          val actualTld = url.hostParts.lastOption
-          actualTld match {
-            case Some(tld) if url.ip.isEmpty && url.hostParts.length > 1 && !TopLevelDomains.isValid(tld) =>
-              Left(URLParseFailure(s"Invalid top-level domain: [$tld] for supplied URL: [$s]", URLParseFailure.InvalidTopLevelDomain))
-            case _ => Right(url)
-          }
         } else {
-          Right(url)
+          tldValidation match {
+            case TLDValidation.Off => Right(url)
+            case TLDValidation.Warn | TLDValidation.ExternalOnly =>
+              val actualTld = url.hostParts.lastOption
+              actualTld match {
+                case Some(tld) if url.ip.isEmpty && url.hostParts.length > 1 && !TopLevelDomains.isValid(tld) =>
+                  val message = s"Invalid top-level domain: [$tld] for supplied URL: [$s]"
+                  tldValidation match {
+                    case TLDValidation.Warn =>
+                      scribe.warn(message)
+                      Right(url)
+                    case TLDValidation.ExternalOnly =>
+                      Left(URLParseFailure(message, URLParseFailure.InvalidTopLevelDomain))
+                    case _ => throw new RuntimeException("Inconceivable!")
+                  }
+                case _ => Right(url)
+              }
+          }
         }
       }
     } else {

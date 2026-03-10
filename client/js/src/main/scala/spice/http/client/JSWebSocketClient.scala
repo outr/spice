@@ -13,15 +13,20 @@ class JSWebSocketClient(url: URL) extends WebSocket {
   private lazy val webSocket: WS = new WS(url.toString)
 
   override def connect(): Task[ConnectionStatus] = {
+    val startMs = System.currentTimeMillis()
+    scribe.info(s"WebSocket connecting to $url ...")
     _status @= ConnectionStatus.Connecting
     webSocket.binaryType = "blob"
     webSocket.addEventListener("open", (_: Event) => {
+      scribe.info(s"WebSocket open after ${System.currentTimeMillis() - startMs}ms")
       updateStatus()
     })
     webSocket.addEventListener("close", (_: Event) => {
+      scribe.info(s"WebSocket closed after ${System.currentTimeMillis() - startMs}ms")
       updateStatus()
     })
     webSocket.addEventListener("error", (_: Event) => {
+      scribe.error(s"WebSocket error after ${System.currentTimeMillis() - startMs}ms")
       error @= new RuntimeException("WebSocket error! Closing...")
       disconnect()
       updateStatus()

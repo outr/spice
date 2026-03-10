@@ -3,6 +3,9 @@ package spice
 import scala.scalajs.js
 
 object Platform {
+  val defaultUserAgent: Option[String] = None
+
+
   def parseHTTPDate(date: String): Option[Long] = {
     val millis = js.Date.parse(date)
     if (millis.isNaN) None else Some(millis.toLong)

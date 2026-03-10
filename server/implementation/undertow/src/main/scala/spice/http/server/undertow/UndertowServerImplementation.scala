@@ -100,7 +100,10 @@ class UndertowServerImplementation(server: HttpServer) extends HttpServerImpleme
 
   override def handleRequest(undertow: HttpServerExchange): Unit = {
     try {
+      val arrivalMs = System.currentTimeMillis()
       val url = URL.parse(s"${undertow.getRequestURL}?${undertow.getQueryString}")
+      val isWsUpgrade = Option(undertow.getRequestHeaders.getFirst("Upgrade")).exists(_.equalsIgnoreCase("websocket"))
+      if (isWsUpgrade) scribe.info(s"WS upgrade request received for ${url.path}")
       if (!server.config.persistentConnections()) {
         undertow.setPersistent(false)
       }
@@ -110,12 +113,19 @@ class UndertowServerImplementation(server: HttpServer) extends HttpServerImpleme
           MDC { mdc =>
             given MDC = mdc
             mdc("url") = url
+            val dispatchMs = System.currentTimeMillis()
+            if (isWsUpgrade) scribe.info(s"WS dispatch delay: ${dispatchMs - arrivalMs}ms")
+            val startMs = dispatchMs
             val io = UndertowRequestParser(undertow, url).flatMap { request =>
+              val parseMs = System.currentTimeMillis() - startMs
+              if (parseMs > 100) scribe.warn(s"Slow request parse: ${parseMs}ms for ${url.path}")
               val exchange = HttpExchange(request)
               server.handle(exchange).handleError { throwable =>
                 server.errorRecovery(exchange, throwable)
               }
             }.flatMap { exchange =>
+              val handleMs = System.currentTimeMillis() - startMs
+              if (handleMs > 100) scribe.warn(s"Slow handler chain: ${handleMs}ms for ${url.path}")
               exchange.webSocketListener match {
                 case Some(webSocketListener) => UndertowWebSocketHandler(undertow, server, exchange, webSocketListener)
                 case None => UndertowResponseSender(undertow, server, exchange)

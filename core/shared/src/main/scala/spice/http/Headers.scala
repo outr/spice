@@ -29,7 +29,7 @@ case class Headers private(map: TreeMap[String, List[String]] = TreeMap.empty(us
 object Headers {
   val KeyOrdering: Ordering[String] = Ordering.comparatorToOrdering(using String.CASE_INSENSITIVE_ORDER)
 
-  var DefaultUserAgent: Option[String] = Some("Spice-HttpClient")
+  var DefaultUserAgent: Option[String] = spice.Platform.defaultUserAgent
 
   val empty: Headers = Headers()
   def default: Headers = empty.withHeaders(List(

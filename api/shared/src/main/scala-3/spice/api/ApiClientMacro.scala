@@ -157,6 +157,7 @@ object ApiClientMacro {
         val typedArg = arg.asExprOf[req]
         val name = Expr(methodName)
         '{ ApiClientRuntime.doRestful[req, res]($baseUrl, $name, $typedArg)(using $reqRW, $resRW) }.asTerm
+      case _ => throw new RuntimeException("Inconceivable!")
     }
   }
 
