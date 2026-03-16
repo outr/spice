@@ -616,11 +616,34 @@ case class OpenAPIDartGenerator(api: OpenAPI, config: OpenAPIGeneratorConfig) ex
 
   def generateService(): SourceFile = {
     var imports = mutable.Set.empty[String]
-    val methods: List[String] = api.paths.toList.sortBy(_._1).map {
+    val methods: List[String] = api.paths.toList.sortBy(_._1).flatMap {
       case (pathString, path) =>
         val name = "[^a-zA-Z0-9](\\S)".r.replaceAllIn(pathString.substring(1), m => {
           m.group(1).toUpperCase
         })
+        // Handle GET endpoints (no request body)
+        if (path.methods.contains(HttpMethod.Get)) {
+          val entry = path.methods(HttpMethod.Get)
+          val successResponse = entry.responses("200").content
+          val (_, apiPath) = successResponse.content.head
+          val responseType = apiPath.schema match {
+            case c: OpenAPISchema.Ref =>
+              val rt = c.ref.ref2Type
+              safeAddImport(imports, rt.type2File)
+              rt
+            case c: OpenAPISchema.Component if c.`type` == "object" && c.properties.nonEmpty =>
+              val rt = c.xFullClass.map(cn => cn.substring(cn.lastIndexOf('.') + 1)).getOrElse(name.capitalize + "Response")
+              rt
+            case _ => "Map<String, dynamic>"
+          }
+          Some(s"""  /// ${entry.description}
+             |  static Future<$responseType> $name() async {
+             |    return await restGet(
+             |      "$pathString",
+             |      $responseType.fromJson
+             |    );
+             |  }""".stripMargin)
+        } else if (path.methods.contains(HttpMethod.Post)) {
         val entry = path.methods(HttpMethod.Post)
         val requestContent = entry.requestBody.get.content
         val (requestContentType, apiContentType) = requestContent.content.head
@@ -628,7 +651,18 @@ case class OpenAPIDartGenerator(api: OpenAPI, config: OpenAPIGeneratorConfig) ex
           .responses("200")
           .content
         val (_, apiPath) = successResponse.content.head
-        apiPath.schema match {
+        Some(apiPath.schema match {
+          case c: OpenAPISchema.Component if c.`type` == "null" =>
+            // void return type — fire and forget
+            val requestType = requestContent.refType
+            safeAddImport(imports, requestType.type2File)
+            s"""  /// ${entry.description}
+               |  static Future<void> $name($requestType request) async {
+               |    await restPost(
+               |      "$pathString",
+               |      request.toJson()
+               |    );
+               |  }""".stripMargin
           case c: OpenAPISchema.Component => c.format match {
             case Some("binary") =>
               val requestType = requestContent.refType
@@ -717,6 +751,9 @@ case class OpenAPIDartGenerator(api: OpenAPI, config: OpenAPIGeneratorConfig) ex
                  |  }""".stripMargin
             }
           case schema => throw new RuntimeException(s"Unsupported schema: $schema")
+        })
+        } else {
+          None
         }
     }
     val importsTemplate = imports.toList.sorted.map(s => s"import 'model/$s.dart';").mkString("\n")

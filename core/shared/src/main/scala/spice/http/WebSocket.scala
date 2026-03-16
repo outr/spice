@@ -13,11 +13,11 @@ import scala.util.matching.Regex
 
 trait WebSocket {
   private val FileUploadRegex: Regex = """fileUpload:(.+):(\d+):(.+):(.+)""".r
-  
+
   protected val _status: Var[ConnectionStatus] = Var(ConnectionStatus.Closed)
   val status: Val[ConnectionStatus] = _status
 
-  val send: WebSocketChannels = new WebSocketChannels
+  val send: WebSocketChannels = new BufferedWebSocketChannels(_status)
   val receive: WebSocketChannels = new WebSocketChannels
   val error: Channel[Throwable] = Channel[Throwable]
 

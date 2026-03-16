@@ -1,0 +1,19 @@
+/// GENERATED CODE: Do not edit!
+import 'dart:convert';
+
+import '%%HANDLER_FILE%%';
+
+class %%SERVICE_NAME%%Dispatcher {
+  final %%SERVICE_NAME%%Handler handler;
+
+  %%SERVICE_NAME%%Dispatcher(this.handler);
+
+  void dispatch(String message) {
+    final json = jsonDecode(message) as Map<String, dynamic>;
+    final method = json['method'] as String;
+    final args = json['args'] as Map<String, dynamic>;
+    switch (method) {
+%%CASES%%
+    }
+  }
+}

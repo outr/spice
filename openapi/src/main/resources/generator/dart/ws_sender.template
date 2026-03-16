@@ -1,0 +1,10 @@
+/// GENERATED CODE: Do not edit!
+import 'dart:convert';
+
+class %%SERVICE_NAME%%Sender {
+  final void Function(String message) send;
+
+  %%SERVICE_NAME%%Sender(this.send);
+
+%%METHODS%%
+}

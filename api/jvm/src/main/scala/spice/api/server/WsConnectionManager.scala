@@ -28,14 +28,8 @@ class WsConnectionManager(server: MutableHttpServer, basePath: URLPath) {
     })
 
   def broadcast(message: String): Unit = {
-    val count = listeners.size()
-    scribe.info(s"WS broadcast to $count listeners: ${message.take(120)}")
     listeners.forEach { listener =>
-      val status = listener.status()
-      scribe.info(s"  Listener status: $status")
-      if (status == ConnectionStatus.Open) {
-        listener.send.text @= message
-      }
+      listener.send.text @= message
     }
   }
 

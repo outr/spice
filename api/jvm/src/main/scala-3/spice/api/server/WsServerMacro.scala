@@ -7,7 +7,8 @@ import spice.net.URLPath
 object WsServerMacro {
   def derive[T: Type](
     server: Expr[MutableHttpServer],
-    basePath: Expr[URLPath]
+    basePath: Expr[URLPath],
+    routingKeyIndex: Expr[Int]
   )(using Quotes): Expr[T] = {
     import quotes.reflect.*
 
@@ -65,11 +66,17 @@ object WsServerMacro {
     val entriesExpr = Expr.ofList(entries)
 
     '{
-      WsServerRuntime.register($server, $basePath)
+      val rki = $routingKeyIndex
+      if (rki >= 0) {
+        WsServerRuntime.registerRouted($server, $basePath)
+      } else {
+        WsServerRuntime.register($server, $basePath)
+      }
       WsServerRuntime.createProxy[T](
         Class.forName(${Expr(tpeSym.fullName)}),
         $basePath,
-        $entriesExpr.toMap
+        $entriesExpr.toMap,
+        rki
       )
     }
   }

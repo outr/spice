@@ -47,6 +47,7 @@ lazy val root = project.in(file("."))
 		delta,
 		server, serverImplementationUndertow,
 		openAPI,
+		mcp,
 		apiJS, apiJVM
 	)
 	.settings(
@@ -163,8 +164,19 @@ lazy val serverImplementationUndertow = project
 		)
 	)
 
+lazy val mcp = project
+	.dependsOn(coreJVM, server)
+	.in(file("mcp"))
+	.settings(
+		name := "spice-mcp",
+		fork := true,
+		libraryDependencies ++= Seq(
+			dep.scalaTest
+		)
+	)
+
 lazy val openAPI = project
-	.dependsOn(server, server % "test->test")
+	.dependsOn(apiJVM, server % "test->test")
 	.in(file("openapi"))
 	.settings(
 		name := "spice-openapi",

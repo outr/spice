@@ -1,0 +1,5 @@
+/// GENERATED CODE: Do not edit!
+
+class %%SERVICE_NAME%%Handler {
+%%METHODS%%
+}
