@@ -58,7 +58,7 @@ object OpenAPISchema {
   }
 
   case class Ref(ref: String, nullable: Option[Boolean] = None) extends OpenAPISchema {
-    override def makeNullable: OpenAPISchema = throw new UnsupportedOperationException("Ref cannot be made nullable")
+    override def makeNullable: OpenAPISchema = copy(nullable = Some(true))
 
     override def withSchema(schema: Schema): OpenAPISchema = this
   }
@@ -82,7 +82,8 @@ object OpenAPISchema {
   case class OneOf(schemas: List[OpenAPISchema],
                    discriminator: Option[Discriminator] = None,
                    nullable: Option[Boolean] = None) extends MultiSchema {
-    override protected def modify(f: List[OpenAPISchema] => List[OpenAPISchema]): OpenAPISchema = copy(f(schemas))
+    override protected def modify(f: List[OpenAPISchema] => List[OpenAPISchema]): OpenAPISchema = copy(schemas = f(schemas))
+    override def makeNullable: OpenAPISchema = copy(schemas = schemas, nullable = Some(true))
   }
 
   case class AllOf(schemas: List[OpenAPISchema],

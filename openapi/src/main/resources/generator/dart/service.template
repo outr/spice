@@ -17,27 +17,44 @@ class Service {
 
   static Uri host(String path) => base.replace(path: path);
 
+  /// Extract a human-readable error message from a server error response body.
+  static String _extractErrorMessage(String body, int statusCode) {
+    try {
+      final json = jsonDecode(body);
+      if (json is Map<String, dynamic>) {
+        final error = json['error'];
+        if (error is Map<String, dynamic> && error['message'] != null) {
+          return error['message'].toString();
+        } else if (error is String) {
+          return error;
+        }
+      }
+    } catch (_) {}
+    return 'Server error $statusCode';
+  }
+
   static Future<Response> restful<Response>(
     String path,
     Map<String, dynamic> request,
     Response Function(Map<String, dynamic> json) convert
   ) async {
+    final String body = jsonEncode(request);
+    final http.Response response = await http.post(
+        Service.host(path),
+        headers: {
+          "Content-Type": "application/json; charset=UTF-8",
+          "Accept": "application/json"
+        },
+        body: body
+    );
+    if (response.statusCode >= 400) {
+      throw Exception(_extractErrorMessage(response.body, response.statusCode));
+    }
     try {
-      final String body = jsonEncode(request);
-      final http.Response response = await http.post(
-          Service.host(path),
-          headers: {
-            "Content-Type": "application/json; charset=UTF-8",
-            "Accept": "application/json"
-          },
-          body: body
-      );
       return convert(jsonDecode(response.body));
-    } catch(exc) {
-      String message = exc.toString();
-      Application.logger.e('Error occurred handling response for $path: $message');
-      Map<String, dynamic> json = jsonDecode('{"error": {"message": "$message"} }');
-      return convert(json);
+    } catch (exc) {
+      Application.logger.e('Error parsing response for $path: $exc');
+      rethrow;
     }
   }
 
@@ -51,6 +68,9 @@ class Service {
     final http.StreamedResponse response = await request.send();
     final Uint8List responseData = await response.stream.toBytes();
     final String jsonString = String.fromCharCodes(responseData);
+    if (response.statusCode >= 400) {
+      throw Exception('Server error ${response.statusCode}: $jsonString');
+    }
     return convert(jsonDecode(jsonString));
   }
 
@@ -58,19 +78,20 @@ class Service {
     String path,
     Response Function(Map<String, dynamic> json) convert
   ) async {
+    final http.Response response = await http.get(
+        Service.host(path),
+        headers: {
+          "Accept": "application/json"
+        }
+    );
+    if (response.statusCode >= 400) {
+      throw Exception(_extractErrorMessage(response.body, response.statusCode));
+    }
     try {
-      final http.Response response = await http.get(
-          Service.host(path),
-          headers: {
-            "Accept": "application/json"
-          }
-      );
       return convert(jsonDecode(response.body));
-    } catch(exc) {
-      String message = exc.toString();
-      Application.logger.e('Error occurred handling response for $path: $message');
-      Map<String, dynamic> json = jsonDecode('{"error": {"message": "$message"} }');
-      return convert(json);
+    } catch (exc) {
+      Application.logger.e('Error parsing response for $path: $exc');
+      rethrow;
     }
   }
 

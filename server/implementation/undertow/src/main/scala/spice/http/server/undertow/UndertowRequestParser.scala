@@ -10,7 +10,7 @@ import spice.http.content.FormDataEntry.{FileEntry, StringEntry}
 import spice.http.{Headers, HttpMethod, HttpRequest}
 import spice.net.{ContentType, IP, URL}
 
-import java.io.File
+import java.io.{File, IOException}
 import scala.jdk.CollectionConverters.IterableHasAsScala
 
 object UndertowRequestParser {
@@ -30,24 +30,30 @@ object UndertowRequestParser {
         case ContentType.`multipart/form-data` =>
           exchange.startBlocking()
           val formDataParser = formParserBuilder.build().createParser(exchange)
-          formDataParser.parseBlocking()
-          val formData = exchange.getAttachment(FormDataParser.FORM_DATA)
-          val data = formData.asScala.toList.map { key =>
-            val entries: List[FormDataEntry] = formData.get(key).asScala.map { entry =>
-              val headers = parseHeaders(entry.getHeaders)
-              if (entry.isFileItem) {
-                val path = entry.getFileItem.getFile
-                val file = File.createTempFile("spice-form", entry.getFileName)
-                path.toFile.renameTo(file)
-                FileEntry(entry.getFileName, file, headers)
-              } else {
-                StringEntry(entry.getValue, headers)
-              }
-            }.toList
-            if (entries.length > 1) throw new UnsupportedOperationException(s"More than one entry for $key found! Not currently supported!")
-            key -> entries.head
+          try {
+            formDataParser.parseBlocking()
+            val formData = exchange.getAttachment(FormDataParser.FORM_DATA)
+            val data = formData.asScala.toList.map { key =>
+              val entries: List[FormDataEntry] = formData.get(key).asScala.map { entry =>
+                val headers = parseHeaders(entry.getHeaders)
+                if (entry.isFileItem) {
+                  val path = entry.getFileItem.getFile
+                  val file = File.createTempFile("spice-form", entry.getFileName)
+                  path.toFile.renameTo(file)
+                  FileEntry(entry.getFileName, file, headers)
+                } else {
+                  StringEntry(entry.getValue, headers)
+                }
+              }.toList
+              if (entries.length > 1) throw new UnsupportedOperationException(s"More than one entry for $key found! Not currently supported!")
+              key -> entries.head
+            }
+            Some(FormDataContent(data.toMap))
+          } catch {
+            case e: IOException =>
+              scribe.warn(s"Connection terminated during multipart parsing for ${url.path}: ${e.getMessage}")
+              None
           }
-          Some(FormDataContent(data.toMap))
         case ct =>
           Option(exchange.getRequestChannel) match {
             case Some(channel) =>
