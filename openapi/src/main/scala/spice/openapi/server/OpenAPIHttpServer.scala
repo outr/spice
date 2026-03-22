@@ -70,7 +70,7 @@ trait OpenAPIHttpServer extends MutableHttpServer {
       val pathParams = service.path.arguments.map { argName =>
         val paramType = service.calls.headOption.flatMap { call =>
           call.requestRW.definition match {
-            case DefType.Obj(map, _) => map.get(argName)
+            case DefType.Obj(map, _, _) => map.get(argName)
             case _ => None
           }
         }

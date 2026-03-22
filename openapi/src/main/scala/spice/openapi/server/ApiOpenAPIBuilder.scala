@@ -108,57 +108,75 @@ private class ApiOpenAPIBuilder(basePath: String) {
   }
 
   private def schemaFrom(dt: DefType): OpenAPISchema = dt match {
-    case DefType.Obj(map, None) => componentSchema(None, map)
-    case DefType.Obj(map, Some(className)) =>
-      val refName = register(className)(componentSchema(Some(className), map))
+    case DefType.Described(inner, desc) =>
+      applyDescription(schemaFrom(inner), desc)
+    case DefType.Obj(map, None, _) => componentSchema(None, dt.description, map)
+    case DefType.Obj(map, Some(className), _) =>
+      val refName = register(className)(componentSchema(Some(className), dt.description, map))
       OpenAPISchema.Ref(s"#/components/schemas/$refName", None)
-    case DefType.Enum(values, Some(className)) =>
+    case DefType.Enum(values, Some(className), _) =>
       val refName = register(className)(OpenAPISchema.Component(
         `type` = "string",
-        description = Some(className),
+        description = dt.description.orElse(Some(className)),
         `enum` = values,
         xFullClass = Some(className)
       ))
       OpenAPISchema.Ref(s"#/components/schemas/$refName", None)
-    case DefType.Enum(values, None) =>
+    case DefType.Enum(values, None, _) =>
       OpenAPISchema.Component(
         `type` = "string",
+        description = dt.description,
         `enum` = values
       )
-    case DefType.Arr(t) => OpenAPISchema.Component(
+    case DefType.Arr(t, _) => OpenAPISchema.Component(
       `type` = "array",
+      description = dt.description,
       items = Some(schemaFrom(t))
     )
     case DefType.Str => OpenAPISchema.Component(`type` = "string")
     case DefType.Bool => OpenAPISchema.Component(`type` = "boolean")
     case DefType.Int => OpenAPISchema.Component(`type` = "integer")
     case DefType.Dec => OpenAPISchema.Component(`type` = "number")
-    case DefType.Opt(t) =>
-      schemaFrom(t) match {
+    case DefType.Opt(t, _) =>
+      val inner = schemaFrom(t) match {
         case ref: OpenAPISchema.Ref => ref.copy(nullable = Some(true))
         case other => other.makeNullable
       }
+      applyDescription(inner, dt.description)
     case DefType.Null => OpenAPISchema.Component(`type` = "null")
     case DefType.Json => OpenAPISchema.Component(`type` = "json")
-    case DefType.Poly(values, _) => OpenAPISchema.OneOf(
-      schemas = values.values.map(schemaFrom).toList
+    case DefType.Poly(values, _, _) => OpenAPISchema.OneOf(
+      schemas = values.values.map(schemaFrom).toList,
+      description = dt.description
     )
     case _ => throw new UnsupportedOperationException(s"Unsupported DefType: $dt")
   }
 
-  private def componentSchema(className: Option[String], map: Map[String, DefType]): OpenAPISchema = {
+  private def componentSchema(className: Option[String], description: Option[String], map: Map[String, DefType]): OpenAPISchema = {
     if (map.keySet == Set("[key]")) {
       OpenAPISchema.Component(
         `type` = "object",
+        description = description,
         additionalProperties = Some(schemaFrom(map("[key]"))),
         xFullClass = className
       )
     } else {
       OpenAPISchema.Component(
         `type` = "object",
+        description = description,
         properties = map.map { case (key, dt) => key -> schemaFrom(dt) },
         xFullClass = className
       )
+    }
+  }
+
+  private def applyDescription(schema: OpenAPISchema, description: Option[String]): OpenAPISchema = {
+    description match {
+      case None => schema
+      case Some(_) => schema match {
+        case c: OpenAPISchema.Component => c.copy(description = c.description.orElse(description))
+        case other => other
+      }
     }
   }
 }

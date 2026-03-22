@@ -65,7 +65,7 @@ trait ServiceCall extends HttpHandler {
 
   lazy val openAPI: Option[OpenAPIPathEntry] = {
     val contentType = requestRW.definition match {
-      case DefType.Obj(map, _) if hasFile(map) => ContentType.`multipart/form-data`
+      case DefType.Obj(map, _, _) if hasFile(map) => ContentType.`multipart/form-data`
       case _ => ContentType.`application/json`
     }
     val requestBody = if (requestRW.definition == DefType.Null || method == HttpMethod.Get) {
@@ -133,26 +133,29 @@ trait ServiceCall extends HttpHandler {
   }
 
   private def schemaFrom(dt: DefType, schema: Schema, format: Option[String], nullable: Option[Boolean]): OpenAPISchema = (dt match {
-    case DefType.Obj(map, None) => componentSchema(dt.className, schema, map, format, nullable)
-    case DefType.Obj(_, Some("spice.http.server.rest.FileUpload")) => OpenAPISchema.Component(
+    case DefType.Described(inner, desc) =>
+      applyDescription(schemaFrom(inner, schema, format, nullable), desc)
+    case DefType.Obj(_, Some("spice.http.server.rest.FileUpload"), _) => OpenAPISchema.Component(
       `type` = "string",
       format = Some("binary")
     )
-    case DefType.Obj(map, Some(className)) =>
+    case DefType.Obj(map, None, _) => componentSchema(dt.className, schema, map, format, nullable)
+    case DefType.Obj(map, Some(className), _) =>
       val refName = service.server.register(className)(componentSchema(Some(className), schema, map, format, None))
       OpenAPISchema.Ref(s"#/components/schemas/$refName", nullable)
-    case DefType.Enum(values, Some(className)) =>
+    case DefType.Enum(values, Some(className), _) =>
       val refName = service.server.register(className)(OpenAPISchema.Component(
         `type` = "string",
-        description = Some(className),
+        description = dt.description.orElse(Some(className)),
         `enum` = values,
         format = format,
         nullable = nullable,
         xFullClass = Some(className)
       ))
       OpenAPISchema.Ref(s"#/components/schemas/$refName", nullable)
-    case DefType.Arr(t) => OpenAPISchema.Component(
+    case DefType.Arr(t, _) => OpenAPISchema.Component(
       `type` = "array",
+      description = dt.description,
       format = format,
       items = Some(schemaFrom(t, schema.items.getOrElse(Schema()), format, None)),
       nullable = nullable
@@ -162,16 +165,15 @@ trait ServiceCall extends HttpHandler {
       format = format,
       nullable = nullable
     )
-    case DefType.Enum(values, cn) => {
+    case DefType.Enum(values, cn, _) =>
       OpenAPISchema.Component(
         `type` = "string",
-        description = cn,
+        description = dt.description.orElse(cn),
         `enum` = values,
         format = format,
         nullable = nullable,
         xFullClass = cn
       )
-    }
     case DefType.Bool => OpenAPISchema.Component(
       `type` = "boolean",
       format = format,
@@ -187,14 +189,15 @@ trait ServiceCall extends HttpHandler {
       format = format,
       nullable = nullable
     )
-    case DefType.Opt(t) => schemaFrom(t, schema, format = format, nullable = Some(true))
+    case DefType.Opt(t, _) => schemaFrom(t, schema, format = format, nullable = Some(true))
     case DefType.Null => OpenAPISchema.Component(
       `type` = "null",
       format = format
     )
-    case DefType.Poly(values, _) => OpenAPISchema.OneOf(
+    case DefType.Poly(values, _, _) => OpenAPISchema.OneOf(
       schemas = values.values.map(dt => schemaFrom(dt, schema, format, nullable)).toList,
-      nullable = nullable
+      nullable = nullable,
+      description = dt.description
     )
     case DefType.Json => OpenAPISchema.Component(
       `type` = "json",
@@ -203,4 +206,14 @@ trait ServiceCall extends HttpHandler {
     )
     case _ => throw new UnsupportedOperationException(s"DefType not supported: $dt")
   }).withSchema(schema)
+
+  private def applyDescription(schema: OpenAPISchema, description: Option[String]): OpenAPISchema = {
+    description match {
+      case None => schema
+      case Some(_) => schema match {
+        case c: OpenAPISchema.Component => c.copy(description = c.description.orElse(description))
+        case other => other
+      }
+    }
+  }
 }

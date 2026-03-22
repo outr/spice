@@ -67,7 +67,7 @@ object OpenAPISchema {
     given rw: RW[Ref] = RW.from(
       r = s => obj("$ref" -> str(s.ref), "nullable" -> s.nullable.json),
       w = j => Ref(j("$ref").asString, j.get("nullable").map(_.as[Boolean])),
-      d = DefType.Obj(Some("Ref"), "$ref" -> DefType.Str, "nullable" -> DefType.Opt(DefType.Bool))
+      d = DefType.Obj(Some("Ref"), "$ref" -> DefType.Str, "nullable" -> DefType.Opt(DefType.Bool, None))
     )
   }
 
@@ -81,20 +81,23 @@ object OpenAPISchema {
 
   case class OneOf(schemas: List[OpenAPISchema],
                    discriminator: Option[Discriminator] = None,
-                   nullable: Option[Boolean] = None) extends MultiSchema {
+                   nullable: Option[Boolean] = None,
+                   description: Option[String] = None) extends MultiSchema {
     override protected def modify(f: List[OpenAPISchema] => List[OpenAPISchema]): OpenAPISchema = copy(schemas = f(schemas))
     override def makeNullable: OpenAPISchema = copy(schemas = schemas, nullable = Some(true))
   }
 
   case class AllOf(schemas: List[OpenAPISchema],
                    discriminator: Option[Discriminator] = None,
-                   nullable: Option[Boolean] = None) extends MultiSchema {
+                   nullable: Option[Boolean] = None,
+                   description: Option[String] = None) extends MultiSchema {
     override protected def modify(f: List[OpenAPISchema] => List[OpenAPISchema]): OpenAPISchema = copy(f(schemas))
   }
 
   case class AnyOf(schemas: List[OpenAPISchema],
                    discriminator: Option[Discriminator] = None,
-                   nullable: Option[Boolean] = None) extends MultiSchema {
+                   nullable: Option[Boolean] = None,
+                   description: Option[String] = None) extends MultiSchema {
     override protected def modify(f: List[OpenAPISchema] => List[OpenAPISchema]): OpenAPISchema = copy(f(schemas))
   }
 
@@ -130,12 +133,14 @@ object OpenAPISchema {
   private def multi(`type`: String,
                     schemas: List[OpenAPISchema],
                     discriminator: Option[Discriminator],
-                    nullable: Option[Boolean]): Json = {
+                    nullable: Option[Boolean],
+                    description: Option[String]): Json = {
     val fields = List(
       `type` -> schemas.json,
-      "nullable" -> nullable.json
+      "nullable" -> nullable.json,
+      "description" -> description.json
     ) ++ discriminator.map(disc => "discriminator" -> disc.json).toList
-    
+
     obj(fields*)
   }
 
@@ -148,27 +153,28 @@ object OpenAPISchema {
     r = {
       case s: Component => Component.rw.read(s)
       case s: Ref => Ref.rw.read(s)
-      case OneOf(schemas, discriminator, nullable) => multi("oneOf", schemas, discriminator, nullable)
-      case AllOf(schemas, discriminator, nullable) => multi("allOf", schemas, discriminator, nullable)
-      case AnyOf(schemas, discriminator, nullable) => multi("anyOf", schemas, discriminator, nullable)
+      case OneOf(schemas, discriminator, nullable, description) => multi("oneOf", schemas, discriminator, nullable, description)
+      case AllOf(schemas, discriminator, nullable, description) => multi("allOf", schemas, discriminator, nullable, description)
+      case AnyOf(schemas, discriminator, nullable, description) => multi("anyOf", schemas, discriminator, nullable, description)
       case Not(schema, nullable) => notSchema(schema, nullable)
       case s => throw new UnsupportedOperationException(s"Unsupported schema: $s")
     },
     w = json => {
       val n = json.get("nullable").map(_.asBoolean)
+      val desc = json.get("description").map(_.asString)
       if (json.get("$ref").nonEmpty) {
         Ref.rw.write(json)
       } else if (json.get("type").nonEmpty) {
         Component.rw.write(json)
       } else if (json.get("oneOf").nonEmpty) {
         val disc = json.get("discriminator").map(_.as[Discriminator])
-        OneOf(json("oneOf").as[List[OpenAPISchema]], disc, n)
+        OneOf(json("oneOf").as[List[OpenAPISchema]], disc, n, desc)
       } else if (json.get("allOf").nonEmpty) {
         val disc = json.get("discriminator").map(_.as[Discriminator])
-        AllOf(json("allOf").as[List[OpenAPISchema]], disc, n)
+        AllOf(json("allOf").as[List[OpenAPISchema]], disc, n, desc)
       } else if (json.get("anyOf").nonEmpty) {
         val disc = json.get("discriminator").map(_.as[Discriminator])
-        AnyOf(json("anyOf").as[List[OpenAPISchema]], disc, n)
+        AnyOf(json("anyOf").as[List[OpenAPISchema]], disc, n, desc)
       } else if (json.get("not").nonEmpty) {
         Not(json("not").as[OpenAPISchema], n)
       } else {
