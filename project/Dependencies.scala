@@ -16,7 +16,7 @@ object Dependencies {
     
     val okHttp: String = "5.3.2"
 
-    val netty: String = "4.2.10.Final"
+    val netty: String = "4.2.11.Final"
 
     val httpMime: String = "4.5.14"
     
