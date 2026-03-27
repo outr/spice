@@ -26,7 +26,7 @@ object Dependencies {
 
     val scalaJSDOM: String = "2.8.1"
 
-    val scalaTest: String = "3.2.19"
+    val scalaTest: String = "3.2.20"
   }
 
   val profig: ModuleID = "com.outr" %% "profig" % version.profig
