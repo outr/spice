@@ -69,6 +69,15 @@ class JVMHttpClientSpec extends AnyWordSpec with Matchers {
         p.completed should be(false)
       }
     }
+    "stream lines from a URL" in {
+      // httpbin.org/stream/5 returns 5 JSON lines (NDJSON format)
+      HttpClient.url(url"https://httpbin.org/stream/5").get.streamLines().flatMap { stream =>
+        stream.toList.map { lines =>
+          lines.size should be(5)
+          lines.foreach(line => line should include("url"))
+        }
+      }
+    }
     "call a URL and get an image back" in {
       val url = url"https://s.yimg.com/ny/api/res/1.2/8Qe5c2B.moDrzo4jn7T5VQ--~A/YXBwaWQ9aGlnaGxhbmRlcjt3PTU2MzI7aD0zNzU1O3NtPTE7aWw9cGxhbmU-/https://media-mbst-pub-ue1.s3.amazonaws.com/creatr-images/2020-04/81f62d40-7ff9-11ea-bfdd-25ac22907561.cf.jpg"
       HttpClient.url(url).send().map { response =>

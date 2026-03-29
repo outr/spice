@@ -45,6 +45,11 @@ class JVMHttpClientWebSocket(url: URL, instance: JVMHttpClientInstance) extends 
   }
 
   override def disconnect(): Unit = jvmWebSocket().foreach { ws =>
+    try {
+      ws.sendClose(java.net.http.WebSocket.NORMAL_CLOSURE, "disconnect").join()
+    } catch {
+      case _: Exception => // ignore errors during close
+    }
     ws.abort()
     jvmWebSocket @= None
   }

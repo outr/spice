@@ -41,6 +41,34 @@ class JVMHttpClientInstance(client: HttpClient) extends HttpClientInstance {
     response <- response2Spice(jvmResponse)
   } yield Success(response)
 
+  override def sendStream(request: HttpRequest): Task[rapid.Stream[String]] = for {
+    jvmRequest <- request2JVM(request)
+    jvmResponse <- Task(jvmClient.send(jvmRequest, BodyHandlers.ofInputStream()))
+      .handleError { t =>
+        throw new RuntimeException(s"Error streaming from ${request.url}", t)
+      }
+  } yield {
+    if (jvmResponse.statusCode() >= 400) {
+      val errorBody = new String(jvmResponse.body().readAllBytes(), java.nio.charset.StandardCharsets.UTF_8)
+      throw new RuntimeException(s"HTTP ${jvmResponse.statusCode()}: ${errorBody.take(500)}")
+    }
+    val reader = new java.io.BufferedReader(
+      new java.io.InputStreamReader(jvmResponse.body(), java.nio.charset.StandardCharsets.UTF_8))
+    var done = false
+    val pull = rapid.Pull.fromFunction[String](
+      pullF = () => {
+        if (done) rapid.Step.Stop
+        else {
+          val line = reader.readLine()
+          if (line == null) { done = true; rapid.Step.Stop }
+          else rapid.Step.Emit(line)
+        }
+      },
+      close = Task(reader.close())
+    )
+    new rapid.Stream(Task.pure(pull))
+  }
+
   override def webSocket(url: URL): WebSocket = new JVMHttpClientWebSocket(url, this)
 
   override def dispose(): Task[Unit] = Task.unit

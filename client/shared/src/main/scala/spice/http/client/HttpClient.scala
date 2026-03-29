@@ -260,6 +260,21 @@ case class HttpClient(request: HttpRequest,
     }
   }
 
+  /** Send the request and return the response body as a stream of lines.
+    * Used for Server-Sent Events (SSE), NDJSON, and other line-based streaming protocols.
+    * The stream emits each line as it arrives — no buffering of the full response. */
+  def streamLines(): Task[rapid.Stream[String]] = {
+    val updatedHeaders = sessionManager match {
+      case Some(sm) =>
+        val cookieHeaders = sm.session.cookies.map { cookie =>
+          Cookie.Request(name = cookie.name, value = cookie.value).http
+        } ::: Headers.Request.`Cookie`.value(request.headers).map(_.http).distinct
+        request.headers.withHeaders(Headers.Request.`Cookie`.key, cookieHeaders)
+      case None => request.headers
+    }
+    instance.sendStream(request.copy(headers = updatedHeaders))
+  }
+
   def webSocket(): WebSocket = instance.webSocket(request.url)
 
   def dispose(): Task[Unit] = implementation.dispose()
