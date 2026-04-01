@@ -1,0 +1,34 @@
+/// GENERATED CODE: Do not edit!
+
+/// Base handler for %%SERVICE_NAME%% durable events.
+/// Override methods to implement business logic.
+class %%SERVICE_NAME%%DurableHandler {
+  // --- Durable event stubs (sequenced, conversation-scoped) ---
+%%EVENT_STUBS%%
+
+  // --- Ephemeral event stubs (fire-and-forget) ---
+%%EPHEMERAL_STUBS%%
+}
+
+/// Dispatches incoming durable events and ephemeral messages to handler methods.
+class %%SERVICE_NAME%%DurableDispatcher {
+  final %%SERVICE_NAME%%DurableHandler handler;
+
+  %%SERVICE_NAME%%DurableDispatcher(this.handler);
+
+  /// Dispatch a durable event (from onEvent stream).
+  void dispatchEvent(Map<String, dynamic> data) {
+    final kind = data['kind'] as String?;
+    switch (kind) {
+%%EVENT_CASES%%
+    }
+  }
+
+  /// Dispatch an ephemeral message (from onEphemeral stream).
+  void dispatchEphemeral(Map<String, dynamic> data) {
+    final kind = data['kind'] as String?;
+    switch (kind) {
+%%EPHEMERAL_CASES%%
+    }
+  }
+}

@@ -32,6 +32,7 @@ class DurableSocketServer[Id: RW, Event: RW, Info: RW](
   config: DurableSocketConfig = DurableSocketConfig(),
   eventLog: EventLog[Id, Event],
   resolveChannel: (String, Info) => Task[Id],
+  authorizeSwitch: (DurableSession[Id, Event, Info], Id) => Task[Unit] = (_: DurableSession[Id, Event, Info], _: Id) => Task.unit,
   sessionTimeout: FiniteDuration = 30.minutes
 ) extends WebSocketHandler {
   private val sessions = new ConcurrentHashMap[String, DurableSession[Id, Event, Info]]()
@@ -69,9 +70,7 @@ class DurableSocketServer[Id: RW, Event: RW, Info: RW](
     val cutoff = now - sessionTimeout.toMillis
     var expired = 0
     sessions.forEach { (clientId, session) =>
-      val isStale = session.lastActivityAt < cutoff
-      val isDisconnected = !session.isConnected
-      if (isStale && isDisconnected) {
+      if (session.lastActivityAt < cutoff && !session.isConnected) {
         removeSession(clientId)
         expired += 1
       }
@@ -150,13 +149,12 @@ class DurableSocketServer[Id: RW, Event: RW, Info: RW](
               Task.unit
             }.start()
           } else {
-            // Session not found — treat as new connection
             resolveChannel(clientId, info).map { channelId =>
               val ds = createSocket(channelId)
               ds.bind(listener)
               val durableSession = DurableSession(clientId, info, ds, reactify.Var(listener))
               registerSession(durableSession)
-  
+
               ds.sendConnected(0L, resumed = false)
               ds.activate()
               onSession @= durableSession
@@ -190,23 +188,31 @@ class DurableSocketServer[Id: RW, Event: RW, Info: RW](
     val lastSeq = json("lastSeq").asLong
     val session = sessions.values().asScala.find(_.protocol eq ds)
     session.foreach { s =>
-      // Update channel index
-      val oldMap = channelSessions.get(s.channelId)
-      if (oldMap != null) oldMap.remove(s.clientId)
+      authorizeSwitch(s, newChannelId).map { _ =>
+        val oldMap = channelSessions.get(s.channelId)
+        if (oldMap != null) oldMap.remove(s.clientId)
 
-      ds.updateChannelId(newChannelId)
-      val newMap = channelSessions.computeIfAbsent(newChannelId, _ => new ConcurrentHashMap())
-      newMap.put(s.clientId, s)
-      s.touch()
+        ds.updateChannelId(newChannelId)
+        val newMap = channelSessions.computeIfAbsent(newChannelId, _ => new ConcurrentHashMap())
+        newMap.put(s.clientId, s)
+        s.touch()
 
-      // Send switched confirmation first (so client resets its tracker), then replay
-      val switched = JsonFormatter.Default(obj(
-        "type" -> str("switched"),
-        "channelId" -> newChannelId.json,
-        "lastSeq" -> num(ds.highestProcessedSeq)
-      ))
-      ds.sendRaw(switched)
-      ds.replayAfter(lastSeq).start()
+        val switched = JsonFormatter.Default(obj(
+          "type" -> str("switched"),
+          "channelId" -> newChannelId.json,
+          "lastSeq" -> num(ds.highestProcessedSeq)
+        ))
+        ds.sendRaw(switched)
+        ds.replayAfter(lastSeq).start()
+      }.handleError { throwable =>
+        val errorMsg = JsonFormatter.Default(obj(
+          "type" -> str("error"),
+          "code" -> str("access_denied"),
+          "message" -> str(Option(throwable.getMessage).getOrElse("Channel access denied"))
+        ))
+        ds.sendRaw(errorMsg)
+        Task.unit
+      }.start()
     }
   }
 

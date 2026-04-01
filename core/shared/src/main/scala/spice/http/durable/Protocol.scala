@@ -5,23 +5,13 @@ import fabric.rw.*
 
 import scala.concurrent.duration.*
 
-// Messages that consume sequence numbers (assigned by sender's EventLog)
-case class InvokeMessage(seq: Long, id: String, tool: String, args: Json)
-object InvokeMessage {
-  given rw: RW[InvokeMessage] = RW.gen
-}
-
-case class ResultMessage(seq: Long, id: String, data: Json, error: Option[String] = None)
-object ResultMessage {
-  given rw: RW[ResultMessage] = RW.gen
-}
-
-case class EventMessage(seq: Long, event: String, data: Json)
+// Durable event message (sequenced, logged, replayed)
+case class EventMessage(seq: Long, data: Json)
 object EventMessage {
   given rw: RW[EventMessage] = RW.gen
 }
 
-// Control messages (no seq — not logged)
+// Ephemeral control messages (not logged)
 case class ConnectMessage(clientId: String, info: Json)
 object ConnectMessage {
   given rw: RW[ConnectMessage] = RW.gen
@@ -42,16 +32,6 @@ object AckMessage {
   given rw: RW[AckMessage] = RW.gen
 }
 
-case class PingMessage(ts: Long)
-object PingMessage {
-  given rw: RW[PingMessage] = RW.gen
-}
-
-case class PongMessage(ts: Long)
-object PongMessage {
-  given rw: RW[PongMessage] = RW.gen
-}
-
 case class ErrorMessage(code: String, message: String)
 object ErrorMessage {
   given rw: RW[ErrorMessage] = RW.gen
@@ -70,9 +50,6 @@ object SwitchedMessage {
 case class DurableSocketConfig(
   ackBatchDelay: FiniteDuration = 100.millis,
   ackBatchCount: Int = 10,
-  resendTimeout: FiniteDuration = 5.seconds,
-  heartbeatInterval: FiniteDuration = 30.seconds,
-  heartbeatTimeout: FiniteDuration = 90.seconds,
   reconnectStrategy: ReconnectStrategy = ReconnectStrategy.exponentialBackoff()
 )
 

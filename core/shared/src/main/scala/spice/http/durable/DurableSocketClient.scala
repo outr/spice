@@ -19,7 +19,6 @@ class DurableSocketClient[Id: RW, Event: RW, Info: RW](
   info: Info,
   clientId: String = UUID.randomUUID().toString
 ) {
-  // Per-channel last-seen seq tracking (for switch resume)
   private val channelSeqs = new ConcurrentHashMap[Id, Long]()
 
   val protocol: DurableSocket[Id, Event, Info] = new DurableSocket[Id, Event, Info](config, outboundLog, initialChannelId) {
@@ -32,7 +31,6 @@ class DurableSocketClient[Id: RW, Event: RW, Info: RW](
         case "switched" =>
           val newChannelId = json("channelId").as[Id]
           val lastSeq = json("lastSeq").asLong
-          // Save the old channel's last-seen seq before switching
           channelSeqs.put(channelId, highestProcessedSeq)
           handleSwitchComplete(newChannelId, lastSeq)
         case _ =>
@@ -64,8 +62,11 @@ class DurableSocketClient[Id: RW, Event: RW, Info: RW](
 
   def close(): Unit = protocol.close()
 
-  def invoke(tool: String, args: Json): Task[Json] = protocol.invoke(tool, args)
+  def push(event: Event): Task[Long] = protocol.push(event)
+  def sendEphemeral(json: Json): Unit = protocol.sendEphemeral(json)
+
   val onEvent: Channel[(Long, Event)] = protocol.onEvent
+  val onEphemeral: Channel[Json] = protocol.onEphemeral
   val state: Val[ProtocolState] = protocol.state
 
   def switch(newChannelId: Id): Task[Unit] = {

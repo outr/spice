@@ -580,6 +580,115 @@ class NettyHttpClientInstance(val client: HttpClient) extends HttpClientInstance
     }
   }
 
+  /** Stream response body line-by-line via Netty. Lines are delivered incrementally
+    * as HTTP chunks arrive — not buffered. Used for SSE and streaming APIs. */
+  override def sendStream(request: HttpRequest): Task[rapid.Stream[String]] = {
+    val streamReady = Task.completable[rapid.Stream[String]]
+    val uri = request.url
+    val host = uri.host
+    val port = uri.port
+    val isHttps = uri.protocol == Protocol.Https
+    val pool = poolManager.getPool(host, port, isHttps)
+
+    pool.acquire().addListener((future: NettyFuture[Channel]) => {
+      if (!future.isSuccess) {
+        streamReady.failure(future.cause())
+      } else {
+        val channel = future.getNow
+        try {
+          val handlerName = s"streamHandler-${System.nanoTime()}"
+          val lineQueue = new java.util.concurrent.LinkedBlockingQueue[Either[Throwable, Option[String]]]()
+          val lineBuffer = new StringBuilder
+
+          val handler = new SimpleChannelInboundHandler[HttpObject] {
+            private var headersSeen = false
+
+            override def channelRead0(ctx: ChannelHandlerContext, msg: HttpObject): Unit = msg match {
+              case response: NettyHttpResponse =>
+                headersSeen = true
+                val code = response.status().code()
+                if (code >= 400) {
+                  lineQueue.offer(Left(new RuntimeException(s"HTTP $code")))
+                }
+
+              case chunk: HttpContent if headersSeen =>
+                val content = chunk.content()
+                if (content.readableBytes() > 0) {
+                  val bytes = new Array[Byte](content.readableBytes())
+                  content.readBytes(bytes)
+                  val text = new String(bytes, StandardCharsets.UTF_8)
+                  for (c <- text) {
+                    if (c == '\n') {
+                      val line = lineBuffer.toString.stripSuffix("\r")
+                      lineBuffer.clear()
+                      lineQueue.offer(Right(Some(line)))
+                    } else {
+                      lineBuffer.append(c)
+                    }
+                  }
+                }
+                if (chunk.isInstanceOf[LastHttpContent]) {
+                  if (lineBuffer.nonEmpty) {
+                    lineQueue.offer(Right(Some(lineBuffer.toString)))
+                    lineBuffer.clear()
+                  }
+                  lineQueue.offer(Right(None)) // End sentinel
+                  try {
+                    val p = ctx.pipeline()
+                    if (p.get(handlerName) != null) p.remove(handlerName)
+                  } catch { case _: Throwable => }
+                  clearActiveRequestTask(channel)
+                  try { pool.release(channel) } catch { case _: Throwable => }
+                }
+
+              case _ =>
+            }
+
+            override def exceptionCaught(ctx: ChannelHandlerContext, cause: Throwable): Unit = {
+              lineQueue.offer(Left(cause))
+              clearActiveRequestTask(channel)
+              ctx.close()
+            }
+          }
+
+          bindActiveRequestTask(channel, Task.completable)
+          val pipeline = channel.pipeline()
+          if (pipeline.get("exceptionHandler") != null) {
+            pipeline.addBefore("exceptionHandler", handlerName, handler)
+          } else {
+            pipeline.addLast(handlerName, handler)
+          }
+
+          val pull = rapid.Pull.fromFunction[String](
+            pullF = () => {
+              lineQueue.poll(client.timeout.toMillis, java.util.concurrent.TimeUnit.MILLISECONDS) match {
+                case null => rapid.Step.Stop
+                case Left(err) => throw err
+                case Right(None) => rapid.Step.Stop
+                case Right(Some(line)) => rapid.Step.Emit(line)
+              }
+            }
+          )
+          streamReady.success(rapid.Stream(Task.pure(pull)))
+
+          val nettyRequest = createNettyRequest(request, uri)
+          channel.writeAndFlush(nettyRequest).addListener((wf: ChannelFuture) => {
+            if (!wf.isSuccess) {
+              lineQueue.offer(Left(Option(wf.cause()).getOrElse(new RuntimeException("Write failed"))))
+            }
+          })
+        } catch {
+          case t: Throwable =>
+            clearActiveRequestTask(channel)
+            try { pool.release(channel) } catch { case _: Throwable => }
+            streamReady.failure(t)
+        }
+      }
+    })
+
+    streamReady
+  }
+
   override def webSocket(url: URL): WebSocket = new NettyHttpClientWebSocket(url, this)
 
   override def dispose(): Task[Unit] = Task {

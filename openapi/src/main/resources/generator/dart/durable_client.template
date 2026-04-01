@@ -1,0 +1,278 @@
+/// GENERATED CODE: Do not edit!
+import 'dart:async';
+import 'dart:convert';
+import 'dart:math';
+
+import 'package:web_socket_channel/web_socket_channel.dart';
+
+%%INFO_CLASS%%
+
+enum DurableSocketState { disconnected, handshaking, active, reconnecting, closed }
+
+/// DurableSocket client for the %%SERVICE_NAME%% backend.
+/// Handles connect/resume handshake, sequenced events with ack batching,
+/// channel switching, ephemeral message passthrough, and auto-reconnect.
+class %%SERVICE_NAME%%DurableClient {
+  final Uri wsUri;
+  final String clientId;
+  final %%SERVICE_NAME%%ConnectionInfo info;
+  final Duration ackBatchDelay;
+  final int ackBatchCount;
+  final int maxReconnectAttempts;
+  final Duration maxReconnectDelay;
+
+  %%SERVICE_NAME%%DurableClient({
+    required this.wsUri,
+    required this.clientId,
+    required this.info,
+    this.ackBatchDelay = const Duration(milliseconds: 100),
+    this.ackBatchCount = 10,
+    this.maxReconnectAttempts = 20,
+    this.maxReconnectDelay = const Duration(seconds: 30),
+  });
+
+  WebSocketChannel? _channel;
+  StreamSubscription? _subscription;
+  Timer? _ackTimer;
+  int _reconnectAttempt = 0;
+
+  // State
+  DurableSocketState _state = DurableSocketState.disconnected;
+  DurableSocketState get state => _state;
+
+  String _channelId = '';
+  String get channelId => _channelId;
+
+  // Sequence tracking
+  int _highestProcessedSeq = 0;
+  int _unackedCount = 0;
+  int _outboundSeq = 0;
+
+  // Per-channel last-seen seq for switch resume
+  final Map<String, int> _channelSeqs = {};
+
+  // Pending handshake completer — resolved on 'connected', rejected on error/disconnect
+  Completer<void>? _connectCompleter;
+
+  // Pending switch completer
+  Completer<void>? _pendingSwitch;
+
+  // Event streams
+  final _eventController = StreamController<(int, Map<String, dynamic>)>.broadcast();
+  final _ephemeralController = StreamController<Map<String, dynamic>>.broadcast();
+  final _errorController = StreamController<Map<String, dynamic>>.broadcast();
+  final _stateController = StreamController<DurableSocketState>.broadcast();
+
+  /// Durable events from the server: (seq, eventData).
+  Stream<(int, Map<String, dynamic>)> get onEvent => _eventController.stream;
+
+  /// Ephemeral messages (no type field or unrecognized type).
+  Stream<Map<String, dynamic>> get onEphemeral => _ephemeralController.stream;
+
+  /// Protocol errors from the server.
+  Stream<Map<String, dynamic>> get onError => _errorController.stream;
+
+  /// State changes.
+  Stream<DurableSocketState> get onStateChange => _stateController.stream;
+
+  // ---------------------------------------------------------------------------
+  // Connect / Close
+  // ---------------------------------------------------------------------------
+
+  Future<void> connect() async {
+    _state = DurableSocketState.handshaking;
+    _stateController.add(_state);
+    _connectCompleter = Completer<void>();
+    _channel = WebSocketChannel.connect(wsUri);
+    await _channel!.ready;
+    _listen();
+    _sendRaw({'type': 'connect', 'clientId': clientId, 'info': %%INFO_TO_JSON%%});
+    await _connectCompleter!.future;
+  }
+
+  void close() {
+    _state = DurableSocketState.closed;
+    _stateController.add(_state);
+    _ackTimer?.cancel();
+    _subscription?.cancel();
+    _channel?.sink.close();
+  }
+
+  // ---------------------------------------------------------------------------
+  // Push events (client → server, sequenced)
+  // ---------------------------------------------------------------------------
+
+  int push(Map<String, dynamic> event) {
+    _outboundSeq++;
+    final seq = _outboundSeq;
+    _sendRaw({'type': 'event', 'seq': seq, 'data': event});
+    return seq;
+  }
+
+  /// Send an ephemeral message (bypasses durable protocol).
+  void sendEphemeral(Map<String, dynamic> json) {
+    _sendRaw(json);
+  }
+
+  // ---------------------------------------------------------------------------
+  // Channel switching
+  // ---------------------------------------------------------------------------
+
+  Future<void> switchChannel(String newChannelId) {
+    final lastSeq = _channelSeqs[newChannelId] ?? 0;
+    _pendingSwitch = Completer<void>();
+    _sendRaw({'type': 'switch', 'channelId': newChannelId, 'lastSeq': lastSeq});
+    return _pendingSwitch!.future;
+  }
+
+  // ---------------------------------------------------------------------------
+  // Internal: message handling
+  // ---------------------------------------------------------------------------
+
+  void _listen() {
+    _subscription = _channel!.stream.listen(
+      _onMessage,
+      onError: (_) => _handleDisconnect(),
+      onDone: _handleDisconnect,
+    );
+  }
+
+  void _onMessage(dynamic raw) {
+    final json = jsonDecode(raw as String) as Map<String, dynamic>;
+    final type = json['type'] as String?;
+
+    switch (type) {
+      case 'event':
+        final seq = json['seq'] as int;
+        if (_acceptInbound(seq)) {
+          final data = json['data'] as Map<String, dynamic>;
+          _eventController.add((seq, data));
+          _maybeAck();
+        }
+        break;
+
+      case 'ack':
+        // Server acked our events — no action needed for now
+        break;
+
+      case 'connected':
+        // json['resumed'] indicates if this is a resume or fresh connect
+        _reconnectAttempt = 0;
+        _activate();
+        _connectCompleter?.complete();
+        _connectCompleter = null;
+        break;
+
+      case 'switched':
+        final newChannelId = json['channelId'] as String;
+        final lastSeq = json['lastSeq'] as int;
+        _channelSeqs[_channelId] = _highestProcessedSeq;
+        _channelId = newChannelId;
+        _highestProcessedSeq = lastSeq;
+        _unackedCount = 0;
+        _pendingSwitch?.complete();
+        _pendingSwitch = null;
+        break;
+
+      case 'error':
+        _errorController.add(json);
+        if (_connectCompleter != null && !_connectCompleter!.isCompleted) {
+          _connectCompleter!.completeError(
+            Exception(json['message'] ?? 'Connection rejected by server'),
+          );
+          _connectCompleter = null;
+        }
+        break;
+
+      default:
+        // Unrecognized type or no type — ephemeral passthrough
+        _ephemeralController.add(json);
+        break;
+    }
+  }
+
+  bool _acceptInbound(int seq) {
+    if (seq <= _highestProcessedSeq) return false;
+    _highestProcessedSeq = seq;
+    _unackedCount++;
+    return true;
+  }
+
+  void _maybeAck() {
+    if (_unackedCount >= ackBatchCount) _sendAck();
+  }
+
+  void _sendAck() {
+    if (_highestProcessedSeq > 0) {
+      _sendRaw({'type': 'ack', 'seq': _highestProcessedSeq});
+      _unackedCount = 0;
+    }
+  }
+
+  void _activate() {
+    _state = DurableSocketState.active;
+    _stateController.add(_state);
+    _ackTimer?.cancel();
+    _ackTimer = Timer.periodic(ackBatchDelay, (_) => _sendAck());
+  }
+
+  // ---------------------------------------------------------------------------
+  // Reconnect
+  // ---------------------------------------------------------------------------
+
+  void _handleDisconnect() {
+    _ackTimer?.cancel();
+    _subscription?.cancel();
+    if (_connectCompleter != null && !_connectCompleter!.isCompleted) {
+      _connectCompleter!.completeError(Exception('Disconnected during handshake'));
+      _connectCompleter = null;
+      _state = DurableSocketState.disconnected;
+      _stateController.add(_state);
+      return;
+    }
+    if (_state == DurableSocketState.closed) return;
+    _state = DurableSocketState.reconnecting;
+    _stateController.add(_state);
+    _attemptReconnect();
+  }
+
+  Future<void> _attemptReconnect() async {
+    if (_state == DurableSocketState.closed) return;
+    if (_reconnectAttempt >= maxReconnectAttempts) {
+      close();
+      return;
+    }
+    final delay = Duration(
+      milliseconds: min(
+        maxReconnectDelay.inMilliseconds,
+        (1000 * pow(2, min(_reconnectAttempt, 10))).toInt(),
+      ),
+    );
+    _reconnectAttempt++;
+    await Future.delayed(delay);
+    if (_state == DurableSocketState.closed) return;
+    try {
+      _channel = WebSocketChannel.connect(wsUri);
+      await _channel!.ready;
+      _listen();
+      _state = DurableSocketState.handshaking;
+      _stateController.add(_state);
+      _sendRaw({
+        'type': 'resume',
+        'clientId': clientId,
+        'lastSeq': _highestProcessedSeq,
+        'info': %%INFO_TO_JSON%%,
+      });
+    } catch (_) {
+      _attemptReconnect();
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  // Raw send
+  // ---------------------------------------------------------------------------
+
+  void _sendRaw(Map<String, dynamic> json) {
+    _channel?.sink.add(jsonEncode(json));
+  }
+}

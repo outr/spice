@@ -1,0 +1,15 @@
+/// GENERATED CODE: Do not edit!
+
+import '%%SERVICE_SNAKE%%_durable_client.dart';
+
+/// Typed methods for sending client → server events via DurableSocket.
+class %%SERVICE_NAME%%DurableSender {
+  final %%SERVICE_NAME%%DurableClient client;
+
+  %%SERVICE_NAME%%DurableSender(this.client);
+
+  /// Push an event to the server (sequenced, durable).
+  int push(Map<String, dynamic> event) => client.push(event);
+
+%%METHODS%%
+}

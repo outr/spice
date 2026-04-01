@@ -32,8 +32,6 @@ class DurableSocketSpec extends AnyWordSpec with Matchers {
   val testConfig: DurableSocketConfig = DurableSocketConfig(
     ackBatchDelay = 50.millis,
     ackBatchCount = 3,
-    heartbeatInterval = 2.seconds,
-    heartbeatTimeout = 6.seconds,
     reconnectStrategy = ReconnectStrategy.none
   )
 
@@ -71,28 +69,35 @@ class DurableSocketSpec extends AnyWordSpec with Matchers {
       server.isRunning should be(true)
     }
 
-    "connect a client and invoke/respond" in {
+    "connect a client and exchange events" in {
       val client = createClient("room1", "user1")
 
-      // Server handles invocations
+      var serverReceived: List[(Long, ChatEvent)] = Nil
+
       durableServer.onSession.attach { session =>
-        session.protocol.onInvoke.attach { msg =>
-          session.touch()
-          msg.tool match {
-            case "greet" =>
-              val name = msg.args("name").asString
-              session.protocol.respond(msg.id, obj("greeting" -> str(s"Hello, $name!"))).start()
-            case other =>
-              session.protocol.respondError(msg.id, s"Unknown tool: $other").start()
-          }
+        session.protocol.onEvent.attach { case (seq, event) =>
+          serverReceived = serverReceived :+ (seq, event)
+          session.protocol.push(ChatEvent(s"echo: ${event.message}", "server")).start()
         }
       }
+
+      var clientReceived: List[(Long, ChatEvent)] = Nil
+      client.onEvent.attach { e => clientReceived = clientReceived :+ e }
 
       client.connect().sync()
       client.state() should be(ProtocolState.Active)
 
-      val result = client.invoke("greet", obj("name" -> str("Alice"))).sync()
-      result("greeting").asString should be("Hello, Alice!")
+      client.push(ChatEvent("hello", "user1")).sync()
+
+      eventually(timeout(Span(5, Seconds))) {
+        serverReceived.size should be(1)
+        serverReceived.head._2.message should be("hello")
+      }
+
+      eventually(timeout(Span(5, Seconds))) {
+        clientReceived.size should be(1)
+        clientReceived.head._2.message should be("echo: hello")
+      }
 
       client.close()
     }
@@ -105,7 +110,6 @@ class DurableSocketSpec extends AnyWordSpec with Matchers {
 
       client.connect().sync()
 
-      // Wait for session to be registered
       eventually(timeout(Span(5, Seconds))) {
         durableServer.session("user2") should not be empty
       }
@@ -138,13 +142,11 @@ class DurableSocketSpec extends AnyWordSpec with Matchers {
         durableServer.sessionsByChannel("chatroom").size should be(2)
       }
 
-      // Broadcast a message to the room
       val seq = durableServer.broadcast("chatroom", ChatEvent("announcement", "admin")).sync()
 
       eventually(timeout(Span(5, Seconds))) {
         received1.size should be(1)
         received2.size should be(1)
-        // Both see the same seq
         received1.head._1 should be(seq)
         received2.head._1 should be(seq)
         received1.head._2 should be(ChatEvent("announcement", "admin"))
@@ -181,19 +183,33 @@ class DurableSocketSpec extends AnyWordSpec with Matchers {
       client.close()
     }
 
-    "error response fails client Task" in {
-      val client = createClient("room1", "user6")
+    "deliver ephemeral messages outside the durable protocol" in {
+      val client = createClient("room1", "user-eph")
+
+      var ephemeral: List[Json] = Nil
+      client.onEphemeral.attach { json => ephemeral = ephemeral :+ json }
 
       client.connect().sync()
 
       eventually(timeout(Span(5, Seconds))) {
-        durableServer.session("user6") should not be empty
+        durableServer.session("user-eph") should not be empty
       }
 
-      // onSession handler already registered from "connect a client" test
-      val result = client.invoke("unknown_tool", obj()).attempt.sync()
-      result.isFailure should be(true)
-      result.failed.get.getMessage should include("Unknown tool")
+      val session = durableServer.session("user-eph").get
+      session.protocol.sendEphemeral(obj(
+        "kind" -> str("notification"),
+        "text" -> str("You have a new message")
+      ))
+
+      eventually(timeout(Span(5, Seconds))) {
+        ephemeral.size should be(1)
+        ephemeral.head("kind").asString should be("notification")
+        ephemeral.head("text").asString should be("You have a new message")
+      }
+
+      // Ephemeral messages should NOT appear in the event log
+      val logged = eventLog.replay("room1", 0L).sync()
+      logged.exists(_._2 == ChatEvent("You have a new message", "notification")) should be(false)
 
       client.close()
     }
@@ -265,8 +281,67 @@ class DurableSocketSpec extends AnyWordSpec with Matchers {
       c3.close()
     }
 
+    "reject unauthorized channel switch" in {
+      val restrictedLog = new InMemoryEventLog[String, ChatEvent]
+      val restrictedServer = new DurableSocketServer[String, ChatEvent, ConnectInfo](
+        config = testConfig,
+        eventLog = restrictedLog,
+        resolveChannel = (_, info) => Task.pure(info.room),
+        authorizeSwitch = (session, targetChannel) => {
+          // Only allow switching to rooms that start with the user's ID
+          if (targetChannel.startsWith(session.info.userId)) Task.unit
+          else Task.error(RuntimeException(s"Access denied to channel: $targetChannel"))
+        }
+      )
+
+      server.handler(List(
+        path"/ws-restricted" / restrictedServer
+      ))
+
+      val client = new DurableSocketClient[String, ChatEvent, ConnectInfo](
+        createWebSocket = () => HttpClient.url(url"ws://localhost".withPort(serverPort).withPath(path"/ws-restricted")).webSocket(),
+        config = testConfig,
+        outboundLog = restrictedLog,
+        initialChannelId = "authuser",
+        info = ConnectInfo("authuser", "authuser-room"),
+        clientId = "authuser"
+      )
+
+      var errors: List[ErrorMessage] = Nil
+      client.protocol.onError.attach { e => errors = errors :+ e }
+
+      client.connect().sync()
+
+      eventually(timeout(Span(5, Seconds))) {
+        restrictedServer.session("authuser") should not be empty
+      }
+
+      // Allowed switch — channel starts with userId
+      client.switch("authuser-other").sync()
+      eventually(timeout(Span(5, Seconds))) {
+        client.protocol.channelId should be("authuser-other")
+      }
+
+      // Unauthorized switch — channel doesn't start with userId
+      // Send as ephemeral with "type" field — DurableSocket routes it to handleHandshakeMessage
+      // which triggers authorizeSwitch on the server
+      client.protocol.sendEphemeral(obj(
+        "type" -> str("switch"),
+        "channelId" -> str("secret-room"),
+        "lastSeq" -> num(0L)
+      ))
+
+      eventually(timeout(Span(5, Seconds))) {
+        errors.exists(_.code == "access_denied") should be(true)
+      }
+
+      // Channel should still be the last authorized one
+      client.protocol.channelId should be("authuser-other")
+
+      client.close()
+    }
+
     "expire stale sessions" in {
-      // Create a server with very short session timeout
       val shortTimeoutServer = new DurableSocketServer[String, ChatEvent, ConnectInfo](
         config = testConfig,
         eventLog = eventLog,
@@ -293,13 +368,8 @@ class DurableSocketSpec extends AnyWordSpec with Matchers {
         shortTimeoutServer.session("expiry-user") should not be empty
       }
 
-      // Disconnect the real WebSocket (causes server-side state → Disconnected)
       client.close()
 
-      // Disconnect the real WebSocket
-      client.close()
-
-      // Wait for Undertow to detect the closed connection
       eventually(timeout(Span(5, Seconds))) {
         Thread.sleep(100)
         val s = shortTimeoutServer.session("expiry-user")
@@ -307,7 +377,6 @@ class DurableSocketSpec extends AnyWordSpec with Matchers {
         s.get.isConnected should be(false)
       }
 
-      // Now expire the stale disconnected session
       val expired = shortTimeoutServer.expireStale()
       expired should be(1)
       shortTimeoutServer.session("expiry-user") should be(empty)

@@ -1,0 +1,30 @@
+/// GENERATED CODE: Do not edit!
+import 'dart:convert';
+
+import 'package:http/http.dart' as http;
+
+/// REST client for %%SERVICE_NAME%% backend tool invocations.
+/// All tools are invoked via POST /api/invoke.
+class %%SERVICE_NAME%%RestClient {
+  final Uri baseUri;
+  String? authToken;
+
+  %%SERVICE_NAME%%RestClient({required this.baseUri, this.authToken});
+
+  Future<Map<String, dynamic>> invoke(String tool, Map<String, dynamic> args) async {
+    final headers = <String, String>{
+      'Content-Type': 'application/json',
+    };
+    if (authToken != null) {
+      headers['Authorization'] = 'Bearer $authToken';
+    }
+    final response = await http.post(
+      baseUri.resolve('/api/invoke'),
+      headers: headers,
+      body: jsonEncode({'tool': tool, 'args': args}),
+    );
+    return jsonDecode(response.body) as Map<String, dynamic>;
+  }
+
+%%METHODS%%
+}
