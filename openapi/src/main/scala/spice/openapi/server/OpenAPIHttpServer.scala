@@ -104,7 +104,7 @@ trait OpenAPIHttpServer extends MutableHttpServer {
         version = version,
         description = description
       ),
-      tags = tags.map(OpenAPITag.apply),
+      tags = tags.map(name => OpenAPITag(name)),
       servers = config.listeners() flatMap { server =>
         server.urls.map { url =>
           OpenAPIServer(url = url, description = server.description)

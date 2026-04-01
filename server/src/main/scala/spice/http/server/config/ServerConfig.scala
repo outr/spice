@@ -94,7 +94,7 @@ class ServerConfig(server: HttpServer) {
     val v = Var[T](value)
     v.attach { value =>
       if (autoRestart.get && server.isRunning) {
-        server.restart()
+        server.restart().start()
       }
     }
     v

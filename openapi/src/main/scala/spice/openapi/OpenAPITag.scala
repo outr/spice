@@ -2,8 +2,6 @@ package spice.openapi
 
 import fabric.rw.*
 
-case class OpenAPITag(name: String)
-
-object OpenAPITag {
-  given rw: RW[OpenAPITag] = RW.gen
-}
+case class OpenAPITag(name: String,
+                      description: Option[String] = None,
+                      externalDocs: Option[OpenAPISchema.ExternalDocs] = None) derives RW

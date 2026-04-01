@@ -624,7 +624,7 @@ case class OpenAPIDartGenerator(api: OpenAPI, config: OpenAPIGeneratorConfig) ex
         // Handle GET endpoints (no request body)
         if (path.methods.contains(HttpMethod.Get)) {
           val entry = path.methods(HttpMethod.Get)
-          val successResponse = entry.responses("200").content
+          val successResponse = entry.responses("200").content.get
           val (_, apiPath) = successResponse.content.head
           val responseType = apiPath.schema match {
             case c: OpenAPISchema.Ref =>
@@ -649,7 +649,7 @@ case class OpenAPIDartGenerator(api: OpenAPI, config: OpenAPIGeneratorConfig) ex
         val (requestContentType, apiContentType) = requestContent.content.head
         val successResponse = entry
           .responses("200")
-          .content
+          .content.get
         val (_, apiPath) = successResponse.content.head
         Some(apiPath.schema match {
           case c: OpenAPISchema.Component if c.`type` == "null" =>

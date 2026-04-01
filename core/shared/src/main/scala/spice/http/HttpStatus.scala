@@ -3,12 +3,12 @@ package spice.http
 import fabric.rw.*
 import spice.UserException
 
+import java.util.concurrent.atomic.AtomicReference
+
 case class HttpStatus(code: Int, message: String) extends Ordered[HttpStatus] {
   assert(message.trim.nonEmpty)
 
-  HttpStatus.synchronized {
-    HttpStatus.codeMap += code -> this
-  }
+  HttpStatus.register(this)
 
   def isInformation: Boolean = code >= 100 && code < 200
   def isSuccess: Boolean = code >= 200 && code < 300
@@ -31,7 +31,14 @@ case class HttpStatus(code: Int, message: String) extends Ordered[HttpStatus] {
 }
 
 object HttpStatus {
-  private var codeMap = Map.empty[Int, HttpStatus]
+  private val codeMap = new AtomicReference(Map.empty[Int, HttpStatus])
+
+  private def register(status: HttpStatus): Unit = {
+    var current = codeMap.get()
+    while (!codeMap.compareAndSet(current, current + (status.code -> status))) {
+      current = codeMap.get()
+    }
+  }
 
   given rw: RW[HttpStatus] = RW.gen
 
@@ -94,6 +101,6 @@ object HttpStatus {
   val NotExtended: HttpStatus = HttpStatus(510, "Not Extended")
   val NetworkAuthenticationRequired: HttpStatus = HttpStatus(511, "Network Authentication Required")
 
-  def getByCode(code: Int): Option[HttpStatus] = codeMap.get(code)
+  def getByCode(code: Int): Option[HttpStatus] = codeMap.get().get(code)
   def byCode(code: Int): HttpStatus = getByCode(code).getOrElse(throw UserException(s"Unable to find HttpResponseStatus by code: $code"))
 }

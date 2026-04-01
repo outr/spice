@@ -110,27 +110,15 @@ object OpenAPISchema {
   }
 
   case class Discriminator(propertyName: String,
-                          mapping: Map[String, String] = Map.empty)
-
-  object Discriminator {
-    given rw: RW[Discriminator] = RW.gen
-  }
+                          mapping: Map[String, String] = Map.empty) derives RW
 
   case class XML(name: Option[String] = None,
                  namespace: Option[String] = None,
                  prefix: Option[String] = None,
                  attribute: Option[Boolean] = None,
-                 wrapped: Option[Boolean] = None)
+                 wrapped: Option[Boolean] = None) derives RW
 
-  object XML {
-    given rw: RW[XML] = RW.gen
-  }
-
-  case class ExternalDocs(url: String, description: Option[String] = None)
-
-  object ExternalDocs {
-    given rw: RW[ExternalDocs] = RW.gen
-  }
+  case class ExternalDocs(url: String, description: Option[String] = None) derives RW
 
   private def multi(`type`: String,
                     schemas: List[OpenAPISchema],

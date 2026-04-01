@@ -28,64 +28,24 @@ import scala.util.{Failure, Success, Try}
 class OkHttpClientInstance(client: HttpClient) extends HttpClientInstance {
   private lazy val instance = {
     val b = new okhttp3.OkHttpClient.Builder()
-    b.sslSocketFactory(new SSLSocketFactory {
-      //      private val default = SSLSocketFactory.getDefault.asInstanceOf[SSLSocketFactory]
-      private val disabled = {
-        val trustAllCerts = Array[TrustManager](new X509TrustManager {
-          override def checkClientTrusted(x509Certificates: Array[X509Certificate], s: String): Unit = {}
-
-          override def checkServerTrusted(x509Certificates: Array[X509Certificate], s: String): Unit = {}
-
-          override def getAcceptedIssuers: Array[X509Certificate] = null
-        })
-        val sc = SSLContext.getInstance("SSL")
-        sc.init(null, trustAllCerts, new SecureRandom)
-        sc.getSocketFactory
+    if (client.validateSSLCertificates) {
+      val tmf = TrustManagerFactory.getInstance(TrustManagerFactory.getDefaultAlgorithm)
+      tmf.init(null: java.security.KeyStore)
+      val defaultTrustManager = tmf.getTrustManagers()(0).asInstanceOf[X509TrustManager]
+      val sc = SSLContext.getInstance("TLS")
+      sc.init(null, Array[TrustManager](defaultTrustManager), new SecureRandom)
+      b.sslSocketFactory(sc.getSocketFactory, defaultTrustManager)
+    } else {
+      val trustAllManager = new X509TrustManager {
+        override def checkClientTrusted(chain: Array[X509Certificate], authType: String): Unit = {}
+        override def checkServerTrusted(chain: Array[X509Certificate], authType: String): Unit = {}
+        override def getAcceptedIssuers: Array[X509Certificate] = Array.empty
       }
-
-      private def f: SSLSocketFactory = disabled //if (config.validateSSLCertificates) default else disabled
-
-      override def getDefaultCipherSuites: Array[String] = f.getDefaultCipherSuites
-
-      override def getSupportedCipherSuites: Array[String] = f.getSupportedCipherSuites
-
-      override def createSocket(socket: Socket, s: String, i: Int, b: Boolean): Socket = f.createSocket(socket, s, i, b)
-
-      override def createSocket(s: String, i: Int): Socket = f.createSocket(s, i)
-
-      override def createSocket(s: String, i: Int, inetAddress: InetAddress, i1: Int): Socket = f.createSocket(s, i, inetAddress, i1)
-
-      override def createSocket(inetAddress: InetAddress, i: Int): Socket = f.createSocket(inetAddress, i)
-
-      override def createSocket(inetAddress: InetAddress, i: Int, inetAddress1: InetAddress, i1: Int): Socket = f.createSocket(inetAddress, i, inetAddress1, i1)
-    }, new X509TrustManager {
-      //      private val factory = TrustManagerFactory.getInstance(TrustManagerFactory.getDefaultAlgorithm)
-      //      private val default = {
-      //        factory.init(KeyStore.getInstance(KeyStore.getDefaultType))
-      //        factory.getTrustManagers.apply(0).asInstanceOf[X509TrustManager]
-      //      }
-
-      override def checkClientTrusted(x509Certificates: Array[X509Certificate], s: String): Unit = {
-        if (client.validateSSLCertificates) {
-          //          default.checkClientTrusted(x509Certificates, s)
-        }
-      }
-
-      override def checkServerTrusted(x509Certificates: Array[X509Certificate], s: String): Unit = {
-        if (client.validateSSLCertificates) {
-          //          default.checkServerTrusted(x509Certificates, s)
-        }
-      }
-
-      override def getAcceptedIssuers: Array[X509Certificate] = //if (config.validateSSLCertificates) {
-      //        default.getAcceptedIssuers
-      //      } else {
-        Array.empty[X509Certificate]
-      //      }
-    })
-    b.hostnameVerifier(new HostnameVerifier {
-      override def verify(s: String, sslSession: SSLSession): Boolean = true
-    })
+      val sc = SSLContext.getInstance("TLS")
+      sc.init(null, Array[TrustManager](trustAllManager), new SecureRandom)
+      b.sslSocketFactory(sc.getSocketFactory, trustAllManager)
+      b.hostnameVerifier((_, _) => true)
+    }
     b.connectionPool(client.connectionPool.asInstanceOf[OkHttpConnectionPool].pool)
     b.connectTimeout(client.timeout.toMillis, TimeUnit.MILLISECONDS)
     b.readTimeout(client.timeout.toMillis, TimeUnit.MILLISECONDS)

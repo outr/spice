@@ -76,7 +76,8 @@ class JVMHttpClientInstance(client: HttpClient) extends HttpClientInstance {
   private def request2JVM(request: HttpRequest): Task[jvm.HttpRequest] = {
     var contentType = request.content.map(c => c.contentType.outputString)
     for {
-      // TODO: Investigate streaming through InputStream
+      // Note: Request body is fully materialized in memory. For large request bodies,
+      // consider the Netty client implementation which supports streaming.
       bodyPublisher <- request.content match {
         case Some(content: FormDataContent) =>
           val builder = MultipartEntityBuilder.create()
@@ -135,7 +136,8 @@ class JVMHttpClientInstance(client: HttpClient) extends HttpClientInstance {
     }.toMap)
     val contentType = Headers.`Content-Type`.value(headers).getOrElse(ContentType.`text/plain`)
     val lastModified = Headers.Response.`Last-Modified`.value(headers).getOrElse(System.currentTimeMillis())
-    // TODO: Investigate streaming through InputStream
+    // Note: Response body is fully materialized as byte array. For streaming large responses,
+    // consider using the Netty client implementation.
     val content = Option(jvmResponse.body()) match {
       case Some(bytes) if bytes.nonEmpty => Some(BytesContent(bytes, contentType, lastModified))
       case _ => None

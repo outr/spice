@@ -2,8 +2,6 @@ package spice.openapi
 
 import fabric.rw.*
 
-case class OpenAPIRequestBody(required: Boolean, content: OpenAPIContent)
-
-object OpenAPIRequestBody {
-  given rw: RW[OpenAPIRequestBody] = RW.gen
-}
+case class OpenAPIRequestBody(required: Boolean,
+                              content: OpenAPIContent,
+                              description: Option[String] = None) derives RW

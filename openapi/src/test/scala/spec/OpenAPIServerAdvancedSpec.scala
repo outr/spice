@@ -115,11 +115,11 @@ class OpenAPIServerAdvancedSpec extends AnyWordSpec with Matchers {
           errorResponses = Map(
             "400" -> OpenAPIResponse(
               description = "The provided parameters are incorrect",
-              content = OpenAPIContent(
+              content = Some(OpenAPIContent(
                 ContentType.`text/html` -> OpenAPIContentType(
                   schema = OpenAPISchema.Component(`type` = "string", maxLength = Some(256))
                 )
-              )
+              ))
             )
           )
         ) { request =>

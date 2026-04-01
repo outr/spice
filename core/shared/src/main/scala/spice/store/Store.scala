@@ -7,7 +7,7 @@ trait Store {
 
   def remove(key: String): Unit
 
-  def apply[T](key: String): T = get[T](key).getOrElse(throw new NullPointerException(s"$key not found."))
+  def apply[T](key: String): T = get[T](key).getOrElse(throw new NoSuchElementException(s"$key not found."))
 
   def getOrElse[T](key: String, default: => T): T = get[T](key).getOrElse(default)
 

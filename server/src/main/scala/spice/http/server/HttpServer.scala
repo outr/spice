@@ -39,10 +39,7 @@ trait HttpServer extends LifecycleHandler with Initializable {
 
   def stop(): Task[Unit] = implementation.stop(this)
 
-  def restart(): Unit = synchronized {
-    stop()
-    start()
-  }
+  def restart(): Task[Unit] = stop().flatMap(_ => start())
 
   override protected def preHandle(exchange: HttpExchange): Task[HttpExchange] = Task {
     val listener = config.listeners().find(l => l.matches(exchange.request.url))

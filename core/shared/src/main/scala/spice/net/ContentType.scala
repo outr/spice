@@ -1821,6 +1821,7 @@ object ContentType {
     val parts = contentTypeString.split(';')
     val part = parts(0).trim
     val split = part.indexOf('/')
+    if (split == -1) throw new RuntimeException(s"Invalid content type (missing '/'): [$contentTypeString]")
     val `type` = part.substring(0, split)
     val subType = part.substring(split + 1)
     var contentType = ContentType(`type`, subType)

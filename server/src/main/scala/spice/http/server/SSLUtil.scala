@@ -12,7 +12,11 @@ object SSLUtil {
     val keyStore = KeyStore.getInstance("JKS")
     assert(keyStoreFile.exists(), s"No keystore file was found at the location: ${keyStoreFile.getAbsolutePath}")
     val keyStoreInput = Files.newInputStream(keyStoreFile.toPath)
-    keyStore.load(keyStoreInput, passwordChars)
+    try {
+      keyStore.load(keyStoreInput, passwordChars)
+    } finally {
+      keyStoreInput.close()
+    }
 
     val keyManagerFactory = KeyManagerFactory.getInstance(KeyManagerFactory.getDefaultAlgorithm)
     keyManagerFactory.init(keyStore, passwordChars)

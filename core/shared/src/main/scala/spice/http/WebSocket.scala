@@ -56,18 +56,29 @@ trait WebSocket {
       // Handle the actual binary data
       receive.binary.attach {
         case ByteBufferData(bb) if fileName.nonEmpty =>
-          val length = bb.remaining()
-          channel.write(bb)
-          written += length
-          if (written == fileLength) {
-            scribe.info(s"$fileName Upload finished!")
-            out.flush()
-            out.close()
-            fileName = None
-            fileLength = -1L
-            out = null
-            channel = null
-            send.text @= "fileUploaded"
+          try {
+            val length = bb.remaining()
+            channel.write(bb)
+            written += length
+            if (written == fileLength) {
+              scribe.info(s"$fileName Upload finished!")
+              out.flush()
+              out.close()
+              fileName = None
+              fileLength = -1L
+              out = null
+              channel = null
+              send.text @= "fileUploaded"
+            }
+          } catch {
+            case t: Throwable =>
+              scribe.error(s"Error during file upload of ${fileName.getOrElse("unknown")}", t)
+              try { if (channel != null) channel.close() } catch { case _: Throwable => }
+              try { if (out != null) out.close() } catch { case _: Throwable => }
+              fileName = None
+              fileLength = -1L
+              out = null
+              channel = null
           }
         case _ => // Ignore
       }

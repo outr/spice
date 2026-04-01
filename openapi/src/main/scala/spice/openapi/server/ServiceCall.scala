@@ -94,13 +94,13 @@ trait ServiceCall extends HttpHandler {
       responses = Map(
         "200" -> OpenAPIResponse(
           description = successDescription,
-          content = OpenAPIContent(
+          content = Some(OpenAPIContent(
             responseTypes.map { rt =>
               rt.contentType -> OpenAPIContentType(
                 schema = schemaFrom(responseRW.definition, responseSchema.getOrElse(Schema()), rt.format, nullable = None)
               )
             }*
-          )
+          ))
         )
       ) ++ errorResponses
     ))

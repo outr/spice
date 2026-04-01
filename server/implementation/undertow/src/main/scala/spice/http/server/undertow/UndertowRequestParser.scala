@@ -39,7 +39,9 @@ object UndertowRequestParser {
                 if (entry.isFileItem) {
                   val path = entry.getFileItem.getFile
                   val file = File.createTempFile("spice-form", entry.getFileName)
-                  path.toFile.renameTo(file)
+                  if (!path.toFile.renameTo(file)) {
+                    java.nio.file.Files.move(path, file.toPath, java.nio.file.StandardCopyOption.REPLACE_EXISTING)
+                  }
                   FileEntry(entry.getFileName, file, headers)
                 } else {
                   StringEntry(entry.getValue, headers)

@@ -76,9 +76,9 @@ private class ApiOpenAPIBuilder(basePath: String) {
       responses = Map(
         "200" -> OpenAPIResponse(
           description = "Success",
-          content = OpenAPIContent(
+          content = Some(OpenAPIContent(
             ContentType.`application/json` -> OpenAPIContentType(schema = responseSchema)
-          )
+          ))
         )
       )
     )
