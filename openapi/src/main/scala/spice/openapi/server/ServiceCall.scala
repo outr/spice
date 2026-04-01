@@ -194,11 +194,28 @@ trait ServiceCall extends HttpHandler {
       `type` = "null",
       format = format
     )
-    case DefType.Poly(values, _, _) => OpenAPISchema.OneOf(
-      schemas = values.values.map(dt => schemaFrom(dt, schema, format, nullable)).toList,
-      nullable = nullable,
-      description = dt.description
-    )
+    case DefType.Poly(values, className, _) =>
+      val schemas = values.map { case (name, dt) =>
+        name -> schemaFrom(dt, schema, format, None)
+      }
+      val discriminatorMapping = schemas.collect {
+        case (name, ref: OpenAPISchema.Ref) => name -> ref.ref
+      }
+      val oneOf = OpenAPISchema.OneOf(
+        schemas = schemas.values.toList,
+        discriminator = Some(OpenAPISchema.Discriminator(
+          propertyName = "type",
+          mapping = discriminatorMapping
+        )),
+        nullable = nullable,
+        description = dt.description
+      )
+      className match {
+        case Some(cn) =>
+          val refName = service.server.register(cn)(oneOf)
+          OpenAPISchema.Ref(s"#/components/schemas/$refName", nullable)
+        case None => oneOf
+      }
     case DefType.Json => OpenAPISchema.Component(
       `type` = "json",
       format = format,

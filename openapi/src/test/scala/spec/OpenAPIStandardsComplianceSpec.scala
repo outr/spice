@@ -42,8 +42,8 @@ class OpenAPIStandardsComplianceSpec extends AnyWordSpec with Matchers {
                   `type` = "integer",
                   minimum = Some(num(13)),
                   maximum = Some(num(120)),
-                  exclusiveMinimum = Some(true),
-                  exclusiveMaximum = Some(false),
+                  exclusiveMinimum = Some(num(13)),
+                  exclusiveMaximum = Some(num(120)),
                   multipleOf = Some(num(1)),
                   description = Some("Age must be between 13 and 120")
                 ),
@@ -51,8 +51,6 @@ class OpenAPIStandardsComplianceSpec extends AnyWordSpec with Matchers {
                   `type` = "number",
                   minimum = Some(num(0.0)),
                   maximum = Some(num(100.0)),
-                  exclusiveMinimum = Some(false),
-                  exclusiveMaximum = Some(false),
                   multipleOf = Some(num(0.1)),
                   description = Some("Score must be between 0 and 100, with 0.1 precision")
                 ),
@@ -88,7 +86,7 @@ class OpenAPIStandardsComplianceSpec extends AnyWordSpec with Matchers {
       yaml should include("format: 'email'")
       yaml should include("minimum: 13")
       yaml should include("maximum: 120")
-      yaml should include("exclusiveMinimum: true")
+      yaml should include("exclusiveMinimum: 13")
       yaml should include("multipleOf: 0.1")
       yaml should include("minItems: 0")
       yaml should include("maxItems: 10")

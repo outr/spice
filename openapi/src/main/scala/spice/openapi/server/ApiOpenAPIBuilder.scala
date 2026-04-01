@@ -145,10 +145,28 @@ private class ApiOpenAPIBuilder(basePath: String) {
       applyDescription(inner, dt.description)
     case DefType.Null => OpenAPISchema.Component(`type` = "null")
     case DefType.Json => OpenAPISchema.Component(`type` = "json")
-    case DefType.Poly(values, _, _) => OpenAPISchema.OneOf(
-      schemas = values.values.map(schemaFrom).toList,
-      description = dt.description
-    )
+    case DefType.Poly(values, className, _) =>
+      val schemas = values.map { case (name, dt) =>
+        val innerSchema = schemaFrom(dt)
+        name -> innerSchema
+      }
+      val discriminatorMapping = schemas.collect {
+        case (name, ref: OpenAPISchema.Ref) => name -> ref.ref
+      }
+      val oneOf = OpenAPISchema.OneOf(
+        schemas = schemas.values.toList,
+        discriminator = Some(OpenAPISchema.Discriminator(
+          propertyName = "type",
+          mapping = discriminatorMapping
+        )),
+        description = dt.description
+      )
+      className match {
+        case Some(cn) =>
+          val refName = register(cn)(oneOf)
+          OpenAPISchema.Ref(s"#/components/schemas/$refName", None)
+        case None => oneOf
+      }
     case _ => throw new UnsupportedOperationException(s"Unsupported DefType: $dt")
   }
 

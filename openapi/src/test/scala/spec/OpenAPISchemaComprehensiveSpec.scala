@@ -31,15 +31,15 @@ class OpenAPISchemaComprehensiveSpec extends AnyWordSpec with Matchers {
         `type` = "integer",
         minimum = Some(num(0)),
         maximum = Some(num(100)),
-        exclusiveMinimum = Some(true),
-        exclusiveMaximum = Some(false),
+        exclusiveMinimum = Some(num(0)),
+        exclusiveMaximum = Some(num(100)),
         multipleOf = Some(num(5))
       )
-      
+
       schema.minimum shouldBe Some(num(0))
       schema.maximum shouldBe Some(num(100))
-      schema.exclusiveMinimum shouldBe Some(true)
-      schema.exclusiveMaximum shouldBe Some(false)
+      schema.exclusiveMinimum shouldBe Some(num(0))
+      schema.exclusiveMaximum shouldBe Some(num(100))
       schema.multipleOf shouldBe Some(num(5))
     }
     
@@ -293,15 +293,15 @@ class OpenAPISchemaComprehensiveSpec extends AnyWordSpec with Matchers {
         `type` = "integer",
         minimum = Some(num(0)),
         maximum = Some(num(100)),
-        exclusiveMinimum = Some(true),
-        exclusiveMaximum = Some(false)
+        exclusiveMinimum = Some(num(0)),
+        exclusiveMaximum = Some(num(100))
       )
-      
+
       // These should be logically consistent
       schema.minimum shouldBe Some(num(0))
       schema.maximum shouldBe Some(num(100))
-      schema.exclusiveMinimum shouldBe Some(true)
-      schema.exclusiveMaximum shouldBe Some(false)
+      schema.exclusiveMinimum shouldBe Some(num(0))
+      schema.exclusiveMaximum shouldBe Some(num(100))
     }
     
     "validate array constraints" in {

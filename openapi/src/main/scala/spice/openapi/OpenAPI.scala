@@ -5,7 +5,7 @@ import fabric.filter.{RemoveEmptyFilter, RemoveNullsFilter}
 import fabric.io.{JsonFormatter, YamlFormatter}
 import fabric.rw.*
 
-case class OpenAPI(openapi: String = "3.0.3",
+case class OpenAPI(openapi: String = "3.2.0",
                    info: OpenAPIInfo,
                    tags: List[OpenAPITag] = Nil,
                    servers: List[OpenAPIServer] = Nil,
@@ -17,7 +17,7 @@ case class OpenAPI(openapi: String = "3.0.3",
 
   def componentByRef(ref: String): Option[OpenAPISchema] = {
     val name = ref.substring(ref.lastIndexOf('/') + 1)
-    components.get.schemas.get(name)
+    components.flatMap(_.schemas.get(name))
   }
 
   override def toString: String = asJsonString
@@ -30,4 +30,5 @@ object OpenAPI {
     .json
     .filterOne(RemoveNullsFilter)
     .filterOne(RemoveEmptyFilter)
+    .filterOne(OpenAPI32Filter)
 }

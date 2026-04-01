@@ -1,4 +1,4 @@
-openapi: '3.0.3'
+openapi: '3.2.0'
 info:
   title: 'Example Server'
   version: '1.0'
@@ -56,7 +56,7 @@ paths:
                 file:
                   type: 'string'
                   format: 'binary'
-              xFullClass: 'spec.OpenAPIHttpServerSpec.FileUploadRequest'
+              x-full-class: 'spec.OpenAPIHttpServerSpec.FileUploadRequest'
       responses:
         200:
           description: 'OK'
@@ -73,7 +73,7 @@ components:
           type: 'string'
         password:
           type: 'string'
-      xFullClass: 'spec.OpenAPIHttpServerSpec.Auth'
+      x-full-class: 'spec.OpenAPIHttpServerSpec.Auth'
     CombineRequest:
       type: 'object'
       properties:
@@ -83,7 +83,7 @@ components:
           type: 'object'
           additionalProperties:
             $ref: '#/components/schemas/NumEnum'
-      xFullClass: 'spec.OpenAPIHttpServerSpec.CombineRequest'
+      x-full-class: 'spec.OpenAPIHttpServerSpec.CombineRequest'
     CombineResponse:
       type: 'object'
       properties:
@@ -92,9 +92,10 @@ components:
           items:
             $ref: '#/components/schemas/NumEnum'
         error:
-          type: 'string'
-          nullable: true
-      xFullClass: 'spec.OpenAPIHttpServerSpec.CombineResponse'
+          type:
+            - 'string'
+            - 'null'
+      x-full-class: 'spec.OpenAPIHttpServerSpec.CombineResponse'
     FileUploadResponse:
       type: 'object'
       properties:
@@ -102,7 +103,7 @@ components:
           type: 'string'
         length:
           type: 'integer'
-      xFullClass: 'spec.OpenAPIHttpServerSpec.FileUploadResponse'
+      x-full-class: 'spec.OpenAPIHttpServerSpec.FileUploadResponse'
     NumEnum:
       type: 'string'
       description: 'spec.OpenAPIHttpServerSpec.NumEnum'
@@ -110,7 +111,7 @@ components:
         - 'One'
         - 'Two'
         - 'Three'
-      xFullClass: 'spec.OpenAPIHttpServerSpec.NumEnum'
+      x-full-class: 'spec.OpenAPIHttpServerSpec.NumEnum'
     ReverseRequest:
       type: 'object'
       properties:
@@ -118,14 +119,16 @@ components:
           $ref: '#/components/schemas/Auth'
         text:
           type: 'string'
-      xFullClass: 'spec.OpenAPIHttpServerSpec.ReverseRequest'
+      x-full-class: 'spec.OpenAPIHttpServerSpec.ReverseRequest'
     ReverseResponse:
       type: 'object'
       properties:
         text:
-          type: 'string'
-          nullable: true
+          type:
+            - 'string'
+            - 'null'
         error:
-          type: 'string'
-          nullable: true
-      xFullClass: 'spec.OpenAPIHttpServerSpec.ReverseResponse'
+          type:
+            - 'string'
+            - 'null'
+      x-full-class: 'spec.OpenAPIHttpServerSpec.ReverseResponse'

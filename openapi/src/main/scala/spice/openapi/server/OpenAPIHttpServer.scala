@@ -56,7 +56,7 @@ trait OpenAPIHttpServer extends MutableHttpServer {
     recurse(0)
   }
 
-  def openAPIVersion: String = "3.0.3"
+  def openAPIVersion: String = "3.2.0"
 
   def title: String
   def version: String

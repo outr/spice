@@ -1,4 +1,4 @@
-openapi: '3.0.3'
+openapi: '3.2.0'
 info:
   title: 'Sample API'
   version: '0.1.9'
@@ -31,11 +31,11 @@ components:
           type: 'string'
         type:
           $ref: '#/components/schemas/UserType'
-      xFullClass: 'spec.OpenAPIServerSpec.User'
+      x-full-class: 'spec.OpenAPIServerSpec.User'
     UserType:
       type: 'string'
       description: 'spec.OpenAPIServerSpec.UserType'
       enum:
         - 'Admin'
         - 'Basic'
-      xFullClass: 'spec.OpenAPIServerSpec.UserType'
+      x-full-class: 'spec.OpenAPIServerSpec.UserType'

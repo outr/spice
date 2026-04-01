@@ -20,8 +20,8 @@ object OpenAPISchema {
                        pattern: Option[String] = None,
                        minimum: Option[Json] = None,
                        maximum: Option[Json] = None,
-                       exclusiveMinimum: Option[Boolean] = None,
-                       exclusiveMaximum: Option[Boolean] = None,
+                       exclusiveMinimum: Option[Json] = None,
+                       exclusiveMaximum: Option[Json] = None,
                        multipleOf: Option[Json] = None,
                        example: Option[Json] = None,
                        `enum`: List[Json] = Nil,
@@ -58,6 +58,8 @@ object OpenAPISchema {
   }
 
   case class Ref(ref: String, nullable: Option[Boolean] = None) extends OpenAPISchema {
+    def name: String = ref.substring(ref.lastIndexOf('/') + 1)
+
     override def makeNullable: OpenAPISchema = copy(nullable = Some(true))
 
     override def withSchema(schema: Schema): OpenAPISchema = this
