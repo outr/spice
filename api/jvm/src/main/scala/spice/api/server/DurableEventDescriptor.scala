@@ -5,3 +5,6 @@ case class DurableFieldDescriptor(name: String, typeName: String, optional: Bool
 
 /** Describes one case class variant of a sealed trait used as a wire event. */
 case class DurableEventDescriptor(kind: String, fields: List[DurableFieldDescriptor])
+
+/** Describes a Dart enum to be generated from a Scala enum. */
+case class DurableEnumDescriptor(name: String, values: List[String])

@@ -1,0 +1,67 @@
+/// GENERATED CODE: Do not edit!
+
+import '%%TYPES_IMPORT%%';
+
+/// Base handler for %%SERVICE_NAME%% durable and ephemeral events.
+/// Override methods to implement business logic.
+class %%SERVICE_NAME%%DurableHandler {
+  // --- Durable event: StoredEvent with WireOperation ---
+  void onStoredEvent(WireOperation operation, String id, String conversationId, Event event) {}
+
+  // --- Session/ephemeral event (not stored, not replayed) ---
+  void onSessionEvent(WireEvent event) {}
+
+  /// Called when an event fails to parse. Override to display an error in the UI.
+  void onEventParseError(WireOperation operation, String id, String conversationId, Object error) {}
+
+  // --- Transient events (pushed via durable channel but not persisted) ---
+%%TRANSIENT_STUBS%%
+}
+
+/// Dispatches incoming durable events and ephemeral messages to handler methods.
+class %%SERVICE_NAME%%DurableDispatcher {
+  final %%SERVICE_NAME%%DurableHandler handler;
+
+  %%SERVICE_NAME%%DurableDispatcher(this.handler);
+
+  /// Dispatch a durable event (from onEvent stream).
+  void dispatchEvent(Map<String, dynamic> data) {
+    // Check for StoredEvent wire format (has 'operation' field)
+    final operationStr = data['operation'] as String?;
+    if (operationStr != null) {
+      final operation = WireOperation.fromString(operationStr);
+      if (operation == null) return;
+      final storedEvent = data['storedEvent'] as Map<String, dynamic>? ?? {};
+      final id = storedEvent['_id'] as String? ?? '';
+      final conversationId = data['conversationId'] as String? ?? '';
+      final eventJson = storedEvent['event'] as Map<String, dynamic>? ?? {};
+      try {
+        final event = Event.fromJson(eventJson);
+        handler.onStoredEvent(operation, id, conversationId, event);
+      } catch (e, st) {
+        print('[DISPATCHER] Event.fromJson failed: $e\n  type: ${eventJson['type']}\n  $st');
+        handler.onEventParseError(operation, id, conversationId, e);
+      }
+      return;
+    }
+
+    // Transient events (no 'operation' field, dispatched by 'kind')
+    final kind = data['kind'] as String?;
+    switch (kind) {
+%%TRANSIENT_CASES%%
+      default:
+        break;
+    }
+  }
+
+  /// Dispatch an ephemeral/session message via typed WireEvent.fromJson.
+  void dispatchEphemeral(Map<String, dynamic> data) {
+    try {
+      final event = WireEvent.fromJson(data);
+      handler.onSessionEvent(event);
+    } catch (e, st) {
+      // Fallback: try kind-based dispatch for backward compatibility
+      print('[DISPATCHER] WireEvent.fromJson failed for ephemeral: $e');
+    }
+  }
+}

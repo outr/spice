@@ -5,7 +5,7 @@ import io.undertow.io.{IoCallback, Sender}
 import io.undertow.server.HttpServerExchange
 import io.undertow.server.handlers.resource.URLResource
 import io.undertow.util.HttpString
-import spice.http.content.{BytesContent, Content, FileContent, IOStreamContent, StreamContent, URLContent}
+import spice.http.content.{BytesContent, Content, FileContent, IOStreamContent, SSEContent, StreamContent, URLContent}
 import spice.http.server.HttpServer
 import spice.http.{Headers, HttpExchange, HttpResponse}
 
@@ -73,6 +73,24 @@ object UndertowResponseSender {
           val out = undertow.getOutputStream
           c.stream(out)
         }
+        case sse: SSEContent =>
+          // SSE: set headers for streaming, write each event incrementally
+          undertow.getResponseHeaders.put(new HttpString("Cache-Control"), "no-cache")
+          undertow.getResponseHeaders.put(new HttpString("Connection"), "keep-alive")
+          undertow.startBlocking()
+          val out = undertow.getOutputStream
+          sse.events
+            .evalMap { event =>
+              Task {
+                out.write((event + "\n").getBytes("UTF-8"))
+                out.flush()
+              }
+            }
+            .drain
+            .map { _ =>
+              out.close()
+              undertow.endExchange()
+            }
         case StreamContent(stream, _, _, _) =>
           undertow.startBlocking()
           val out = undertow.getOutputStream

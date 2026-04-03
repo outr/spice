@@ -2,6 +2,7 @@
 import 'dart:convert';
 
 import 'package:http/http.dart' as http;
+import '%%TYPES_IMPORT%%';
 
 /// REST client for %%SERVICE_NAME%% backend tool invocations.
 /// All tools are invoked via POST /api/invoke.
