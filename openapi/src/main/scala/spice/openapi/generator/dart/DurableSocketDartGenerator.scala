@@ -73,7 +73,7 @@ case class DurableSocketDartGenerator(config: DurableSocketDartConfig) {
   def generate(): List[SourceFile] = {
     val base = List(generateClient(), generateHandler(), generateSender(), generateRestClient())
     if (config.defTypes.nonEmpty || config.enums.nonEmpty || config.typedRestTools.nonEmpty)
-      base :+ generateDefTypes()
+      base ++ generateDefTypeFiles()
     else
       base
   }
@@ -292,13 +292,16 @@ case class DurableSocketDartGenerator(config: DurableSocketDartConfig) {
   // DefType-based type generation
   // ---------------------------------------------------------------------------
 
-  def generateDefTypes(): SourceFile = {
-    val parts = mutable.ListBuffer.empty[String]
+  /** Output path for generated model files (relative to project root). */
+  private val modelPath = "lib/ws/durable/model"
+
+  /** Generate one SourceFile per type definition, plus a barrel file for re-exports. */
+  def generateDefTypeFiles(): List[SourceFile] = {
+    val files = mutable.ListBuffer.empty[SourceFile]
 
     // Collect all types that need to be emitted, recursively
     val toEmit = mutable.LinkedHashMap.empty[String, DefType]
     config.defTypes.foreach { case (name, dt) => collectTypes(name, dt, toEmit) }
-    // Auto-collect types from typed REST tools (input/output DefTypes)
     config.typedRestTools.foreach { tool =>
       tool.inputDef match {
         case o: DefType.Obj => o.map.foreach { case (_, fdt) => collectNestedType(fdt, toEmit) }
@@ -311,7 +314,7 @@ case class DurableSocketDartGenerator(config: DurableSocketDartConfig) {
       }
     }
 
-    // Build child→parent map from poly types so subtypes can extend their parent
+    // Build child→parent map from poly types
     val childToParent = mutable.Map.empty[String, String]
     toEmit.foreach { case (name, dt) =>
       dt match {
@@ -323,9 +326,6 @@ case class DurableSocketDartGenerator(config: DurableSocketDartConfig) {
         case _ =>
       }
     }
-
-    // Detect poly-to-poly parent relationships: if all of Poly A's subtypes
-    // are also subtypes of Poly B, then A extends B in Dart.
     val polyTypes = toEmit.collect { case (name, p: DefType.Poly) => name -> p.values.map { case (key, dt) => shortName(key, dt) }.toSet }
     for ((childPolyName, childSubs) <- polyTypes; (parentPolyName, parentSubs) <- polyTypes if childPolyName != parentPolyName) {
       if (childSubs.nonEmpty && childSubs.subsetOf(parentSubs) && !childToParent.contains(childPolyName)) {
@@ -333,33 +333,167 @@ case class DurableSocketDartGenerator(config: DurableSocketDartConfig) {
       }
     }
 
+    // Track all generated file names for the barrel file
+    val exportNames = mutable.ListBuffer.empty[String]
+
+    // Generate typed wrappers first (they're referenced by other types)
+    // Force wrapper discovery by doing a dry-run type scan
+    toEmit.foreach { case (_, dt) => scanForWrappers(dt) }
+    discoveredWrappers.foreach { case (_, (wrapperName, primitiveDart)) =>
+      val fileName = s"${snakeCase(wrapperName)}.dart"
+      val source = wrapTypedWrapper(wrapperName, primitiveDart)
+      files += SourceFile("Dart", wrapperName, fileName, modelPath, source)
+      exportNames += fileName
+    }
+
+    // Generate each type
     toEmit.foreach { case (name, dt) =>
       if (!dartReserved.contains(name)) {
         val dn = dartName(name)
+        val fileName = s"${snakeCase(dn)}.dart"
+        val parent = childToParent.get(name).map(dartName)
+
         dt match {
-          case e: DefType.Enum => parts += generateDartEnum(dn, e)
-          case o: DefType.Obj  => parts += generateDartClass(dn, o, toEmit, childToParent.get(name).map(dartName))
-          case p: DefType.Poly => parts += generateDartPoly(dn, p, toEmit, childToParent.get(name).map(dartName))
-          case _               => // primitives / arrays / opts don't generate top-level types
+          case e: DefType.Enum =>
+            files += SourceFile("Dart", dn, fileName, modelPath, wrapEnum(dn, generateDartEnum(dn, e)))
+            exportNames += fileName
+          case o: DefType.Obj =>
+            val imports = collectImports(o.map.values.toList, dn, toEmit, childToParent)
+            val parentImport = parent.map(p => s"import '${snakeCase(p)}.dart';").toList
+            val allImports = (imports ++ parentImport).distinct.sorted
+            files += SourceFile("Dart", dn, fileName, modelPath,
+              wrapClass(dn, fileName, generateDartClassBody(dn, o, toEmit, parent), allImports, hasFields = o.map.nonEmpty))
+            exportNames += fileName
+          case p: DefType.Poly =>
+            val subImports = p.values.map { case (key, subDt) =>
+              val subName = dartName(shortName(key, subDt))
+              s"import '${snakeCase(subName)}.dart';"
+            }.toList
+            val parentImport = parent.map(p => s"import '${snakeCase(p)}.dart';").toList
+            val allImports = (subImports ++ parentImport).distinct.sorted
+            files += SourceFile("Dart", dn, fileName, modelPath,
+              wrapPoly(dn, generateDartPoly(dn, p, toEmit, parent), allImports))
+            exportNames += fileName
+          case _ =>
         }
       }
     }
 
     // Simple DurableEnumDescriptor fallback enums
     config.enums.foreach { ed =>
-      parts += generateSimpleDartEnum(ed.name, ed.values)
+      val fileName = s"${snakeCase(ed.name)}.dart"
+      files += SourceFile("Dart", ed.name, fileName, modelPath, wrapEnum(ed.name, generateSimpleDartEnum(ed.name, ed.values)))
+      exportNames += fileName
     }
 
-    // Auto-generated typed wrappers for Classed primitives (Id, Timestamp, etc.)
-    discoveredWrappers.foreach { case (_, (dartName, primitiveDart)) =>
-      parts.prepend(generateTypedWrapper(dartName, primitiveDart))
-    }
+    // Barrel file that re-exports everything (backwards-compatible import)
+    val exports = exportNames.sorted.map(f => s"export 'model/$f';").mkString("\n")
+    val barrelSource =
+      s"""$generatedComment
+         |$exports
+         |""".stripMargin
+    files += SourceFile("Dart", s"${sn}Types", s"${snakeCase(sn)}_types.dart", "lib/ws/durable", barrelSource)
 
-    val source = TypesTemplate
-      .replace("%%TYPE_DEFINITIONS%%", parts.mkString("\n\n"))
-
-    SourceFile("Dart", s"${sn}Types", s"${snakeCase(sn)}_types.dart", "lib/ws/durable", source)
+    files.toList
   }
+
+  /** Scan a DefType tree to discover typed wrappers (Id, Timestamp, etc.) without generating code. */
+  private def scanForWrappers(dt: DefType): Unit = dt match {
+    case DefType.Described(inner, _) => scanForWrappers(inner)
+    case DefType.Classed(inner, cn) =>
+      val name = cn.split('.').last
+      val primitiveDart = defTypeToDartType(inner)
+      discoveredWrappers.getOrElseUpdate(cn, (name, primitiveDart))
+    case DefType.Obj(m, _, _) => m.values.foreach(scanForWrappers)
+    case DefType.Poly(v, _, _) => v.values.foreach(scanForWrappers)
+    case DefType.Arr(inner, _) => scanForWrappers(inner)
+    case DefType.Opt(inner, _) => scanForWrappers(inner)
+    case _ =>
+  }
+
+  /** Collect import statements for field types that reference other generated types. */
+  private def collectImports(
+    fieldTypes: List[DefType],
+    selfName: String,
+    knownTypes: mutable.LinkedHashMap[String, DefType],
+    childToParent: mutable.Map[String, String]
+  ): List[String] = {
+    val imports = mutable.Set.empty[String]
+    def scan(dt: DefType): Unit = dt match {
+      case DefType.Described(inner, _) => scan(inner)
+      case DefType.Classed(_, cn) =>
+        val name = cn.split('.').last
+        if (name != selfName) imports += s"import '${snakeCase(name)}.dart';"
+      case DefType.Obj(_, Some(cn), _) =>
+        val name = dartName(cn.split('.').last)
+        if (name != selfName) imports += s"import '${snakeCase(name)}.dart';"
+      case DefType.Poly(_, Some(cn), _) =>
+        val name = dartName(cn.split('.').last)
+        if (name != selfName) imports += s"import '${snakeCase(name)}.dart';"
+      case DefType.Enum(_, Some(cn), _) =>
+        val name = cn.split('.').last
+        if (name != selfName && !dartReserved.contains(name)) imports += s"import '${snakeCase(name)}.dart';"
+      case DefType.Arr(inner, _) => scan(inner)
+      case DefType.Opt(inner, _) => scan(inner)
+      case _ =>
+    }
+    fieldTypes.foreach(scan)
+    imports.toList.sorted
+  }
+
+  /** Wrap a typed wrapper class in a standalone file. */
+  private def wrapTypedWrapper(name: String, primitiveDart: String): String = {
+    s"""$generatedComment
+       |
+       |${generateTypedWrapper(name, primitiveDart)}
+       |""".stripMargin
+  }
+
+  /** Wrap an enum in a standalone file. */
+  private def wrapEnum(name: String, body: String): String = {
+    s"""$generatedComment
+       |
+       |$body
+       |""".stripMargin
+  }
+
+  /** Wrap a concrete class in a standalone file. @CopyWith only for classes with fields. */
+  private def wrapClass(name: String, fileName: String, body: String, imports: List[String], hasFields: Boolean): String = {
+    val importsStr = if (imports.nonEmpty) imports.mkString("\n") + "\n" else ""
+    if (hasFields) {
+      val partFile = fileName.replace(".dart", ".g.dart")
+      s"""$generatedComment
+         |import 'package:copy_with_extension/copy_with_extension.dart';
+         |
+         |${importsStr}part '$partFile';
+         |
+         |@CopyWith()
+         |$body
+         |""".stripMargin
+    } else {
+      s"""$generatedComment
+         |${importsStr}
+         |$body
+         |""".stripMargin
+    }
+  }
+
+  /** Wrap a poly abstract class in a standalone file (no @CopyWith — abstract). */
+  private def wrapPoly(name: String, body: String, imports: List[String]): String = {
+    val importsStr = if (imports.nonEmpty) imports.mkString("\n") + "\n" else ""
+    s"""$generatedComment
+       |${importsStr}
+       |$body
+       |""".stripMargin
+  }
+
+  /** Generate the class body (without file wrapper) for a concrete class. */
+  private def generateDartClassBody(
+    name: String,
+    o: DefType.Obj,
+    knownTypes: mutable.LinkedHashMap[String, DefType],
+    parentName: Option[String] = None
+  ): String = generateDartClass(name, o, knownTypes, parentName)
 
   /** Recursively collect named types from a DefType tree into `out` (in dependency order). */
   private def collectTypes(name: String, dt: DefType, out: mutable.LinkedHashMap[String, DefType]): Unit = {
