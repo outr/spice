@@ -43,19 +43,28 @@ class DurableDefTypeSpec extends AnyWordSpec with Matchers {
 
   case class TypedRecord(id: UserId, name: String, created: CreatedAt, parentId: Option[UserId]) derives RW
 
+  private def generateFiles(name: String, dt: DefType) = {
+    val config = DurableSocketDartConfig(
+      serviceName = "Test",
+      defTypes = List(name -> dt)
+    )
+    DurableSocketDartGenerator(config).generate()
+  }
+
+  private def findSource(files: List[spice.openapi.generator.SourceFile], fileName: String): String =
+    files.find(_.fileName == fileName).map(_.source).getOrElse(
+      throw new NoSuchElementException(s"File $fileName not found in: ${files.map(_.fileName).mkString(", ")}")
+    )
+
+  private def allSources(files: List[spice.openapi.generator.SourceFile]): String =
+    files.map(_.source).mkString("\n")
+
   // --- Tests ---
 
   "DurableDefTypeSpec" should {
     "generate Dart enum from DefType.Enum" in {
-      val config = DurableSocketDartConfig(
-        serviceName = "Test",
-        defTypes = List("Color" -> summon[RW[Color]].definition)
-      )
-      val gen = DurableSocketDartGenerator(config)
-      val files = gen.generate()
-      val typesFile = files.find(_.fileName == "test_types.dart")
-      typesFile should not be empty
-      val source = typesFile.get.source
+      val files = generateFiles("Color", summon[RW[Color]].definition)
+      val source = findSource(files, "color.dart")
       source should include("enum Color")
       source should include("red,")
       source should include("green,")
@@ -64,145 +73,90 @@ class DurableDefTypeSpec extends AnyWordSpec with Matchers {
     }
 
     "generate Dart class with fromJson constructor" in {
-      val config = DurableSocketDartConfig(
-        serviceName = "Test",
-        defTypes = List("SimpleMessage" -> summon[RW[SimpleMessage]].definition)
-      )
-      val gen = DurableSocketDartGenerator(config)
-      val files = gen.generate()
-      val source = files.find(_.fileName == "test_types.dart").get.source
+      val files = generateFiles("SimpleMessage", summon[RW[SimpleMessage]].definition)
+      val source = findSource(files, "simple_message.dart")
       source should include("class SimpleMessage")
       source should include("final String text;")
       source should include("final int count;")
       source should include("SimpleMessage.fromJson(Map<String, dynamic> json)")
-      // Constructor should use : before initializer list
       source should include(": text =")
-      // Should NOT have double semicolons
       source should not include ";;"
     }
 
     "generate Dart abstract class with polymorphic fromJson for sealed trait" in {
-      val config = DurableSocketDartConfig(
-        serviceName = "Test",
-        defTypes = List("Animal" -> summon[RW[Animal]].definition)
-      )
-      val gen = DurableSocketDartGenerator(config)
-      val files = gen.generate()
-      val source = files.find(_.fileName == "test_types.dart").get.source
-      source should include("abstract class Animal")
-      source should include("static Animal fromJson")
-      source should include("if (type == 'Dog') return Dog.fromJson(json);")
-      source should include("if (type == 'Cat') return Cat.fromJson(json);")
-      source should include("class Dog extends Animal")
-      source should include("class Cat extends Animal")
+      val files = generateFiles("Animal", summon[RW[Animal]].definition)
+      val all = allSources(files)
+      all should include("abstract class Animal")
+      all should include("static Animal fromJson")
+      all should include("if (type == 'Dog') return Dog.fromJson(json);")
+      all should include("if (type == 'Cat') return Cat.fromJson(json);")
+      all should include("class Dog extends Animal")
+      all should include("class Cat extends Animal")
     }
 
     "generate proper class names for empty case objects in enums" in {
-      val config = DurableSocketDartConfig(
-        serviceName = "Test",
-        defTypes = List("Status" -> summon[RW[Status]].definition)
-      )
-      val gen = DurableSocketDartGenerator(config)
-      val files = gen.generate()
-      val source = files.find(_.fileName == "test_types.dart").get.source
-      // Empty case objects should have proper class names, not "class 1 {"
-      source should not include "class 1"
-      source should include("class Active")
-      source should include("class Inactive")
-      source should include("class Pending")
-      source should include("if (type == 'Active') return Active.fromJson(json);")
+      val files = generateFiles("Status", summon[RW[Status]].definition)
+      val all = allSources(files)
+      all should not include "class 1"
+      all should include("class Active")
+      all should include("class Inactive")
+      all should include("class Pending")
+      all should include("if (type == 'Active') return Active.fromJson(json);")
     }
 
     "recursively discover nested types" in {
-      val config = DurableSocketDartConfig(
-        serviceName = "Test",
-        defTypes = List("Wrapper" -> summon[RW[Wrapper]].definition)
-      )
-      val gen = DurableSocketDartGenerator(config)
-      val files = gen.generate()
-      val source = files.find(_.fileName == "test_types.dart").get.source
-      // Should discover Animal, Dog, Cat, Status from Wrapper's fields
-      source should include("class Wrapper")
-      source should include("abstract class Animal")
-      source should include("class Dog")
-      source should include("class Cat")
-      source should include("abstract class Status")
+      val files = generateFiles("Wrapper", summon[RW[Wrapper]].definition)
+      val all = allSources(files)
+      all should include("class Wrapper")
+      all should include("abstract class Animal")
+      all should include("class Dog")
+      all should include("class Cat")
+      all should include("abstract class Status")
     }
 
     "not generate invalid Dart identifiers (no 'enum String')" in {
-      val config = DurableSocketDartConfig(
-        serviceName = "Test",
-        defTypes = List("Wrapper" -> summon[RW[Wrapper]].definition)
-      )
-      val gen = DurableSocketDartGenerator(config)
-      val files = gen.generate()
-      val source = files.find(_.fileName == "test_types.dart").get.source
-      // Should not generate "enum String" or use reserved Dart words as type names
-      source should not include "enum String {"
+      val files = generateFiles("Wrapper", summon[RW[Wrapper]].definition)
+      val all = allSources(files)
+      all should not include "enum String {"
     }
 
     "generate fromJson with .map for List<Poly> and null-check for Optional<Poly>" in {
-      val config = DurableSocketDartConfig(
-        serviceName = "Test",
-        defTypes = List("Wrapper" -> summon[RW[Wrapper]].definition)
-      )
-      val gen = DurableSocketDartGenerator(config)
-      val files = gen.generate()
-      val source = files.find(_.fileName == "test_types.dart").get.source
-      // List<Content> fields in Wrapper's Animal subtypes should use .map().toList(), not .cast<>()
-      // Optional Poly fields should use null-check + fromJson, not "as Poly?"
-      source should not include ".cast<Animal>()"
-      source should not include ".cast<Status>()"
-      // The Animal field in Wrapper should call fromJson
-      source should include("Animal.fromJson")
-      // The Status field in Wrapper should call fromJson
-      source should include("Status.fromJson")
+      val files = generateFiles("Wrapper", summon[RW[Wrapper]].definition)
+      val all = allSources(files)
+      all should not include ".cast<Animal>()"
+      all should not include ".cast<Status>()"
+      all should include("Animal.fromJson")
+      all should include("Status.fromJson")
     }
 
     "generate typed Dart wrapper classes for AnyVal types with className" in {
-      val config = DurableSocketDartConfig(
-        serviceName = "Test",
-        defTypes = List("TypedRecord" -> summon[RW[TypedRecord]].definition)
-      )
-      val gen = DurableSocketDartGenerator(config)
-      val files = gen.generate()
-      val source = files.find(_.fileName == "test_types.dart").get.source
+      val files = generateFiles("TypedRecord", summon[RW[TypedRecord]].definition)
+      val all = allSources(files)
 
-      // Should generate wrapper classes for UserId and CreatedAt
-      source should include("class UserId {")
-      source should include("final String value;")
-      source should include("const UserId(this.value);")
+      all should include("class UserId {")
+      all should include("final String value;")
+      all should include("const UserId(this.value);")
 
-      source should include("class CreatedAt {")
-      source should include("final int value;")
-      source should include("const CreatedAt(this.value);")
+      all should include("class CreatedAt {")
+      all should include("final int value;")
+      all should include("const CreatedAt(this.value);")
 
-      // TypedRecord should use typed fields, not bare primitives
-      source should include("final UserId id;")
-      source should include("final CreatedAt created;")
-      source should include("final UserId? parentId;")
+      all should include("final UserId id;")
+      all should include("final CreatedAt created;")
+      all should include("final UserId? parentId;")
 
-      // fromJson should wrap in constructor
-      source should include("UserId(")
-      source should include("CreatedAt(")
+      all should include("UserId(")
+      all should include("CreatedAt(")
 
-      // toJson should unwrap with .value
-      source should include("id.value")
-      source should include("created.value")
+      all should include("id.value")
+      all should include("created.value")
     }
 
     "generate valid Dart constructor syntax" in {
-      val config = DurableSocketDartConfig(
-        serviceName = "Test",
-        defTypes = List("SimpleMessage" -> summon[RW[SimpleMessage]].definition)
-      )
-      val gen = DurableSocketDartGenerator(config)
-      val files = gen.generate()
-      val source = files.find(_.fileName == "test_types.dart").get.source
-      // Constructor should end with single semicolon, not double
+      val files = generateFiles("SimpleMessage", summon[RW[SimpleMessage]].definition)
+      val source = findSource(files, "simple_message.dart")
       val lines = source.split("\n")
       lines.count(_.trim.endsWith(";;")) shouldBe 0
-      // Constructor initializer list should start with :
       val fromJsonLine = lines.find(_.contains("SimpleMessage.fromJson"))
       fromJsonLine should not be empty
     }
