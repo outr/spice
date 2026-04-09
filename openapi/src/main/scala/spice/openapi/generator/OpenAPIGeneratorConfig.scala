@@ -33,7 +33,7 @@ case class OpenAPIGeneratorConfig() {
       }
     }.toMap
 
-    fromOneOf ++ fromEnums
+    fromEnums ++ fromOneOf
   }
 
   /**

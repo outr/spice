@@ -85,6 +85,9 @@ case class OpenAPIDartGenerator(api: OpenAPI, config: OpenAPIGeneratorConfig) ex
     "_id" -> "id"
   )
 
+  /** Track wrapper type names (e.g., "Id", "Timestamp") discovered during generation */
+  private val wrapperTypes = mutable.Set.empty[String]
+
   private def field(`type`: String, name: String, nullable: Boolean): String = {
     val rename = renameMap.get(name)
     val n = if (nullable) "?" else ""
@@ -107,7 +110,7 @@ case class OpenAPIDartGenerator(api: OpenAPI, config: OpenAPIGeneratorConfig) ex
     parentFiles = Map.empty
     val sourceFiles = api.components.toList.flatMap(_.schemas.toList).filter {
       case (typeName, schema: OpenAPISchema.Component) =>
-        !isPrimitiveTypeOnly(schema) && !conflictsWithDartBuiltInTypes(typeName)
+        !isPrimitiveTypeOnly(typeName, schema) && !conflictsWithDartBuiltInTypes(typeName)
       case (typeName, _: OpenAPISchema.OneOf) => !conflictsWithDartBuiltInTypes(typeName)
       case (typeName, _: OpenAPISchema.AllOf) => !conflictsWithDartBuiltInTypes(typeName)
       case (typeName, _: OpenAPISchema.AnyOf) => !conflictsWithDartBuiltInTypes(typeName)
@@ -127,24 +130,27 @@ case class OpenAPIDartGenerator(api: OpenAPI, config: OpenAPIGeneratorConfig) ex
   /**
    * Check if a schema is just a primitive type without additional properties that would warrant a separate Dart file
    */
-  private def isPrimitiveTypeOnly(schema: OpenAPISchema.Component): Boolean = {
+  private def isPrimitiveTypeOnly(typeName: String, schema: OpenAPISchema.Component): Boolean = {
     // If it has properties, it's not just a primitive type
     if (schema.properties.nonEmpty) return false
-    
+
     // If it has an enum, it should generate a file (even if it's a primitive type)
     if (schema.`enum`.nonEmpty) return false
-    
+
     // If it has additional properties like description, format, etc., it might need a file
     if (schema.description.isDefined || schema.format.isDefined || schema.example.isDefined) return false
-    
+
     // If it has validation constraints, it might need a file
     if (schema.minLength.isDefined || schema.maxLength.isDefined || schema.pattern.isDefined ||
         schema.minimum.isDefined || schema.maximum.isDefined || schema.exclusiveMinimum.isDefined ||
         schema.exclusiveMaximum.isDefined || schema.multipleOf.isDefined) return false
-    
-    // If it has xFullClass, it should generate a file
+
+    // If it has xFullClass, it should generate a file (typed wrapper like Id, Timestamp)
     if (schema.xFullClass.isDefined) return false
-    
+
+    // If it's a polymorphic subtype (has a parent in the type map), it needs a class
+    if (baseForTypeMap.contains(typeName)) return false
+
     // Otherwise, it's just a primitive type that doesn't need a separate file
     true
   }
@@ -338,6 +344,46 @@ case class OpenAPIDartGenerator(api: OpenAPI, config: OpenAPIGeneratorConfig) ex
     )
   }
 
+  private def parseTypedWrapper(typeName: String, schema: OpenAPISchema.Component): SourceFile = {
+    val dartType = schema.`type` match {
+      case "string" => "String"
+      case "integer" => "int"
+      case "number" => "double"
+      case "boolean" => "bool"
+      case other => other
+    }
+    val fileName = s"${typeName.type2File}.dart"
+    val source =
+      s"""import 'package:json_annotation/json_annotation.dart';
+         |
+         |/// GENERATED CODE: Do not edit!
+         |/// Typed wrapper for $dartType
+         |class $typeName {
+         |  final $dartType value;
+         |  const $typeName(this.value);
+         |
+         |  factory $typeName.fromJson($dartType value) => $typeName(value);
+         |  $dartType toJson() => value;
+         |
+         |  @override
+         |  String toString() => value.toString();
+         |
+         |  @override
+         |  bool operator ==(Object other) => other is $typeName && other.value == value;
+         |
+         |  @override
+         |  int get hashCode => value.hashCode;
+         |}
+         |""".stripMargin
+    SourceFile(
+      language = "Dart",
+      name = typeName,
+      fileName = fileName,
+      path = "lib/model",
+      source = source
+    )
+  }
+
   private def parseComponent(rawTypeName: String, schema: OpenAPISchema.Component): SourceFile = {
     val typeName: String = typeNameForComponent(rawTypeName, schema)
     if (schema.`enum`.nonEmpty) {
@@ -346,6 +392,9 @@ case class OpenAPIDartGenerator(api: OpenAPI, config: OpenAPIGeneratorConfig) ex
         case json => throw new UnsupportedOperationException(s"Enum only supports Str: $json")
       }
       parseEnum(typeName, `enum`)
+    } else if (schema.properties.isEmpty && schema.`type`.nonEmpty && schema.xFullClass.isDefined && !baseForTypeMap.contains(rawTypeName)) {
+      // Simple type wrapper (e.g., Id wrapping String, Timestamp wrapping int) — not a poly subtype
+      parseTypedWrapper(typeName, schema)
     } else {
       val imports = mutable.Set.empty[String]
 

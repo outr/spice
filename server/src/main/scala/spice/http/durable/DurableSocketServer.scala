@@ -216,6 +216,33 @@ class DurableSocketServer[Id: RW, Event: RW, Info: RW](
     }
   }
 
+  /** Server-initiated channel switch. Moves a session to a new channel without
+    * client negotiation or authorization. Sends "switched" to the client and replays
+    * any existing events on the new channel. */
+  def serverSwitch(clientId: String, newChannelId: Id): Task[Unit] = {
+    session(clientId) match {
+      case Some(s) =>
+        val ds = s.protocol
+        val oldMap = channelSessions.get(s.channelId)
+        if (oldMap != null) oldMap.remove(s.clientId)
+
+        ds.updateChannelId(newChannelId)
+        val newMap = channelSessions.computeIfAbsent(newChannelId, _ => new ConcurrentHashMap())
+        newMap.put(s.clientId, s)
+        s.touch()
+
+        val switched = JsonFormatter.Default(obj(
+          "type" -> str("switched"),
+          "channelId" -> newChannelId.json,
+          "lastSeq" -> num(ds.highestProcessedSeq)
+        ))
+        ds.sendRaw(switched)
+        Task.unit
+      case None =>
+        Task.error(RuntimeException(s"No session found for clientId $clientId"))
+    }
+  }
+
   private def registerSession(session: DurableSession[Id, Event, Info]): Unit = {
     sessions.put(session.clientId, session)
     val channelMap = channelSessions.computeIfAbsent(session.channelId, _ => new ConcurrentHashMap())

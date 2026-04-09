@@ -221,6 +221,14 @@ trait ServiceCall extends HttpHandler {
       format = format,
       nullable = nullable
     )
+    case DefType.Classed(inner, className) =>
+      val simpleName = className.split('.').last
+      val innerSchema = schemaFrom(inner, schema, format, None) match {
+        case c: OpenAPISchema.Component => c.copy(xFullClass = Some(className))
+        case other => other
+      }
+      val refName = service.server.register(simpleName)(innerSchema)
+      OpenAPISchema.Ref(s"#/components/schemas/$refName", nullable)
     case _ => throw new UnsupportedOperationException(s"DefType not supported: $dt")
   }).withSchema(schema)
 
