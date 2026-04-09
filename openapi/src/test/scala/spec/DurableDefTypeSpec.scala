@@ -6,6 +6,16 @@ import org.scalatest.matchers.should.Matchers
 import org.scalatest.wordspec.AnyWordSpec
 import spice.openapi.generator.dart.{DurableSocketDartConfig, DurableSocketDartGenerator}
 
+// AnyVal wrappers must be top-level (can't be nested in a class)
+case class UserId(value: String) extends AnyVal
+object UserId {
+  given RW[UserId] = RW.string(_.value, UserId.apply, className = Some("test.UserId"))
+}
+case class CreatedAt(value: Long) extends AnyVal
+object CreatedAt {
+  given RW[CreatedAt] = RW.long(_.value, CreatedAt.apply, className = Some("test.CreatedAt"))
+}
+
 /** Tests Dart code generation from DefType — verifies the generator produces
   * correct Dart for enums, classes, polymorphic types, and edge cases. */
 class DurableDefTypeSpec extends AnyWordSpec with Matchers {
@@ -30,6 +40,8 @@ class DurableDefTypeSpec extends AnyWordSpec with Matchers {
 
   // Nested types — a poly containing another poly
   case class Wrapper(animal: Animal, status: Status, timestamp: Long) derives RW
+
+  case class TypedRecord(id: UserId, name: String, created: CreatedAt, parentId: Option[UserId]) derives RW
 
   // --- Tests ---
 
@@ -145,6 +157,38 @@ class DurableDefTypeSpec extends AnyWordSpec with Matchers {
       source should include("Animal.fromJson")
       // The Status field in Wrapper should call fromJson
       source should include("Status.fromJson")
+    }
+
+    "generate typed Dart wrapper classes for AnyVal types with className" in {
+      val config = DurableSocketDartConfig(
+        serviceName = "Test",
+        defTypes = List("TypedRecord" -> summon[RW[TypedRecord]].definition)
+      )
+      val gen = DurableSocketDartGenerator(config)
+      val files = gen.generate()
+      val source = files.find(_.fileName == "test_types.dart").get.source
+
+      // Should generate wrapper classes for UserId and CreatedAt
+      source should include("class UserId {")
+      source should include("final String value;")
+      source should include("const UserId(this.value);")
+
+      source should include("class CreatedAt {")
+      source should include("final int value;")
+      source should include("const CreatedAt(this.value);")
+
+      // TypedRecord should use typed fields, not bare primitives
+      source should include("final UserId id;")
+      source should include("final CreatedAt created;")
+      source should include("final UserId? parentId;")
+
+      // fromJson should wrap in constructor
+      source should include("UserId(")
+      source should include("CreatedAt(")
+
+      // toJson should unwrap with .value
+      source should include("id.value")
+      source should include("created.value")
     }
 
     "generate valid Dart constructor syntax" in {

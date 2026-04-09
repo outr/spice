@@ -12,8 +12,12 @@ import java.nio.file.{Files, Path}
 import scala.collection.mutable
 import scala.io.Source
 
-/** Descriptor for a REST tool invocation. */
+/** Descriptor for a REST tool invocation with manual param declarations. */
 case class RestToolDescriptor(name: String, params: List[(String, String)])
+
+/** Descriptor for a REST tool whose input/output types are captured from RW DefTypes.
+  * Input params and return type are derived automatically — zero manual declarations. */
+case class TypedRestTool(name: String, inputDef: DefType, outputDef: DefType)
 
 /** Configuration for the DurableSocket Dart code generator.
   * Event descriptors come from DurableEventIntrospect — no manual lists. */
@@ -23,10 +27,12 @@ case class DurableSocketDartConfig(
   eventKinds: List[DurableEventDescriptor] = Nil,
   /** Server → Client ephemeral kinds (from introspection) */
   ephemeralKinds: List[DurableEventDescriptor] = Nil,
-  /** Client → Server event kinds (from introspection) */
+  /** @deprecated Use clientEventDefs instead */
   clientEventKinds: List[DurableEventDescriptor] = Nil,
-  /** REST tools (via POST /api/invoke) */
+  /** REST tools (via POST /api/invoke) — manual descriptors */
   restTools: List[RestToolDescriptor] = Nil,
+  /** REST tools with typed DefType input/output — auto-derived params and return types */
+  typedRestTools: List[TypedRestTool] = Nil,
   /** ConnectionInfo fields sent during handshake */
   infoFields: List[(String, String)] = Nil,
   /** Simple enum fallback descriptors (when DefType isn't available) */
@@ -37,7 +43,10 @@ case class DurableSocketDartConfig(
   storedEventMode: Boolean = false,
   /** Transient event descriptors dispatched via durable channel but not persisted.
     * These need full field info for generating typed stubs and dispatch cases. */
-  transientEventKinds: List[DurableEventDescriptor] = Nil
+  transientEventKinds: List[DurableEventDescriptor] = Nil,
+  /** Client → Server event types (typed DefTypes). The generator emits sender methods
+    * with proper constructors and toJson() serialization. Replaces clientEventKinds. */
+  clientEventDefs: List[(String, DefType)] = Nil
 )
 
 /** Generates Dart code for a DurableSocket client, event handler, event sender,
@@ -58,9 +67,12 @@ case class DurableSocketDartGenerator(config: DurableSocketDartConfig) {
   /** Apply rename if the name conflicts with Flutter/Dart SDK. */
   private def dartName(name: String): String = dartRename.getOrElse(name, name)
 
+  /** Rename fields that would be private in Dart (underscore prefix). */
+  private def dartFieldName(name: String): String = if (name.startsWith("_")) name.drop(1) else name
+
   def generate(): List[SourceFile] = {
     val base = List(generateClient(), generateHandler(), generateSender(), generateRestClient())
-    if (config.defTypes.nonEmpty || config.enums.nonEmpty)
+    if (config.defTypes.nonEmpty || config.enums.nonEmpty || config.typedRestTools.nonEmpty)
       base :+ generateDefTypes()
     else
       base
@@ -182,18 +194,48 @@ case class DurableSocketDartGenerator(config: DurableSocketDartConfig) {
   // ---------------------------------------------------------------------------
 
   private def generateSender(): SourceFile = {
-    val methods = config.clientEventKinds.map { ek =>
-      val params = ek.fields.map(f => s"${dartType(f)} ${f.name}").mkString(", ")
-      val jsonEntries = (s"'kind': '${ek.kind}'" +: ek.fields.map(f => s"'${f.name}': ${f.name}")).mkString(", ")
-      s"""  void ${camelCase(ek.kind)}($params) {
-         |    push({$jsonEntries});
-         |  }""".stripMargin
-    }.mkString("\n\n")
+    // Typed methods from clientEventDefs — uses generated class constructors + toJson()
+    val methods = config.clientEventDefs.flatMap { case (name, dt) =>
+      dt match {
+        case o: DefType.Obj if o.map.nonEmpty =>
+          val dartClass = dartName(name)
+          val stripped = name.replaceAll("^Client", "")
+          val methodName = stripped.head.toLower + stripped.tail
+          val params = o.map.toList.map { case (fname, fdt) =>
+            val dartType = defTypeToDartType(fdt)
+            val dartField = dartFieldName(fname)
+            if (dartType.endsWith("?")) s"$dartType $dartField" else s"required $dartType $dartField"
+          }.mkString(", ")
+          val args = o.map.toList.map { case (fname, _) =>
+            s"${dartFieldName(fname)}: ${dartFieldName(fname)}"
+          }.mkString(", ")
+          Some(
+            s"""  void $methodName({$params}) {
+               |    push($dartClass($args).toJson());
+               |  }""".stripMargin)
+        case o: DefType.Obj =>
+          // Empty class (no fields)
+          val dartClass = dartName(name)
+          val stripped = name.replaceAll("^Client", "")
+          val methodName = stripped.head.toLower + stripped.tail
+          Some(
+            s"""  void $methodName() {
+               |    push($dartClass().toJson());
+               |  }""".stripMargin)
+        case _ => None
+      }
+    }
+
+    val allMethods = methods.mkString("\n\n")
+    val typeImports = if (config.clientEventDefs.nonEmpty) {
+      s"import '${snakeCase(sn)}_types.dart';\n"
+    } else ""
 
     val source = SenderTemplate
       .replace("%%SERVICE_NAME%%", sn)
       .replace("%%SERVICE_SNAKE%%", snakeCase(sn))
-      .replace("%%METHODS%%", methods)
+      .replace("%%TYPE_IMPORTS%%", typeImports)
+      .replace("%%METHODS%%", allMethods)
 
     SourceFile("Dart", s"${sn}DurableSender", s"${snakeCase(sn)}_durable_sender.dart", "lib/ws/durable", source)
   }
@@ -203,17 +245,45 @@ case class DurableSocketDartGenerator(config: DurableSocketDartConfig) {
   // ---------------------------------------------------------------------------
 
   private def generateRestClient(): SourceFile = {
-    val methods = config.restTools.map { tool =>
+    val manualMethods = config.restTools.map { tool =>
       val params = tool.params.map { case (n, t) => s"$t $n" }.mkString(", ")
       val argEntries = tool.params.map { case (n, _) => s"'$n': $n" }.mkString(", ")
       s"""  Future<Map<String, dynamic>> ${camelCase(tool.name)}($params) {
          |    return invoke('${tool.name}', {$argEntries});
          |  }""".stripMargin
-    }.mkString("\n\n")
+    }
+
+    val typedMethods = config.typedRestTools.map { tool =>
+      val returnTypeName = tool.outputDef match {
+        case DefType.Obj(_, Some(cn), _) => dartName(cn.split('.').last)
+        case _ => "Map<String, dynamic>"
+      }
+      val (params, argEntries) = tool.inputDef match {
+        case o: DefType.Obj if o.map.nonEmpty =>
+          val ps = o.map.map { case (fname, fdt) => s"${defTypeToDartType(fdt)} $fname" }.mkString(", ")
+          val args = o.map.keys.map(fname => s"'$fname': $fname").mkString(", ")
+          (ps, args)
+        case _ => ("", "")
+      }
+      if (returnTypeName == "Map<String, dynamic>") {
+        s"""  Future<Map<String, dynamic>> ${camelCase(tool.name)}($params) {
+           |    return invoke('${tool.name}', {$argEntries});
+           |  }""".stripMargin
+      } else {
+        s"""  Future<$returnTypeName> ${camelCase(tool.name)}($params) async {
+           |    final json = await invoke('${tool.name}', {$argEntries});
+           |    return $returnTypeName.fromJson(json);
+           |  }""".stripMargin
+      }
+    }
+
+    val allMethods = (manualMethods ++ typedMethods).mkString("\n\n")
+    val typesImport = s"${snakeCase(sn)}_types.dart"
 
     val source = RestTemplate
       .replace("%%SERVICE_NAME%%", sn)
-      .replace("%%METHODS%%", methods)
+      .replace("%%TYPES_IMPORT%%", typesImport)
+      .replace("%%METHODS%%", allMethods)
 
     SourceFile("Dart", s"${sn}RestClient", s"${snakeCase(sn)}_rest_client.dart", "lib/ws/durable", source)
   }
@@ -228,6 +298,18 @@ case class DurableSocketDartGenerator(config: DurableSocketDartConfig) {
     // Collect all types that need to be emitted, recursively
     val toEmit = mutable.LinkedHashMap.empty[String, DefType]
     config.defTypes.foreach { case (name, dt) => collectTypes(name, dt, toEmit) }
+    // Auto-collect types from typed REST tools (input/output DefTypes)
+    config.typedRestTools.foreach { tool =>
+      tool.inputDef match {
+        case o: DefType.Obj => o.map.foreach { case (_, fdt) => collectNestedType(fdt, toEmit) }
+        case _ =>
+      }
+      tool.outputDef match {
+        case o: DefType.Obj if o.className.isDefined =>
+          collectTypes(o.className.get.split('.').last, tool.outputDef, toEmit)
+        case _ =>
+      }
+    }
 
     // Build child→parent map from poly types so subtypes can extend their parent
     val childToParent = mutable.Map.empty[String, String]
@@ -266,6 +348,11 @@ case class DurableSocketDartGenerator(config: DurableSocketDartConfig) {
     // Simple DurableEnumDescriptor fallback enums
     config.enums.foreach { ed =>
       parts += generateSimpleDartEnum(ed.name, ed.values)
+    }
+
+    // Auto-generated typed wrappers for Classed primitives (Id, Timestamp, etc.)
+    discoveredWrappers.foreach { case (_, (dartName, primitiveDart)) =>
+      parts.prepend(generateTypedWrapper(dartName, primitiveDart))
     }
 
     val source = TypesTemplate
@@ -313,6 +400,23 @@ case class DurableSocketDartGenerator(config: DurableSocketDartConfig) {
         if (short.forall(_.isDigit) || cn.contains("anon")) key else short
       case None => key
     }
+  }
+
+  /** Generate a typed wrapper class for a Classed primitive (e.g., Id wrapping String). */
+  private def generateTypedWrapper(name: String, primitiveDart: String): String = {
+    s"""class $name {
+       |  final $primitiveDart value;
+       |  const $name(this.value);
+       |
+       |  @override
+       |  String toString() => value.toString();
+       |
+       |  @override
+       |  bool operator ==(Object other) => other is $name && other.value == value;
+       |
+       |  @override
+       |  int get hashCode => value.hashCode;
+       |}""".stripMargin
   }
 
   private def generateDartEnum(name: String, e: DefType.Enum): String = {
@@ -363,22 +467,39 @@ case class DurableSocketDartGenerator(config: DurableSocketDartConfig) {
     if (o.map.isEmpty) {
       // Empty class (e.g., case object with no fields)
       s"""class $name$extendsClause {
+         |  $name();
          |  $name.fromJson(Map<String, dynamic> json);
+         |
+         |  Map<String, dynamic> toJson() => {'type': '$name'};
          |}""".stripMargin
     } else {
       val fields = o.map.map { case (fname, fdt) =>
-        s"  final ${defTypeToDartType(fdt)} $fname;"
+        s"  final ${defTypeToDartType(fdt)} ${dartFieldName(fname)};"
       }.mkString("\n")
 
+      val ctorParams = o.map.toList.map { case (fname, fdt) =>
+        val dartField = dartFieldName(fname)
+        val dartType = defTypeToDartType(fdt)
+        if (dartType.endsWith("?")) s"this.$dartField" else s"required this.$dartField"
+      }.mkString(", ")
+
       val fromJsonInits = o.map.toList.map { case (fname, fdt) =>
-        s"$fname = ${defTypeFromJson(fname, fdt)}"
+        s"${dartFieldName(fname)} = ${defTypeFromJson(fname, fdt)}"
       }.mkString(",\n        ")
+
+      val toJsonEntries = o.map.toList.map { case (fname, fdt) =>
+        s"'$fname': ${defTypeToJsonExpr(dartFieldName(fname), fdt)}"
+      }.mkString(", ")
 
       s"""class $name$extendsClause {
          |$fields
          |
+         |  $name({$ctorParams});
+         |
          |  $name.fromJson(Map<String, dynamic> json)
          |      : $fromJsonInits;
+         |
+         |  Map<String, dynamic> toJson() => {'type': '$name', $toJsonEntries};
          |}""".stripMargin
     }
   }
@@ -398,10 +519,12 @@ case class DurableSocketDartGenerator(config: DurableSocketDartConfig) {
     s"""abstract class $name$extendsClause {
        |  const $name();
        |
+       |  Map<String, dynamic> toJson();
+       |
        |  static $name fromJson(Map<String, dynamic> json) {
        |    final type = json['type'] as String?;
        |$cases
-       |    throw ArgumentError('Unknown $name type: $$type');
+       |    throw ArgumentError('Unknown $name type: $$type (keys: $${json.keys.join(", ")})');
        |  }
        |}""".stripMargin
   }
@@ -410,8 +533,16 @@ case class DurableSocketDartGenerator(config: DurableSocketDartConfig) {
   // DefType → Dart type name
   // ---------------------------------------------------------------------------
 
+  /** Track Classed wrappers discovered during generation. Key = className, Value = (dartName, primitiveDartType). */
+  private val discoveredWrappers = scala.collection.mutable.LinkedHashMap.empty[String, (String, String)]
+
   private def defTypeToDartType(dt: DefType): String = dt match {
     case DefType.Described(inner, _) => defTypeToDartType(inner)
+    case DefType.Classed(inner, cn) =>
+      val dartName = cn.split('.').last
+      val primitiveDart = defTypeToDartType(inner)
+      discoveredWrappers.getOrElseUpdate(cn, (dartName, primitiveDart))
+      dartName
     case DefType.Str => "String"
     case DefType.Int => "int"
     case DefType.Dec => "double"
@@ -438,12 +569,20 @@ case class DurableSocketDartGenerator(config: DurableSocketDartConfig) {
 
   private def defTypeFromJsonExpr(access: String, dt: DefType): String = dt match {
     case DefType.Described(inner, _) => defTypeFromJsonExpr(access, inner)
+    case DefType.Classed(inner, cn) =>
+      val dartName = cn.split('.').last
+      val primitiveExpr = defTypeFromJsonExpr(access, inner)
+      s"$dartName($primitiveExpr)"
     case DefType.Str => s"$access as String? ?? ''"
     case DefType.Int => s"($access as int?) ?? 0"
     case DefType.Dec => s"($access as num?)?.toDouble() ?? 0.0"
     case DefType.Bool => s"($access as bool?) ?? false"
     case DefType.Json => s"$access is Map<String, dynamic> ? $access as Map<String, dynamic> : <String, dynamic>{}"
     case DefType.Null => "null"
+    case DefType.Opt(DefType.Classed(unwrapped, cn), _) =>
+      val dartName = cn.split('.').last
+      // Use the raw access for null check, then wrap in constructor
+      s"$access != null ? $dartName(${defTypeFromJsonExpr(access, unwrapped)}) : null"
     case DefType.Opt(inner, _) =>
       val innerDart = defTypeToDartType(inner)
       inner match {
@@ -462,6 +601,17 @@ case class DurableSocketDartGenerator(config: DurableSocketDartConfig) {
           s"$access != null ? $arrExpr : null"
         case _ => s"$access as $innerDart?"
       }
+    case DefType.Arr(DefType.Classed(unwrapped, cn), desc) =>
+      val wrapperName = cn.split('.').last
+      val primitiveDart = defTypeToDartType(unwrapped)
+      val primitiveJsonType = unwrapped match {
+        case DefType.Str => "String"
+        case DefType.Int => "int"
+        case DefType.Dec => "double"
+        case DefType.Bool => "bool"
+        case _ => "dynamic"
+      }
+      s"($access as List?)?.map((e) => $wrapperName(e as $primitiveJsonType)).toList() ?? []"
     case DefType.Arr(inner, _) =>
       val innerDart = defTypeToDartType(inner)
       inner match {
@@ -489,6 +639,26 @@ case class DurableSocketDartGenerator(config: DurableSocketDartConfig) {
       val sub = dartName(cn.split('.').last)
       s"$sub.fromJson($access as Map<String, dynamic>)"
     case _ => s"$access as dynamic"
+  }
+
+  /** Generate a Dart expression that serializes a field value to JSON-compatible form. */
+  private def defTypeToJsonExpr(access: String, dt: DefType): String = dt match {
+    case DefType.Described(inner, _) => defTypeToJsonExpr(access, inner)
+    case DefType.Classed(_, _) => s"$access.value"
+    case DefType.Str | DefType.Int | DefType.Dec | DefType.Bool | DefType.Json | DefType.Null => access
+    case DefType.Opt(inner, _) => s"$access != null ? ${defTypeToJsonExpr(s"$access!", inner)} : null"
+    case DefType.Arr(inner, _) => inner match {
+      case DefType.Str | DefType.Int | DefType.Bool | DefType.Dec => access
+      case DefType.Classed(_, _) => s"$access.map((e) => e.value).toList()"
+      case DefType.Obj(_, Some(_), _) | DefType.Poly(_, Some(_), _) =>
+        s"$access.map((e) => e.toJson()).toList()"
+      case _ => access
+    }
+    case DefType.Enum(_, Some(cn), _) =>
+      val sub = cn.split('.').last
+      if (dartReserved.contains(sub)) access else s"$access.name"
+    case DefType.Obj(_, Some(_), _) | DefType.Poly(_, Some(_), _) => s"$access.toJson()"
+    case _ => access
   }
 
   // ---------------------------------------------------------------------------

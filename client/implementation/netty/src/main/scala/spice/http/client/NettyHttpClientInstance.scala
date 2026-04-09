@@ -602,13 +602,15 @@ class NettyHttpClientInstance(val client: HttpClient) extends HttpClientInstance
 
           val handler = new SimpleChannelInboundHandler[HttpObject] {
             private var headersSeen = false
+            private var errorCode: Int = 0
+            private val errorBody = new StringBuilder
 
             override def channelRead0(ctx: ChannelHandlerContext, msg: HttpObject): Unit = msg match {
               case response: NettyHttpResponse =>
                 headersSeen = true
                 val code = response.status().code()
                 if (code >= 400) {
-                  lineQueue.offer(Left(new RuntimeException(s"HTTP $code")))
+                  errorCode = code // defer error until body is read
                 }
 
               case chunk: HttpContent if headersSeen =>
@@ -617,22 +619,34 @@ class NettyHttpClientInstance(val client: HttpClient) extends HttpClientInstance
                   val bytes = new Array[Byte](content.readableBytes())
                   content.readBytes(bytes)
                   val text = new String(bytes, StandardCharsets.UTF_8)
-                  for (c <- text) {
-                    if (c == '\n') {
-                      val line = lineBuffer.toString.stripSuffix("\r")
-                      lineBuffer.clear()
-                      lineQueue.offer(Right(Some(line)))
-                    } else {
-                      lineBuffer.append(c)
+                  if (errorCode > 0) {
+                    // Buffer error response body instead of emitting lines
+                    errorBody.append(text)
+                  } else {
+                    for (c <- text) {
+                      if (c == '\n') {
+                        val line = lineBuffer.toString.stripSuffix("\r")
+                        lineBuffer.clear()
+                        lineQueue.offer(Right(Some(line)))
+                      } else {
+                        lineBuffer.append(c)
+                      }
                     }
                   }
                 }
                 if (chunk.isInstanceOf[LastHttpContent]) {
-                  if (lineBuffer.nonEmpty) {
-                    lineQueue.offer(Right(Some(lineBuffer.toString)))
-                    lineBuffer.clear()
+                  if (errorCode > 0) {
+                    // Emit error with full response body
+                    val body = errorBody.toString.take(2000)
+                    lineQueue.offer(Left(new RuntimeException(s"HTTP $errorCode: $body")))
+                    lineQueue.offer(Right(None))
+                  } else {
+                    if (lineBuffer.nonEmpty) {
+                      lineQueue.offer(Right(Some(lineBuffer.toString)))
+                      lineBuffer.clear()
+                    }
+                    lineQueue.offer(Right(None)) // End sentinel
                   }
-                  lineQueue.offer(Right(None)) // End sentinel
                   try {
                     val p = ctx.pipeline()
                     if (p.get(handlerName) != null) p.remove(handlerName)

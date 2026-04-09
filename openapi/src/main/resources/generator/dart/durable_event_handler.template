@@ -24,11 +24,8 @@ class %%SERVICE_NAME%%DurableDispatcher {
     }
   }
 
-  /// Dispatch an ephemeral message (from onEphemeral stream).
-  void dispatchEphemeral(Map<String, dynamic> data) {
-    final kind = data['kind'] as String?;
-    switch (kind) {
-%%EPHEMERAL_CASES%%
-    }
+  /// Dispatch a typed ephemeral WireEvent.
+  void dispatchEphemeral(WireEvent event) {
+    handler.onSessionEvent(event);
   }
 }

@@ -1,7 +1,7 @@
 /// GENERATED CODE: Do not edit!
 
 import '%%SERVICE_SNAKE%%_durable_client.dart';
-
+%%TYPE_IMPORTS%%
 /// Typed methods for sending client → server events via DurableSocket.
 class %%SERVICE_NAME%%DurableSender {
   final %%SERVICE_NAME%%DurableClient client;
