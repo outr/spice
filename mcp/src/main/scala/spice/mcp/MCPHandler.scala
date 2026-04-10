@@ -60,7 +60,7 @@ case class MCPHandler(server: MCPServer) extends HttpHandler {
     val session = Option(sessions.get(sessionId))
     session match {
       case Some(s) =>
-        server.authenticateMCP(exchange).flatMap {
+        authenticateRequest(exchange).flatMap {
           case Some(ctx) => f(ctx.copy(sessionId = sessionId))
           case None => respondUnauthorized(exchange)
         }
@@ -69,8 +69,25 @@ case class MCPHandler(server: MCPServer) extends HttpHandler {
     }
   }
 
-  private def handleInitialize(exchange: HttpExchange, id: Json, params: Option[Json])(using MDC): Task[HttpExchange] = {
+  private def authenticateRequest(exchange: HttpExchange)(using MDC): Task[Option[MCPContext]] = {
     server.authenticateMCP(exchange).flatMap {
+      case some @ Some(_) => Task.pure(some)
+      case None =>
+        val bearerToken = exchange.request.headers.first(Headers.Request.`Authorization`)
+          .filter(_.startsWith("Bearer "))
+          .map(_.substring(7))
+        bearerToken match {
+          case Some(token) =>
+            server.oauthStore.getToken(token).map(_.map { accessToken =>
+              MCPContext(sessionId = "", store = accessToken.context)
+            })
+          case None => Task.pure(None)
+        }
+    }
+  }
+
+  private def handleInitialize(exchange: HttpExchange, id: Json, params: Option[Json])(using MDC): Task[HttpExchange] = {
+    authenticateRequest(exchange).flatMap {
       case None => respondUnauthorized(exchange)
       case Some(_) =>
         val sessionId = UUID.randomUUID().toString
