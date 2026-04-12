@@ -370,7 +370,9 @@ case class DurableSocketDartGenerator(config: DurableSocketDartConfig) {
               s"import '${snakeCase(subName)}.dart';"
             }.toList
             val parentImport = parent.map(p => s"import '${snakeCase(p)}.dart';").toList
-            val allImports = (subImports ++ parentImport).distinct.sorted
+            // Detect common field types that need imports
+            val commonFieldImports = detectCommonFieldImports(p)
+            val allImports = (subImports ++ parentImport ++ commonFieldImports).distinct.sorted
             files += SourceFile("Dart", dn, fileName, modelPath,
               wrapPoly(dn, generateDartPoly(dn, p, toEmit, parent), allImports))
             exportNames += fileName
@@ -650,9 +652,29 @@ case class DurableSocketDartGenerator(config: DurableSocketDartConfig) {
       s"""    if (type == '$key') return $subName.fromJson(json);"""
     }.mkString("\n")
 
+    // Detect common fields across all subtypes
+    val subtypeFields: List[Map[String, (String, Boolean)]] = p.values.values.toList.flatMap { dt =>
+      extractObjFields(dt).map(_.map { case (fieldName, fieldDt, optional) =>
+        fieldName -> (defTypeToDartType(fieldDt), optional)
+      }.toMap)
+    }
+    val commonFields = if (subtypeFields.size >= 2) {
+      val allFieldNames = subtypeFields.map(_.keySet)
+      val commonNames = allFieldNames.reduce(_ intersect _) - "type"
+      commonNames.flatMap { fieldName =>
+        val types = subtypeFields.flatMap(_.get(fieldName)).map(_._1).distinct
+        if (types.size == 1) Some((fieldName, types.head)) else None
+      }.toList.sortBy(_._1)
+    } else Nil
+
+    val commonGetters = commonFields.map { case (fieldName, dartType) =>
+      s"  $dartType? get $fieldName;"
+    }.mkString("\n")
+    val getterBlock = if (commonGetters.nonEmpty) s"\n$commonGetters\n" else ""
+
     s"""abstract class $name$extendsClause {
        |  const $name();
-       |
+       |$getterBlock
        |  Map<String, dynamic> toJson();
        |
        |  static $name fromJson(Map<String, dynamic> json) {
@@ -666,6 +688,47 @@ case class DurableSocketDartGenerator(config: DurableSocketDartConfig) {
   // ---------------------------------------------------------------------------
   // DefType → Dart type name
   // ---------------------------------------------------------------------------
+
+  /** Extract field definitions from a DefType if it's an Obj (possibly wrapped in Described/Classed). */
+  private def extractObjFields(dt: DefType): Option[List[(String, DefType, Boolean)]] = dt match {
+    case DefType.Obj(fields, _, _) =>
+      Some(fields.map { case (name, fieldDt) =>
+        val optional = fieldDt match {
+          case DefType.Opt(_, _) => true
+          case _ => false
+        }
+        val innerDt = fieldDt match {
+          case DefType.Opt(inner, _) => inner
+          case other => other
+        }
+        (name, innerDt, optional)
+      }.toList)
+    case DefType.Described(inner, _) => extractObjFields(inner)
+    case DefType.Classed(inner, _) => extractObjFields(inner)
+    case _ => None
+  }
+
+  /** Detect which imports are needed for common fields in a poly type. */
+  private def detectCommonFieldImports(p: DefType.Poly): List[String] = {
+    val subtypeFields: List[Map[String, (String, Boolean)]] = p.values.values.toList.flatMap { dt =>
+      extractObjFields(dt).map(_.map { case (fieldName, fieldDt, optional) =>
+        fieldName -> (defTypeToDartType(fieldDt), optional)
+      }.toMap)
+    }
+    if (subtypeFields.size < 2) return Nil
+    val allFieldNames = subtypeFields.map(_.keySet)
+    val commonNames = allFieldNames.reduce(_ intersect _) - "type"
+    val commonTypes = commonNames.flatMap { fieldName =>
+      val types = subtypeFields.flatMap(_.get(fieldName)).map(_._1).distinct
+      if (types.size == 1) Some(types.head) else None
+    }.toSet
+    // Map non-primitive dart types to their import files
+    val primitives = Set("String", "int", "double", "bool", "num", "dynamic", "Object", "void", "List", "Map")
+    commonTypes.filterNot(t => primitives.contains(t) || t.startsWith("List<") || t.startsWith("Map<")).flatMap { dartType =>
+      val snaked = snakeCase(dartType)
+      Some(s"import '$snaked.dart';")
+    }.toList
+  }
 
   /** Track Classed wrappers discovered during generation. Key = className, Value = (dartName, primitiveDartType). */
   private val discoveredWrappers = scala.collection.mutable.LinkedHashMap.empty[String, (String, String)]
