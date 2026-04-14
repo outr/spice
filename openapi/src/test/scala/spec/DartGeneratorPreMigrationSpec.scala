@@ -6,7 +6,7 @@ import org.scalatest.matchers.should.Matchers
 import org.scalatest.wordspec.AnyWordSpec
 import spice.http.HttpMethod
 import spice.net.*
-import spice.openapi.{OpenAPI, OpenAPIComponents, OpenAPIContent, OpenAPIContentType, OpenAPIInfo, OpenAPIPath, OpenAPIPathEntry, OpenAPIRequestBody, OpenAPIResponse, OpenAPISchema, OpenAPIServer}
+import spice.openapi.{OpenAPI, OpenAPIComponents, OpenAPIContent, OpenAPIContentType, OpenAPIGenericType, OpenAPIInfo, OpenAPIPath, OpenAPIPathEntry, OpenAPIRequestBody, OpenAPIResponse, OpenAPISchema, OpenAPIServer}
 import spice.openapi.generator.{OpenAPIGeneratorConfig, SourceFile}
 import spice.openapi.generator.dart.OpenAPIDartGenerator
 
@@ -875,6 +875,53 @@ class DartGeneratorPreMigrationSpec extends AnyWordSpec with Matchers {
 
       val catFile = result.find(_.fileName == "cat.dart").get
       catFile.source should include("class Cat extends Animal with EquatableMixin")
+    }
+
+    "generate generic Dart types from Ref with genericTypeArgs" in {
+      val api = OpenAPI(
+        info = OpenAPIInfo(title = "Test", version = "1.0"),
+        components = Some(OpenAPIComponents(
+          schemas = Map(
+            "Id" -> OpenAPISchema.Component(
+              `type` = "string",
+              xFullClass = Some("test.Id")
+            ),
+            "User" -> OpenAPISchema.Component(
+              `type` = "object",
+              properties = Map(
+                "name" -> OpenAPISchema.Component(`type` = "string")
+              )
+            ),
+            "Post" -> OpenAPISchema.Component(
+              `type` = "object",
+              properties = Map(
+                "title" -> OpenAPISchema.Component(`type` = "string")
+              )
+            ),
+            "Record" -> OpenAPISchema.Component(
+              `type` = "object",
+              properties = Map(
+                "userId" -> OpenAPISchema.Ref(
+                  "#/components/schemas/Id",
+                  genericTypeArgs = List(OpenAPIGenericType("T", "User"))
+                ),
+                "postId" -> OpenAPISchema.Ref(
+                  "#/components/schemas/Id",
+                  genericTypeArgs = List(OpenAPIGenericType("T", "Post"))
+                ),
+                "name" -> OpenAPISchema.Component(`type` = "string")
+              )
+            )
+          )
+        ))
+      )
+      val generator = OpenAPIDartGenerator(api, OpenAPIGeneratorConfig())
+      val result = generator.generate()
+      val recordFile = result.find(_.fileName == "record.dart").get
+      // Ref with genericTypeArgs should produce Dart generic types
+      recordFile.source should include("final Id<User> userId;")
+      recordFile.source should include("final Id<Post> postId;")
+      recordFile.source should include("final String name;")
     }
   }
 }

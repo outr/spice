@@ -25,10 +25,19 @@ object UndertowWebSocketHandler {
         channel.setIdleTimeout(-1L)
         // Handle sending messages
         webSocketListener.send.text.attach { message =>
+          val len = message.length
+          if (len > 1_000_000) {
+            scribe.warn(s"[WS-SEND] Large text frame: ${len} bytes (${len / 1024}KB). Preview: ${message.take(200)}...")
+          }
           WebSockets.sendText(message, channel, null)
         }
         webSocketListener.send.binary.attach {
-          case ByteBufferData(message) => WebSockets.sendBinary(message, channel, null)
+          case ByteBufferData(message) =>
+            val len = message.remaining()
+            if (len > 1_000_000) {
+              scribe.warn(s"[WS-SEND] Large binary frame: ${len} bytes (${len / 1024}KB)")
+            }
+            WebSockets.sendBinary(message, channel, null)
         }
         webSocketListener.send.close.attach { _ =>
           if (channel.isOpen) {
@@ -39,7 +48,12 @@ object UndertowWebSocketHandler {
         // Handle receiving messages
         channel.getReceiveSetter.set(new AbstractReceiveListener {
           override def onFullTextMessage(channel: WebSocketChannel, message: BufferedTextMessage): Unit = {
-            webSocketListener.receive.text @= message.getData
+            val data = message.getData
+            val len = data.length
+            if (len > 1_000_000) {
+              scribe.warn(s"[WS-RECV] Large text frame: ${len} bytes (${len / 1024}KB). Preview: ${data.take(200)}...")
+            }
+            webSocketListener.receive.text @= data
             super.onFullTextMessage(channel, message)
           }
 

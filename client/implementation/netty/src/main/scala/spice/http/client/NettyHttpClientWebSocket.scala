@@ -69,7 +69,7 @@ class NettyHttpClientWebSocket(url: URL, instance: NettyHttpClientInstance) exte
         null,  // subprotocols
         true,  // allowExtensions
         new DefaultHttpHeaders(),
-        8388608  // maxFramePayloadLength
+        67108864  // maxFramePayloadLength
       )
 
       val handler = new SimpleChannelInboundHandler[AnyRef] {
@@ -166,7 +166,7 @@ class NettyHttpClientWebSocket(url: URL, instance: NettyHttpClientInstance) exte
               
               ctx.close()
             case _ =>
-              scribe.error(s"WebSocket exception", cause)
+              scribe.error(s"WebSocket exception on $url (handshakeComplete=$handshakeComplete, channel=${ctx.channel()})", cause)
               error @= cause
               _status @= ConnectionStatus.Closed
 
@@ -199,7 +199,7 @@ class NettyHttpClientWebSocket(url: URL, instance: NettyHttpClientInstance) exte
 
             // HTTP codec for initial handshake
             p.addLast("httpCodec", new HttpClientCodec())
-            p.addLast("httpAggregator", new HttpObjectAggregator(8388608)) // 8MB max
+            p.addLast("httpAggregator", new HttpObjectAggregator(67108864)) // 8MB max
 
             // WebSocket protocol handler with larger frame size
             val config = WebSocketClientProtocolConfig.newBuilder()
@@ -207,7 +207,7 @@ class NettyHttpClientWebSocket(url: URL, instance: NettyHttpClientInstance) exte
               .dropPongFrames(false)
               .handshakeTimeoutMillis(10000L)
               .allowExtensions(true)
-              .maxFramePayloadLength(8388608)
+              .maxFramePayloadLength(67108864)
               .build()
             p.addLast("wsProtocol", new WebSocketClientProtocolHandler(handshaker, config))
 

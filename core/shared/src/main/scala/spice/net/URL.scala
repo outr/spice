@@ -1,6 +1,6 @@
 package spice.net
 
-import fabric.define.DefType
+import fabric.define.{DefType, Definition}
 
 import fabric.rw.*
 
@@ -154,7 +154,7 @@ case class URL(protocol: Protocol = Protocol.Http,
 }
 
 object URL {
-  given rw: RW[URL] = RW.from(_.toString.json, v => parse(v.asStr.value), DefType.Str)
+  given rw: RW[URL] = RW.from(_.toString.json, v => parse(v.asStr.value), Definition(DefType.Str))
 
   def build(protocol: String,
             host: String,

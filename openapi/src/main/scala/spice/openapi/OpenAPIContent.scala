@@ -1,7 +1,7 @@
 package spice.openapi
 
 import fabric.*
-import fabric.define.DefType
+import fabric.define.{DefType, Definition}
 import fabric.rw.*
 import spice.net.ContentType
 
@@ -15,7 +15,7 @@ object OpenAPIContent {
     w = j => OpenAPIContent(j.asMap.map {
       case (ct, oct) => ContentType.parse(ct) -> oct.as[OpenAPIContentType]
     }.toList),
-    d = DefType.Null
+    d = Definition(DefType.Null)
   )
 
   def apply(content: (ContentType, OpenAPIContentType)*): OpenAPIContent = OpenAPIContent(content.toList)

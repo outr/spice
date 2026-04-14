@@ -28,6 +28,8 @@ class UndertowServerImplementation(server: HttpServer) extends HttpServerImpleme
     val encodingHandler = new EncodingHandler(contentEncodingRepository).setNext(this)
 
     val builder = Undertow.builder().setHandler(encodingHandler)
+    // Allow uploads up to 20MB (Undertow default is 2MB)
+    builder.setServerOption(UndertowOptions.MAX_ENTITY_SIZE, java.lang.Long.valueOf(20L * 1024 * 1024))
     if (server.config.enableHTTP2) {
       builder.setServerOption(UndertowOptions.ENABLE_HTTP2, java.lang.Boolean.TRUE)
     }

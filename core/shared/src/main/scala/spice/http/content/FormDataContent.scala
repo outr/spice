@@ -1,6 +1,6 @@
 package spice.http.content
 
-import fabric.define.DefType
+import fabric.define.{DefType, Definition}
 import fabric.{Json, Null}
 import fabric.io.JsonParser
 import fabric.rw.*
@@ -63,6 +63,6 @@ object FormDataContent extends FormDataContent(Map.empty) {
   given rw: RW[FormDataContent] = RW.from[FormDataContent](
     r = _ => Null,
     w = _ => this,
-    d = DefType.Null
+    d = Definition(DefType.Null)
   )
 }

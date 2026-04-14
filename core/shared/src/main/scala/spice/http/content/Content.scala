@@ -1,6 +1,6 @@
 package spice.http.content
 
-import fabric.define.DefType
+import fabric.define.{DefType, Definition}
 import fabric.rw.*
 import rapid.Task
 import spice.net.ContentType
@@ -20,7 +20,7 @@ object Content extends SharedContentHelpers with ContentHelpers {
   given rw: RW[Content] = RW.from[Content](
     r = _ => throw new UnsupportedOperationException("Content cannot be converted"),
     w = _ => throw new UnsupportedOperationException("Content cannot be converted"),
-    d = DefType.Obj(Some("spice.http.content.Content"))
+    d = Definition(DefType.Obj(), className = Some("spice.http.content.Content"))
   )
 
   case object none extends Content {

@@ -1,6 +1,6 @@
 package spice.http.server.rest
 
-import fabric.define.DefType
+import fabric.define.{DefType, Definition}
 import fabric.obj
 import fabric.rw.*
 import spice.http.Headers
@@ -13,6 +13,6 @@ object FileUpload {
   given rw: RW[FileUpload] = RW.from[FileUpload](
     r = f => obj().withReference(f),
     w = json => json.reference.getOrElse(throw new RuntimeException("No reference for FileUpload")).asInstanceOf[FileUpload],
-    d = DefType.Obj(Some("spice.http.server.rest.FileUpload"))
+    d = Definition(DefType.Obj(), className = Some("spice.http.server.rest.FileUpload"))
   )
 }

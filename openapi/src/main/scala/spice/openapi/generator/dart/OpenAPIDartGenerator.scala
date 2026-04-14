@@ -33,12 +33,19 @@ case class OpenAPIDartGenerator(api: OpenAPI, config: OpenAPIGeneratorConfig) ex
     private def ref2Type: String = {
       api.componentByRef(s) match {
         case Some(c: OpenAPISchema.Component) => typeNameForComponent(ref, c)
-        case Some(_: OpenAPISchema.Ref) => ref // Handle nested refs
-        case Some(_: OpenAPISchema.OneOf) => ref // Handle OneOf schemas
-        case Some(_: OpenAPISchema.AllOf) => ref // Handle AllOf schemas
-        case Some(_: OpenAPISchema.AnyOf) => ref // Handle AnyOf schemas
-        case Some(_: OpenAPISchema.Not) => ref // Handle Not schemas
+        case Some(_: OpenAPISchema.Ref) => ref
+        case Some(_: OpenAPISchema.OneOf) => ref
+        case Some(_: OpenAPISchema.AllOf) => ref
+        case Some(_: OpenAPISchema.AnyOf) => ref
+        case Some(_: OpenAPISchema.Not) => ref
         case _ => ref
+      }
+    }
+    private def ref2DartType(r: OpenAPISchema.Ref): String = {
+      api.componentByRef(s) match {
+        case Some(c: OpenAPISchema.Component) =>
+          dartTypeWithGenerics(typeNameForComponent(ref, c), r)
+        case _ => ref2Type
       }
     }
     private def type2File: String = {
@@ -306,15 +313,26 @@ case class OpenAPIDartGenerator(api: OpenAPI, config: OpenAPIGeneratorConfig) ex
     )
   }
 
+  private def stripTypeArgs(s: String): String = {
+    val idx = s.indexOf('[')
+    if (idx == -1) s else s.substring(0, idx)
+  }
+
   private def typeNameForComponent(rawTypeName: => String, schema: OpenAPISchema.Component): String = schema.xFullClass match {
     case Some(cn) =>
-      val parts = cn.substring(cn.lastIndexOf('$') + 1).split('.')
+      val clean = stripTypeArgs(cn)
+      val parts = clean.substring(clean.lastIndexOf('$') + 1).split('.')
       if (parts.length > 1 && parts(parts.length - 2).charAt(0).isUpper) {
         s"${parts(parts.length - 2)}${parts.last}"
       } else {
         parts.last
       }
     case None => rawTypeName.replace(" ", "")
+  }
+
+  private def dartTypeWithGenerics(baseName: String, ref: OpenAPISchema.Ref): String = {
+    if (ref.genericTypeArgs.isEmpty) baseName
+    else s"$baseName<${ref.genericTypeArgs.map(_.typeName).mkString(", ")}>"
   }
 
   private def parseEnum(typeName: String, `enum`: List[String]): SourceFile = {
@@ -518,8 +536,9 @@ case class OpenAPIDartGenerator(api: OpenAPI, config: OpenAPIGeneratorConfig) ex
       ParsedField(c.`type`.dartType, fieldName, c.nullable.getOrElse(false))
     case c: OpenAPISchema.Ref =>
       val modelType = c.ref.ref2Type
+      val dartType = c.ref.ref2DartType(c)
       safeAddImport(imports, modelType.type2File)
-      ParsedField(modelType, fieldName, c.nullable.getOrElse(false))
+      ParsedField(dartType, fieldName, c.nullable.getOrElse(false))
     case c: OpenAPISchema.OneOf =>
       val refs = c.schemas.map(_.asInstanceOf[OpenAPISchema.Ref].ref.ref2Type)
       val parents: List[String] = refs.map(r => baseForTypeMap.getOrElse(r, throw new RuntimeException(s"No mapping defined for $r"))).distinct

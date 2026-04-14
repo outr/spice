@@ -1,6 +1,6 @@
 package spice.openapi.server
 
-import fabric.define.DefType
+import fabric.define.{DefType, Definition}
 import rapid.Task
 import spice.http.paths
 import spice.http.content.Content
@@ -68,13 +68,13 @@ trait OpenAPIHttpServer extends MutableHttpServer {
 
     val paths = services.map { service =>
       val pathParams = service.path.arguments.map { argName =>
-        val paramType = service.calls.headOption.flatMap { call =>
-          call.requestRW.definition match {
-            case DefType.Obj(map, _, _) => map.get(argName)
+        val paramDef = service.calls.headOption.flatMap { call =>
+          call.requestRW.definition.defType match {
+            case DefType.Obj(map) => map.get(argName)
             case _ => None
           }
         }
-        val openAPIType = paramType match {
+        val openAPIType = paramDef.map(_.defType) match {
           case Some(DefType.Int) => "integer"
           case Some(DefType.Dec) => "number"
           case Some(DefType.Bool) => "boolean"

@@ -1,7 +1,7 @@
 package spice.openapi
 
 import fabric.*
-import fabric.define.DefType
+import fabric.define.{DefType, Definition}
 import fabric.rw.*
 import fabric.dsl.*
 import spice.openapi.server.Schema
@@ -57,7 +57,7 @@ object OpenAPISchema {
     given rw: RW[Component] = RW.gen
   }
 
-  case class Ref(ref: String, nullable: Option[Boolean] = None) extends OpenAPISchema {
+  case class Ref(ref: String, nullable: Option[Boolean] = None, genericTypeArgs: List[OpenAPIGenericType] = Nil) extends OpenAPISchema {
     def name: String = ref.substring(ref.lastIndexOf('/') + 1)
 
     override def makeNullable: OpenAPISchema = copy(nullable = Some(true))
@@ -69,7 +69,7 @@ object OpenAPISchema {
     given rw: RW[Ref] = RW.from(
       r = s => obj("$ref" -> str(s.ref), "nullable" -> s.nullable.json),
       w = j => Ref(j("$ref").asString, j.get("nullable").map(_.as[Boolean])),
-      d = DefType.Obj(Some("Ref"), "$ref" -> DefType.Str, "nullable" -> DefType.Opt(DefType.Bool, None))
+      d = Definition(DefType.Obj("$ref" -> Definition(DefType.Str), "nullable" -> Definition(DefType.Opt(Definition(DefType.Bool)))), className = Some("Ref"))
     )
   }
 
@@ -171,6 +171,6 @@ object OpenAPISchema {
         throw new RuntimeException(s"Unsupported OpenAPISchema: $json")
       }
     },
-    d = DefType.Json
+    d = Definition(DefType.Json)
   )
 }

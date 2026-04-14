@@ -1,6 +1,6 @@
 package spec
 
-import fabric.define.DefType
+import fabric.define.{DefType, Definition, GenericType}
 import fabric.rw.*
 import org.scalatest.matchers.should.Matchers
 import org.scalatest.wordspec.AnyWordSpec
@@ -43,10 +43,10 @@ class DurableDefTypeSpec extends AnyWordSpec with Matchers {
 
   case class TypedRecord(id: UserId, name: String, created: CreatedAt, parentId: Option[UserId]) derives RW
 
-  private def generateFiles(name: String, dt: DefType) = {
+  private def generateFiles(name: String, defn: Definition) = {
     val config = DurableSocketDartConfig(
       serviceName = "Test",
-      defTypes = List(name -> dt)
+      defTypes = List(name -> defn)
     )
     DurableSocketDartGenerator(config).generate()
   }
@@ -159,6 +159,49 @@ class DurableDefTypeSpec extends AnyWordSpec with Matchers {
       lines.count(_.trim.endsWith(";;")) shouldBe 0
       val fromJsonLine = lines.find(_.contains("SimpleMessage.fromJson"))
       fromJsonLine should not be empty
+    }
+
+    "generate generic Dart types for parameterized wrappers like Id[User]" in {
+      // Simulate what Fabric 1.24 produces for a field of type Id[User]
+      // where Id[T] is case class Id[T](value: String)
+      val userDef = Definition(
+        DefType.Obj(Map("name" -> Definition(DefType.Str))),
+        className = Some("test.User")
+      )
+      val idUserDef = Definition(
+        DefType.Str,
+        className = Some("test.Id[User]"),
+        genericTypes = List(GenericType("T", userDef))
+      )
+      val idPostDef = Definition(
+        DefType.Str,
+        className = Some("test.Id[Post]"),
+        genericTypes = List(GenericType("T", Definition(
+          DefType.Obj(Map("title" -> Definition(DefType.Str))),
+          className = Some("test.Post")
+        )))
+      )
+      val recordDef = Definition(
+        DefType.Obj(Map(
+          "userId" -> idUserDef,
+          "postId" -> idPostDef,
+          "name" -> Definition(DefType.Str)
+        )),
+        className = Some("test.Record")
+      )
+      val files = generateFiles("Record", recordDef)
+      val all = allSources(files)
+
+      // Should generate ONE Id wrapper class (not Id[User] and Id[Post] separately)
+      all should include("class Id {")
+      all should include("final String value;")
+      all should include("const Id(this.value);")
+
+      // Field types should use Dart generics
+      val recordSource = findSource(files, "record.dart")
+      recordSource should include("final Id<User> userId;")
+      recordSource should include("final Id<Post> postId;")
+      recordSource should include("final String name;")
     }
   }
 }

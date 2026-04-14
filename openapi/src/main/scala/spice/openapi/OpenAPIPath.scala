@@ -1,6 +1,6 @@
 package spice.openapi
 
-import fabric.define.DefType
+import fabric.define.{DefType, Definition}
 import fabric.obj
 import fabric.rw.*
 import spice.http.HttpMethod
@@ -21,6 +21,6 @@ object OpenAPIPath {
         case (m, e) => HttpMethod(m) -> e.as[OpenAPIPathEntry]
       }
     ),
-    d = DefType.Json
+    d = Definition(DefType.Json)
   )
 }

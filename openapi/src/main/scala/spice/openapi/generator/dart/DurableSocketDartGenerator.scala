@@ -1,7 +1,7 @@
 package spice.openapi.generator.dart
 
 import fabric.Str as FabricStr
-import fabric.define.DefType
+import fabric.define.{DefType, Definition}
 import spice.api.server.{DurableEnumDescriptor, DurableEventDescriptor, DurableFieldDescriptor}
 import spice.openapi.generator.SourceFile
 import spice.streamer.*
@@ -15,9 +15,9 @@ import scala.io.Source
 /** Descriptor for a REST tool invocation with manual param declarations. */
 case class RestToolDescriptor(name: String, params: List[(String, String)])
 
-/** Descriptor for a REST tool whose input/output types are captured from RW DefTypes.
+/** Descriptor for a REST tool whose input/output types are captured from RW Definitions.
   * Input params and return type are derived automatically — zero manual declarations. */
-case class TypedRestTool(name: String, inputDef: DefType, outputDef: DefType)
+case class TypedRestTool(name: String, inputDef: Definition, outputDef: Definition)
 
 /** Configuration for the DurableSocket Dart code generator.
   * Event descriptors come from DurableEventIntrospect — no manual lists. */
@@ -37,16 +37,16 @@ case class DurableSocketDartConfig(
   infoFields: List[(String, String)] = Nil,
   /** Simple enum fallback descriptors (when DefType isn't available) */
   enums: List[DurableEnumDescriptor] = Nil,
-  /** Named DefType pairs for full type generation */
-  defTypes: List[(String, DefType)] = Nil,
+  /** Named Definition pairs for full type generation */
+  defTypes: List[(String, Definition)] = Nil,
   /** When true: handler uses storedEvent / transient / ephemeral dispatch pattern */
   storedEventMode: Boolean = false,
   /** Transient event descriptors dispatched via durable channel but not persisted.
     * These need full field info for generating typed stubs and dispatch cases. */
   transientEventKinds: List[DurableEventDescriptor] = Nil,
-  /** Client → Server event types (typed DefTypes). The generator emits sender methods
+  /** Client → Server event types (typed Definitions). The generator emits sender methods
     * with proper constructors and toJson() serialization. Replaces clientEventKinds. */
-  clientEventDefs: List[(String, DefType)] = Nil
+  clientEventDefs: List[(String, Definition)] = Nil
 )
 
 /** Generates Dart code for a DurableSocket client, event handler, event sender,
@@ -195,14 +195,14 @@ case class DurableSocketDartGenerator(config: DurableSocketDartConfig) {
 
   private def generateSender(): SourceFile = {
     // Typed methods from clientEventDefs — uses generated class constructors + toJson()
-    val methods = config.clientEventDefs.flatMap { case (name, dt) =>
-      dt match {
+    val methods = config.clientEventDefs.flatMap { case (name, defn) =>
+      defn.defType match {
         case o: DefType.Obj if o.map.nonEmpty =>
           val dartClass = dartName(name)
           val stripped = name.replaceAll("^Client", "")
           val methodName = stripped.head.toLower + stripped.tail
-          val params = o.map.toList.map { case (fname, fdt) =>
-            val dartType = defTypeToDartType(fdt)
+          val params = o.map.toList.map { case (fname, fDefn) =>
+            val dartType = defTypeToDartType(fDefn)
             val dartField = dartFieldName(fname)
             if (dartType.endsWith("?")) s"$dartType $dartField" else s"required $dartType $dartField"
           }.mkString(", ")
@@ -213,7 +213,7 @@ case class DurableSocketDartGenerator(config: DurableSocketDartConfig) {
             s"""  void $methodName({$params}) {
                |    push($dartClass($args).toJson());
                |  }""".stripMargin)
-        case o: DefType.Obj =>
+        case _: DefType.Obj =>
           // Empty class (no fields)
           val dartClass = dartName(name)
           val stripped = name.replaceAll("^Client", "")
@@ -254,13 +254,13 @@ case class DurableSocketDartGenerator(config: DurableSocketDartConfig) {
     }
 
     val typedMethods = config.typedRestTools.map { tool =>
-      val returnTypeName = tool.outputDef match {
-        case DefType.Obj(_, Some(cn), _) => dartName(cn.split('.').last)
+      val returnTypeName = (tool.outputDef.defType, tool.outputDef.className) match {
+        case (_: DefType.Obj, Some(cn)) => dartName(simpleName(cn))
         case _ => "Map<String, dynamic>"
       }
-      val (params, argEntries) = tool.inputDef match {
+      val (params, argEntries) = tool.inputDef.defType match {
         case o: DefType.Obj if o.map.nonEmpty =>
-          val ps = o.map.map { case (fname, fdt) => s"${defTypeToDartType(fdt)} $fname" }.mkString(", ")
+          val ps = o.map.map { case (fname, fDefn) => s"${defTypeToDartType(fDefn)} $fname" }.mkString(", ")
           val args = o.map.keys.map(fname => s"'$fname': $fname").mkString(", ")
           (ps, args)
         case _ => ("", "")
@@ -300,33 +300,36 @@ case class DurableSocketDartGenerator(config: DurableSocketDartConfig) {
     val files = mutable.ListBuffer.empty[SourceFile]
 
     // Collect all types that need to be emitted, recursively
-    val toEmit = mutable.LinkedHashMap.empty[String, DefType]
-    config.defTypes.foreach { case (name, dt) => collectTypes(name, dt, toEmit) }
+    val toEmit = mutable.LinkedHashMap.empty[String, Definition]
+    config.defTypes.foreach { case (name, defn) => collectTypes(name, defn, toEmit) }
     config.typedRestTools.foreach { tool =>
-      tool.inputDef match {
-        case o: DefType.Obj => o.map.foreach { case (_, fdt) => collectNestedType(fdt, toEmit) }
+      tool.inputDef.defType match {
+        case o: DefType.Obj => o.map.foreach { case (_, fDefn) => collectNestedType(fDefn, toEmit) }
         case _ =>
       }
-      tool.outputDef match {
-        case o: DefType.Obj if o.className.isDefined =>
-          collectTypes(o.className.get.split('.').last, tool.outputDef, toEmit)
+      (tool.outputDef.defType, tool.outputDef.className) match {
+        case (_: DefType.Obj, Some(cn)) =>
+          collectTypes(simpleName(cn), tool.outputDef, toEmit)
         case _ =>
       }
     }
 
     // Build child→parent map from poly types
     val childToParent = mutable.Map.empty[String, String]
-    toEmit.foreach { case (name, dt) =>
-      dt match {
+    toEmit.foreach { case (name, defn) =>
+      defn.defType match {
         case p: DefType.Poly =>
-          p.values.foreach { case (key, subDt) =>
-            val sn = shortName(key, subDt)
+          p.values.foreach { case (key, subDefn) =>
+            val sn = shortName(key, subDefn)
             if (!childToParent.contains(sn)) childToParent(sn) = name
           }
         case _ =>
       }
     }
-    val polyTypes = toEmit.collect { case (name, p: DefType.Poly) => name -> p.values.map { case (key, dt) => shortName(key, dt) }.toSet }
+    val polyTypes = toEmit.collect { case (name, defn) if defn.defType.isInstanceOf[DefType.Poly] =>
+      val p = defn.defType.asInstanceOf[DefType.Poly]
+      name -> p.values.map { case (key, subDefn) => shortName(key, subDefn) }.toSet
+    }
     for ((childPolyName, childSubs) <- polyTypes; (parentPolyName, parentSubs) <- polyTypes if childPolyName != parentPolyName) {
       if (childSubs.nonEmpty && childSubs.subsetOf(parentSubs) && !childToParent.contains(childPolyName)) {
         childToParent(childPolyName) = parentPolyName
@@ -338,7 +341,7 @@ case class DurableSocketDartGenerator(config: DurableSocketDartConfig) {
 
     // Generate typed wrappers first (they're referenced by other types)
     // Force wrapper discovery by doing a dry-run type scan
-    toEmit.foreach { case (_, dt) => scanForWrappers(dt) }
+    toEmit.foreach { case (_, defn) => scanForWrappers(defn) }
     discoveredWrappers.foreach { case (_, (wrapperName, primitiveDart)) =>
       val fileName = s"${snakeCase(wrapperName)}.dart"
       val source = wrapTypedWrapper(wrapperName, primitiveDart)
@@ -347,15 +350,15 @@ case class DurableSocketDartGenerator(config: DurableSocketDartConfig) {
     }
 
     // Generate each type
-    toEmit.foreach { case (name, dt) =>
+    toEmit.foreach { case (name, defn) =>
       if (!dartReserved.contains(name)) {
         val dn = dartName(name)
         val fileName = s"${snakeCase(dn)}.dart"
         val parent = childToParent.get(name).map(dartName)
 
-        dt match {
-          case e: DefType.Enum =>
-            files += SourceFile("Dart", dn, fileName, modelPath, wrapEnum(dn, generateDartEnum(dn, e)))
+        defn.defType match {
+          case p: DefType.Poly if isSimpleEnum(p) =>
+            files += SourceFile("Dart", dn, fileName, modelPath, wrapEnum(dn, generateDartEnumFromPoly(dn, p)))
             exportNames += fileName
           case o: DefType.Obj =>
             val imports = collectImports(o.map.values.toList, dn, toEmit, childToParent)
@@ -365,8 +368,8 @@ case class DurableSocketDartGenerator(config: DurableSocketDartConfig) {
               wrapClass(dn, fileName, generateDartClassBody(dn, o, toEmit, parent), allImports, hasFields = o.map.nonEmpty))
             exportNames += fileName
           case p: DefType.Poly =>
-            val subImports = p.values.map { case (key, subDt) =>
-              val subName = dartName(shortName(key, subDt))
+            val subImports = p.values.map { case (key, subDefn) =>
+              val subName = dartName(shortName(key, subDefn))
               s"import '${snakeCase(subName)}.dart';"
             }.toList
             val parentImport = parent.map(p => s"import '${snakeCase(p)}.dart';").toList
@@ -399,45 +402,59 @@ case class DurableSocketDartGenerator(config: DurableSocketDartConfig) {
     files.toList
   }
 
-  /** Scan a DefType tree to discover typed wrappers (Id, Timestamp, etc.) without generating code. */
-  private def scanForWrappers(dt: DefType): Unit = dt match {
-    case DefType.Described(inner, _) => scanForWrappers(inner)
-    case DefType.Classed(inner, cn) =>
-      val name = cn.split('.').last
-      val primitiveDart = defTypeToDartType(inner)
-      discoveredWrappers.getOrElseUpdate(cn, (name, primitiveDart))
-    case DefType.Obj(m, _, _) => m.values.foreach(scanForWrappers)
-    case DefType.Poly(v, _, _) => v.values.foreach(scanForWrappers)
-    case DefType.Arr(inner, _) => scanForWrappers(inner)
-    case DefType.Opt(inner, _) => scanForWrappers(inner)
-    case _ =>
+  /** Scan a Definition tree to discover typed wrappers (Id, Timestamp, etc.) without generating code. */
+  private def scanForWrappers(d: Definition): Unit = {
+    d.className.foreach { cn =>
+      d.defType match {
+        case DefType.Str | DefType.Int | DefType.Dec | DefType.Bool =>
+          val baseCn = baseClassName(cn)
+          val (baseName, _) = parseClassName(cn)
+          val primitiveDart = defTypeToDartPrimitive(d.defType)
+          discoveredWrappers.getOrElseUpdate(baseCn, (baseName, primitiveDart))
+        case _ =>
+      }
+    }
+    d.defType match {
+      case DefType.Obj(m) => m.values.foreach(scanForWrappers)
+      case DefType.Poly(v) => v.values.foreach(scanForWrappers)
+      case DefType.Arr(inner) => scanForWrappers(inner)
+      case DefType.Opt(inner) => scanForWrappers(inner)
+      case _ =>
+    }
   }
 
   /** Collect import statements for field types that reference other generated types. */
   private def collectImports(
-    fieldTypes: List[DefType],
+    fieldTypes: List[Definition],
     selfName: String,
-    knownTypes: mutable.LinkedHashMap[String, DefType],
+    knownTypes: mutable.LinkedHashMap[String, Definition],
     childToParent: mutable.Map[String, String]
   ): List[String] = {
     val imports = mutable.Set.empty[String]
-    def scan(dt: DefType): Unit = dt match {
-      case DefType.Described(inner, _) => scan(inner)
-      case DefType.Classed(_, cn) =>
-        val name = cn.split('.').last
-        if (name != selfName) imports += s"import '${snakeCase(name)}.dart';"
-      case DefType.Obj(_, Some(cn), _) =>
-        val name = dartName(cn.split('.').last)
-        if (name != selfName) imports += s"import '${snakeCase(name)}.dart';"
-      case DefType.Poly(_, Some(cn), _) =>
-        val name = dartName(cn.split('.').last)
-        if (name != selfName) imports += s"import '${snakeCase(name)}.dart';"
-      case DefType.Enum(_, Some(cn), _) =>
-        val name = cn.split('.').last
-        if (name != selfName && !dartReserved.contains(name)) imports += s"import '${snakeCase(name)}.dart';"
-      case DefType.Arr(inner, _) => scan(inner)
-      case DefType.Opt(inner, _) => scan(inner)
-      case _ =>
+    def scan(d: Definition): Unit = {
+      d.className.foreach { cn =>
+        d.defType match {
+          case DefType.Str | DefType.Int | DefType.Dec | DefType.Bool =>
+            // Typed wrapper (e.g., UserId)
+            val name = simpleName(cn)
+            if (name != selfName) imports += s"import '${snakeCase(name)}.dart';"
+          case _: DefType.Obj =>
+            val name = dartName(simpleName(cn))
+            if (name != selfName) imports += s"import '${snakeCase(name)}.dart';"
+          case _: DefType.Poly if isSimpleEnum(d.defType.asInstanceOf[DefType.Poly]) =>
+            val name = simpleName(cn)
+            if (name != selfName && !dartReserved.contains(name)) imports += s"import '${snakeCase(name)}.dart';"
+          case _: DefType.Poly =>
+            val name = dartName(simpleName(cn))
+            if (name != selfName) imports += s"import '${snakeCase(name)}.dart';"
+          case _ =>
+        }
+      }
+      d.defType match {
+        case DefType.Arr(inner) => scan(inner)
+        case DefType.Opt(inner) => scan(inner)
+        case _ =>
+      }
     }
     fieldTypes.foreach(scan)
     imports.toList.sorted
@@ -493,44 +510,42 @@ case class DurableSocketDartGenerator(config: DurableSocketDartConfig) {
   private def generateDartClassBody(
     name: String,
     o: DefType.Obj,
-    knownTypes: mutable.LinkedHashMap[String, DefType],
+    knownTypes: mutable.LinkedHashMap[String, Definition],
     parentName: Option[String] = None
   ): String = generateDartClass(name, o, knownTypes, parentName)
 
-  /** Recursively collect named types from a DefType tree into `out` (in dependency order). */
-  private def collectTypes(name: String, dt: DefType, out: mutable.LinkedHashMap[String, DefType]): Unit = {
+  /** Recursively collect named types from a Definition tree into `out` (in dependency order). */
+  private def collectTypes(name: String, defn: Definition, out: mutable.LinkedHashMap[String, Definition]): Unit = {
     if (out.contains(name)) return
-    dt match {
-      case DefType.Described(inner, _) => collectTypes(name, inner, out)
-      case e: DefType.Enum =>
-        out(name) = e
+    defn.defType match {
       case o: DefType.Obj =>
         // Recurse into field types first
-        o.map.foreach { case (_, fieldDt) => collectNestedType(fieldDt, out) }
-        out(name) = o
+        o.map.foreach { case (_, fieldDefn) => collectNestedType(fieldDefn, out) }
+        out(name) = defn
       case p: DefType.Poly =>
-        p.values.foreach { case (subName, subDt) => collectTypes(shortName(subName, subDt), subDt, out) }
-        out(name) = p
-      case DefType.Arr(inner, _) => collectNestedType(inner, out)
-      case DefType.Opt(inner, _) => collectNestedType(inner, out)
+        p.values.foreach { case (subName, subDefn) => collectTypes(shortName(subName, subDefn), subDefn, out) }
+        out(name) = defn
+      case DefType.Arr(inner) => collectNestedType(inner, out)
+      case DefType.Opt(inner) => collectNestedType(inner, out)
       case _ => // primitives — no top-level type to register
     }
   }
 
-  private def collectNestedType(dt: DefType, out: mutable.LinkedHashMap[String, DefType]): Unit = dt match {
-    case DefType.Described(inner, _) => collectNestedType(inner, out)
-    case DefType.Obj(_, Some(cn), _) => collectTypes(cn.split('.').last, dt, out)
-    case DefType.Enum(_, Some(cn), _) => collectTypes(cn.split('.').last, dt, out)
-    case DefType.Poly(_, Some(cn), _) => collectTypes(cn.split('.').last, dt, out)
-    case DefType.Arr(inner, _) => collectNestedType(inner, out)
-    case DefType.Opt(inner, _) => collectNestedType(inner, out)
-    case _ => ()
+  private def collectNestedType(defn: Definition, out: mutable.LinkedHashMap[String, Definition]): Unit = {
+    val cn = defn.className
+    defn.defType match {
+      case _: DefType.Obj if cn.isDefined => collectTypes(cn.get.split('.').last, defn, out)
+      case _: DefType.Poly if cn.isDefined => collectTypes(cn.get.split('.').last, defn, out)
+      case DefType.Arr(inner) => collectNestedType(inner, out)
+      case DefType.Opt(inner) => collectNestedType(inner, out)
+      case _ => ()
+    }
   }
 
-  private def shortName(key: String, dt: DefType): String = {
-    dt.className match {
+  private def shortName(key: String, defn: Definition): String = {
+    defn.className match {
       case Some(cn) =>
-        val short = cn.split('.').last
+        val short = simpleName(cn)
         // Scala 3 generates anonymous class names for parameterless enum cases (e.g., "anon.13")
         // In that case, fall back to the poly key which is the actual discriminator value
         if (short.forall(_.isDigit) || cn.contains("anon")) key else short
@@ -555,14 +570,13 @@ case class DurableSocketDartGenerator(config: DurableSocketDartConfig) {
        |}""".stripMargin
   }
 
-  private def generateDartEnum(name: String, e: DefType.Enum): String = {
-    val values = e.values.map { v =>
-      val raw = v match {
-        case FabricStr(s, _) => s
-        case other => other.toString
-      }
-      dartIdentifier(raw)
-    }.mkString(",\n  ")
+  /** Detect if a Poly represents a simple enum (all variants have DefType.Null). */
+  private def isSimpleEnum(p: DefType.Poly): Boolean =
+    p.values.nonEmpty && p.values.values.forall(_.defType.isNull)
+
+  /** Generate a Dart enum from a Poly that represents a simple enum. */
+  private def generateDartEnumFromPoly(name: String, p: DefType.Poly): String = {
+    val values = p.values.keys.map(dartIdentifier).mkString(",\n  ")
     s"""enum $name {
        |  $values;
        |
@@ -596,7 +610,7 @@ case class DurableSocketDartGenerator(config: DurableSocketDartConfig) {
   private def generateDartClass(
     name: String,
     o: DefType.Obj,
-    knownTypes: mutable.LinkedHashMap[String, DefType],
+    knownTypes: mutable.LinkedHashMap[String, Definition],
     parentName: Option[String] = None
   ): String = {
     val extendsClause = parentName.map(p => s" extends $p").getOrElse("")
@@ -609,22 +623,22 @@ case class DurableSocketDartGenerator(config: DurableSocketDartConfig) {
          |  Map<String, dynamic> toJson() => {'type': '$name'};
          |}""".stripMargin
     } else {
-      val fields = o.map.map { case (fname, fdt) =>
-        s"  final ${defTypeToDartType(fdt)} ${dartFieldName(fname)};"
+      val fields = o.map.map { case (fname, fDefn) =>
+        s"  final ${defTypeToDartType(fDefn)} ${dartFieldName(fname)};"
       }.mkString("\n")
 
-      val ctorParams = o.map.toList.map { case (fname, fdt) =>
+      val ctorParams = o.map.toList.map { case (fname, fDefn) =>
         val dartField = dartFieldName(fname)
-        val dartType = defTypeToDartType(fdt)
+        val dartType = defTypeToDartType(fDefn)
         if (dartType.endsWith("?")) s"this.$dartField" else s"required this.$dartField"
       }.mkString(", ")
 
-      val fromJsonInits = o.map.toList.map { case (fname, fdt) =>
-        s"${dartFieldName(fname)} = ${defTypeFromJson(fname, fdt)}"
+      val fromJsonInits = o.map.toList.map { case (fname, fDefn) =>
+        s"${dartFieldName(fname)} = ${defTypeFromJson(fname, fDefn)}"
       }.mkString(",\n        ")
 
-      val toJsonEntries = o.map.toList.map { case (fname, fdt) =>
-        s"'$fname': ${defTypeToJsonExpr(dartFieldName(fname), fdt)}"
+      val toJsonEntries = o.map.toList.map { case (fname, fDefn) =>
+        s"'$fname': ${defTypeToJsonExpr(dartFieldName(fname), fDefn)}"
       }.mkString(", ")
 
       s"""class $name$extendsClause {
@@ -643,19 +657,19 @@ case class DurableSocketDartGenerator(config: DurableSocketDartConfig) {
   private def generateDartPoly(
     name: String,
     p: DefType.Poly,
-    knownTypes: mutable.LinkedHashMap[String, DefType],
+    knownTypes: mutable.LinkedHashMap[String, Definition],
     parentName: Option[String] = None
   ): String = {
     val extendsClause = parentName.map(p => s" extends $p").getOrElse("")
-    val cases = p.values.map { case (key, dt) =>
-      val subName = dartName(shortName(key, dt))
+    val cases = p.values.map { case (key, defn) =>
+      val subName = dartName(shortName(key, defn))
       s"""    if (type == '$key') return $subName.fromJson(json);"""
     }.mkString("\n")
 
     // Detect common fields across all subtypes
-    val subtypeFields: List[Map[String, (String, Boolean)]] = p.values.values.toList.flatMap { dt =>
-      extractObjFields(dt).map(_.map { case (fieldName, fieldDt, optional) =>
-        fieldName -> (defTypeToDartType(fieldDt), optional)
+    val subtypeFields: List[Map[String, (String, Boolean)]] = p.values.values.toList.flatMap { defn =>
+      extractObjFields(defn).map(_.map { case (fieldName, fieldDefn, optional) =>
+        fieldName -> (defTypeToDartType(fieldDefn), optional)
       }.toMap)
     }
     val commonFields = if (subtypeFields.size >= 2) {
@@ -689,30 +703,28 @@ case class DurableSocketDartGenerator(config: DurableSocketDartConfig) {
   // DefType → Dart type name
   // ---------------------------------------------------------------------------
 
-  /** Extract field definitions from a DefType if it's an Obj (possibly wrapped in Described/Classed). */
-  private def extractObjFields(dt: DefType): Option[List[(String, DefType, Boolean)]] = dt match {
-    case DefType.Obj(fields, _, _) =>
-      Some(fields.map { case (name, fieldDt) =>
-        val optional = fieldDt match {
-          case DefType.Opt(_, _) => true
+  /** Extract field definitions from a Definition if it's an Obj. */
+  private def extractObjFields(defn: Definition): Option[List[(String, Definition, Boolean)]] = defn.defType match {
+    case DefType.Obj(fields) =>
+      Some(fields.map { case (name, fieldDefn) =>
+        val optional = fieldDefn.defType match {
+          case _: DefType.Opt => true
           case _ => false
         }
-        val innerDt = fieldDt match {
-          case DefType.Opt(inner, _) => inner
-          case other => other
+        val innerDefn = fieldDefn.defType match {
+          case DefType.Opt(inner) => inner
+          case _ => fieldDefn
         }
-        (name, innerDt, optional)
+        (name, innerDefn, optional)
       }.toList)
-    case DefType.Described(inner, _) => extractObjFields(inner)
-    case DefType.Classed(inner, _) => extractObjFields(inner)
     case _ => None
   }
 
   /** Detect which imports are needed for common fields in a poly type. */
   private def detectCommonFieldImports(p: DefType.Poly): List[String] = {
-    val subtypeFields: List[Map[String, (String, Boolean)]] = p.values.values.toList.flatMap { dt =>
-      extractObjFields(dt).map(_.map { case (fieldName, fieldDt, optional) =>
-        fieldName -> (defTypeToDartType(fieldDt), optional)
+    val subtypeFields: List[Map[String, (String, Boolean)]] = p.values.values.toList.flatMap { defn =>
+      extractObjFields(defn).map(_.map { case (fieldName, fieldDefn, optional) =>
+        fieldName -> (defTypeToDartType(fieldDefn), optional)
       }.toMap)
     }
     if (subtypeFields.size < 2) return Nil
@@ -730,78 +742,155 @@ case class DurableSocketDartGenerator(config: DurableSocketDartConfig) {
     }.toList
   }
 
-  /** Track Classed wrappers discovered during generation. Key = className, Value = (dartName, primitiveDartType). */
+  /** Track typed wrappers discovered during generation. Key = base className (no type params), Value = (dartName, primitiveDartType). */
   private val discoveredWrappers = scala.collection.mutable.LinkedHashMap.empty[String, (String, String)]
 
-  private def defTypeToDartType(dt: DefType): String = dt match {
-    case DefType.Described(inner, _) => defTypeToDartType(inner)
-    case DefType.Classed(inner, cn) =>
-      val dartName = cn.split('.').last
-      val primitiveDart = defTypeToDartType(inner)
-      discoveredWrappers.getOrElseUpdate(cn, (dartName, primitiveDart))
-      dartName
+  /** Parse a className like "lightdb.id.Id[User]" into ("Id", Some(List("User"))).
+    * Returns (baseName, typeArgs) where typeArgs is None if not parameterized. */
+  private def parseClassName(cn: String): (String, Option[List[String]]) = {
+    val dotIdx = cn.lastIndexOf('.')
+    val short = if (dotIdx >= 0) cn.substring(dotIdx + 1) else cn
+    val bracketIdx = short.indexOf('[')
+    if (bracketIdx == -1) (short, None)
+    else {
+      val base = short.substring(0, bracketIdx)
+      val argsStr = short.substring(bracketIdx + 1, short.lastIndexOf(']'))
+      val args = argsStr.split(',').map(_.trim).toList
+      (base, Some(args))
+    }
+  }
+
+  /** Extract the base className (without type parameters) from a full className string.
+    * "com.example.Id[User]" → "com.example.Id" */
+  private def baseClassName(cn: String): String = {
+    val bracketIdx = cn.indexOf('[')
+    if (bracketIdx == -1) cn else cn.substring(0, bracketIdx)
+  }
+
+  /** Extract the simple name from a className, stripping package and type args.
+    * "com.example.Id[User]" → "Id" */
+  private def simpleName(cn: String): String = {
+    val (base, _) = parseClassName(cn)
+    base
+  }
+
+  /** Map a bare DefType (no metadata) to a Dart primitive type name. */
+  private def defTypeToDartPrimitive(dt: DefType): String = dt match {
     case DefType.Str => "String"
     case DefType.Int => "int"
     case DefType.Dec => "double"
     case DefType.Bool => "bool"
     case DefType.Json => "Map<String, dynamic>"
     case DefType.Null => "Null"
-    case DefType.Arr(inner, _) => s"List<${defTypeToDartType(inner)}>"
-    case DefType.Opt(inner, _) => s"${defTypeToDartType(inner)}?"
-    case DefType.Enum(_, Some(cn), _) =>
-      val sub = cn.split('.').last
-      if (dartReserved.contains(sub)) "String" else sub
-    case DefType.Obj(_, Some(cn), _) => dartName(cn.split('.').last)
-    case DefType.Poly(_, Some(cn), _) => dartName(cn.split('.').last)
-    case DefType.Enum(_, None, _) => "String"
-    case DefType.Obj(_, None, _) => "Map<String, dynamic>"
-    case DefType.Poly(_, None, _) => "dynamic"
+    case _ => "dynamic"
+  }
+
+  private def defTypeToDartType(d: Definition): String = {
+    d.className match {
+      case Some(cn) =>
+        d.defType match {
+          case DefType.Str | DefType.Int | DefType.Dec | DefType.Bool =>
+            val baseCn = baseClassName(cn)
+            val (baseName, typeArgs) = parseClassName(cn)
+            val primitiveDart = defTypeToDartPrimitive(d.defType)
+            discoveredWrappers.getOrElseUpdate(baseCn, (baseName, primitiveDart))
+            typeArgs match {
+              case Some(args) => s"$baseName<${args.mkString(", ")}>"
+              case None => baseName
+            }
+          case p: DefType.Poly if isSimpleEnum(p) =>
+            val (baseName, _) = parseClassName(cn)
+            if (dartReserved.contains(baseName)) "String" else baseName
+          case _: DefType.Obj =>
+            val (baseName, _) = parseClassName(cn)
+            dartName(baseName)
+          case _: DefType.Poly =>
+            val (baseName, _) = parseClassName(cn)
+            dartName(baseName)
+          case _ => defTypeToDartTypeInner(d)
+        }
+      case None => defTypeToDartTypeInner(d)
+    }
+  }
+
+  private def defTypeToDartTypeInner(d: Definition): String = d.defType match {
+    case DefType.Str => "String"
+    case DefType.Int => "int"
+    case DefType.Dec => "double"
+    case DefType.Bool => "bool"
+    case DefType.Json => "Map<String, dynamic>"
+    case DefType.Null => "Null"
+    case DefType.Arr(inner) => s"List<${defTypeToDartType(inner)}>"
+    case DefType.Opt(inner) => s"${defTypeToDartType(inner)}?"
+    case p: DefType.Poly if isSimpleEnum(p) => "String"
+    case _: DefType.Obj => "Map<String, dynamic>"
+    case _: DefType.Poly => "dynamic"
   }
 
   /** Generate a Dart expression that deserializes a field from a Map<String, dynamic>. */
-  private def defTypeFromJson(fieldName: String, dt: DefType): String = {
+  private def defTypeFromJson(fieldName: String, d: Definition): String = {
     val access = s"json['$fieldName']"
-    defTypeFromJsonExpr(access, dt)
+    defTypeFromJsonExpr(access, d)
   }
 
-  private def defTypeFromJsonExpr(access: String, dt: DefType): String = dt match {
-    case DefType.Described(inner, _) => defTypeFromJsonExpr(access, inner)
-    case DefType.Classed(inner, cn) =>
-      val dartName = cn.split('.').last
-      val primitiveExpr = defTypeFromJsonExpr(access, inner)
-      s"$dartName($primitiveExpr)"
+  private def defTypeFromJsonExpr(access: String, d: Definition): String = {
+    d.className match {
+      case Some(cn) =>
+        d.defType match {
+          case DefType.Str | DefType.Int | DefType.Dec | DefType.Bool =>
+            val (baseName, _) = parseClassName(cn)
+            val primitiveExpr = defTypeFromJsonExprInner(access, Definition(d.defType))
+            return s"$baseName($primitiveExpr)"
+          case _ =>
+        }
+      case None =>
+    }
+    defTypeFromJsonExprInner(access, d)
+  }
+
+  private def defTypeFromJsonExprInner(access: String, d: Definition): String = d.defType match {
     case DefType.Str => s"$access as String? ?? ''"
     case DefType.Int => s"($access as int?) ?? 0"
     case DefType.Dec => s"($access as num?)?.toDouble() ?? 0.0"
     case DefType.Bool => s"($access as bool?) ?? false"
     case DefType.Json => s"$access is Map<String, dynamic> ? $access as Map<String, dynamic> : <String, dynamic>{}"
     case DefType.Null => "null"
-    case DefType.Opt(DefType.Classed(unwrapped, cn), _) =>
-      val dartName = cn.split('.').last
-      // Use the raw access for null check, then wrap in constructor
-      s"$access != null ? $dartName(${defTypeFromJsonExpr(access, unwrapped)}) : null"
-    case DefType.Opt(inner, _) =>
+    case DefType.Opt(inner) if inner.className.isDefined && isPrimitive(inner.defType) =>
+      val (baseName, _) = parseClassName(inner.className.get)
+      s"$access != null ? $baseName(${defTypeFromJsonExprInner(access, Definition(inner.defType))}) : null"
+    case DefType.Opt(inner) =>
       val innerDart = defTypeToDartType(inner)
-      inner match {
+      inner.defType match {
         case DefType.Str => s"$access as String?"
         case DefType.Int => s"$access as int?"
         case DefType.Dec => s"($access as num?)?.toDouble()"
         case DefType.Bool => s"$access as bool?"
-        case DefType.Enum(_, Some(cn), _) =>
-          val sub = cn.split('.').last
-          if (dartReserved.contains(sub)) s"$access as String?"
-          else s"$sub.fromString($access as String?)"
-        case DefType.Obj(_, Some(cn), _) => s"$access != null ? ${dartName(cn.split('.').last)}.fromJson($access as Map<String, dynamic>) : null"
-        case DefType.Poly(_, Some(cn), _) => s"$access != null ? ${dartName(cn.split('.').last)}.fromJson($access as Map<String, dynamic>) : null"
-        case DefType.Arr(arrInner, _) =>
-          val arrExpr = defTypeFromJsonExpr(access, DefType.Arr(arrInner))
+        case p: DefType.Poly if isSimpleEnum(p) =>
+          inner.className match {
+            case Some(cn) =>
+              val sub = simpleName(cn)
+              if (dartReserved.contains(sub)) s"$access as String?"
+              else s"$sub.fromString($access as String?)"
+            case None => s"$access as String?"
+          }
+        case _: DefType.Obj =>
+          inner.className match {
+            case Some(cn) => s"$access != null ? ${dartName(simpleName(cn))}.fromJson($access as Map<String, dynamic>) : null"
+            case None => s"$access as $innerDart?"
+          }
+        case _: DefType.Poly =>
+          inner.className match {
+            case Some(cn) => s"$access != null ? ${dartName(simpleName(cn))}.fromJson($access as Map<String, dynamic>) : null"
+            case None => s"$access as $innerDart?"
+          }
+        case DefType.Arr(_) =>
+          val arrExpr = defTypeFromJsonExprInner(access, Definition(inner.defType))
           s"$access != null ? $arrExpr : null"
         case _ => s"$access as $innerDart?"
       }
-    case DefType.Arr(DefType.Classed(unwrapped, cn), desc) =>
-      val wrapperName = cn.split('.').last
-      val primitiveDart = defTypeToDartType(unwrapped)
-      val primitiveJsonType = unwrapped match {
+    case DefType.Arr(inner) if inner.className.isDefined && isPrimitive(inner.defType) =>
+      val (wrapperName, _) = parseClassName(inner.className.get)
+      val primitiveJsonType = inner.defType match {
         case DefType.Str => "String"
         case DefType.Int => "int"
         case DefType.Dec => "double"
@@ -809,53 +898,92 @@ case class DurableSocketDartGenerator(config: DurableSocketDartConfig) {
         case _ => "dynamic"
       }
       s"($access as List?)?.map((e) => $wrapperName(e as $primitiveJsonType)).toList() ?? []"
-    case DefType.Arr(inner, _) =>
+    case DefType.Arr(inner) =>
       val innerDart = defTypeToDartType(inner)
-      inner match {
+      inner.defType match {
         case DefType.Str | DefType.Int | DefType.Bool | DefType.Dec =>
           s"($access as List?)?.cast<$innerDart>() ?? []"
-        case DefType.Obj(_, Some(cn), _) =>
-          val sub = dartName(cn.split('.').last)
-          s"($access as List?)?.map((e) => $sub.fromJson(e as Map<String, dynamic>)).toList() ?? []"
-        case DefType.Poly(_, Some(cn), _) =>
-          val sub = dartName(cn.split('.').last)
-          s"($access as List?)?.map((e) => $sub.fromJson(e as Map<String, dynamic>)).toList() ?? []"
-        case DefType.Arr(_, _) =>
+        case _: DefType.Obj =>
+          inner.className match {
+            case Some(cn) =>
+              val sub = dartName(simpleName(cn))
+              s"($access as List?)?.map((e) => $sub.fromJson(e as Map<String, dynamic>)).toList() ?? []"
+            case None =>
+              s"($access as List?)?.cast<$innerDart>() ?? []"
+          }
+        case _: DefType.Poly =>
+          inner.className match {
+            case Some(cn) =>
+              val sub = dartName(simpleName(cn))
+              s"($access as List?)?.map((e) => $sub.fromJson(e as Map<String, dynamic>)).toList() ?? []"
+            case None =>
+              s"($access as List?)?.cast<$innerDart>() ?? []"
+          }
+        case _: DefType.Arr =>
           s"($access as List?)?.cast<$innerDart>() ?? []"
         case _ =>
           s"($access as List?)?.cast<$innerDart>() ?? []"
       }
-    case DefType.Enum(_, Some(cn), _) =>
-      val sub = cn.split('.').last
-      if (dartReserved.contains(sub)) s"$access as String? ?? ''"
-      else s"$sub.fromString($access as String?) ?? $sub.values.first"
-    case DefType.Obj(_, Some(cn), _) =>
-      val sub = dartName(cn.split('.').last)
-      s"$sub.fromJson($access as Map<String, dynamic>)"
-    case DefType.Poly(_, Some(cn), _) =>
-      val sub = dartName(cn.split('.').last)
-      s"$sub.fromJson($access as Map<String, dynamic>)"
+    case p: DefType.Poly if isSimpleEnum(p) =>
+      d.className match {
+        case Some(cn) =>
+          val sub = simpleName(cn)
+          if (dartReserved.contains(sub)) s"$access as String? ?? ''"
+          else s"$sub.fromString($access as String?) ?? $sub.values.first"
+        case None => s"$access as String? ?? ''"
+      }
+    case _: DefType.Obj =>
+      d.className match {
+        case Some(cn) =>
+          val sub = dartName(simpleName(cn))
+          s"$sub.fromJson($access as Map<String, dynamic>)"
+        case None => s"$access as dynamic"
+      }
+    case _: DefType.Poly =>
+      d.className match {
+        case Some(cn) =>
+          val sub = dartName(simpleName(cn))
+          s"$sub.fromJson($access as Map<String, dynamic>)"
+        case None => s"$access as dynamic"
+      }
     case _ => s"$access as dynamic"
   }
 
+  private def isPrimitive(dt: DefType): Boolean = dt match {
+    case DefType.Str | DefType.Int | DefType.Dec | DefType.Bool => true
+    case _ => false
+  }
+
   /** Generate a Dart expression that serializes a field value to JSON-compatible form. */
-  private def defTypeToJsonExpr(access: String, dt: DefType): String = dt match {
-    case DefType.Described(inner, _) => defTypeToJsonExpr(access, inner)
-    case DefType.Classed(_, _) => s"$access.value"
-    case DefType.Str | DefType.Int | DefType.Dec | DefType.Bool | DefType.Json | DefType.Null => access
-    case DefType.Opt(inner, _) => s"$access != null ? ${defTypeToJsonExpr(s"$access!", inner)} : null"
-    case DefType.Arr(inner, _) => inner match {
-      case DefType.Str | DefType.Int | DefType.Bool | DefType.Dec => access
-      case DefType.Classed(_, _) => s"$access.map((e) => e.value).toList()"
-      case DefType.Obj(_, Some(_), _) | DefType.Poly(_, Some(_), _) =>
-        s"$access.map((e) => e.toJson()).toList()"
+  private def defTypeToJsonExpr(access: String, d: Definition): String = {
+    // Handle typed wrappers (className + primitive)
+    d.className match {
+      case Some(_) if isPrimitive(d.defType) => return s"$access.value"
+      case _ =>
+    }
+    d.defType match {
+      case DefType.Str | DefType.Int | DefType.Dec | DefType.Bool | DefType.Json | DefType.Null => access
+      case DefType.Opt(inner) => s"$access != null ? ${defTypeToJsonExpr(s"$access!", inner)} : null"
+      case DefType.Arr(inner) =>
+        if (inner.className.isDefined && isPrimitive(inner.defType)) {
+          s"$access.map((e) => e.value).toList()"
+        } else inner.defType match {
+          case DefType.Str | DefType.Int | DefType.Bool | DefType.Dec => access
+          case _: DefType.Obj if inner.className.isDefined => s"$access.map((e) => e.toJson()).toList()"
+          case _: DefType.Poly if inner.className.isDefined => s"$access.map((e) => e.toJson()).toList()"
+          case _ => access
+        }
+      case p: DefType.Poly if isSimpleEnum(p) =>
+        d.className match {
+          case Some(cn) =>
+            val sub = simpleName(cn)
+            if (dartReserved.contains(sub)) access else s"$access.name"
+          case None => access
+        }
+      case _: DefType.Obj if d.className.isDefined => s"$access.toJson()"
+      case _: DefType.Poly if d.className.isDefined => s"$access.toJson()"
       case _ => access
     }
-    case DefType.Enum(_, Some(cn), _) =>
-      val sub = cn.split('.').last
-      if (dartReserved.contains(sub)) access else s"$access.name"
-    case DefType.Obj(_, Some(_), _) | DefType.Poly(_, Some(_), _) => s"$access.toJson()"
-    case _ => access
   }
 
   // ---------------------------------------------------------------------------
