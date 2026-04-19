@@ -37,6 +37,7 @@ trait Service extends HttpHandler {
                                      operationId: Option[String] = None,
                                      requestSchema: Option[Schema] = None,
                                      responseSchema: Option[Schema] = None,
+                                     security: Option[List[Map[String, List[String]]]] = None,
                                      errorResponses: Map[String, OpenAPIResponse] = Map.empty)
                                     (call: ServiceRequest[Request] => Task[ServiceResponse[Response]])
                                     (using requestRW: RW[Request], responseRW: RW[Response]): ServiceCall = {
@@ -54,6 +55,7 @@ trait Service extends HttpHandler {
       responseRW = responseRW,
       requestSchema = requestSchema,
       responseSchema = responseSchema,
+      security = security,
       errorResponses = errorResponses
     )
   }

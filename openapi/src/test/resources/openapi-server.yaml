@@ -56,6 +56,9 @@ paths:
                 file:
                   type: 'string'
                   format: 'binary'
+              required:
+                - 'userId'
+                - 'file'
               x-full-class: 'spec.OpenAPIHttpServerSpec.FileUploadRequest'
       responses:
         200:
@@ -73,6 +76,9 @@ components:
           type: 'string'
         password:
           type: 'string'
+      required:
+        - 'username'
+        - 'password'
       x-full-class: 'spec.OpenAPIHttpServerSpec.Auth'
     CombineRequest:
       type: 'object'
@@ -83,6 +89,9 @@ components:
           type: 'object'
           additionalProperties:
             $ref: '#/components/schemas/NumEnum'
+      required:
+        - 'auth'
+        - 'map'
       x-full-class: 'spec.OpenAPIHttpServerSpec.CombineRequest'
     CombineResponse:
       type: 'object'
@@ -95,6 +104,8 @@ components:
           type:
             - 'string'
             - 'null'
+      required:
+        - 'list'
       x-full-class: 'spec.OpenAPIHttpServerSpec.CombineResponse'
     FileUploadResponse:
       type: 'object'
@@ -103,6 +114,9 @@ components:
           type: 'string'
         length:
           type: 'integer'
+      required:
+        - 'userId'
+        - 'length'
       x-full-class: 'spec.OpenAPIHttpServerSpec.FileUploadResponse'
     NumEnum:
       type: 'string'
@@ -119,6 +133,9 @@ components:
           $ref: '#/components/schemas/Auth'
         text:
           type: 'string'
+      required:
+        - 'auth'
+        - 'text'
       x-full-class: 'spec.OpenAPIHttpServerSpec.ReverseRequest'
     ReverseResponse:
       type: 'object'

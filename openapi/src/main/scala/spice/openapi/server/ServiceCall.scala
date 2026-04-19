@@ -26,6 +26,7 @@ trait ServiceCall extends HttpHandler {
   def tags: List[String] = Nil
   def operationId: Option[String] = None
   def successDescription: String
+  def security: Option[List[Map[String, List[String]]]] = None
   def errorResponses: Map[String, OpenAPIResponse] = Map.empty
 
   def service: Service
@@ -92,6 +93,7 @@ trait ServiceCall extends HttpHandler {
       tags = tags,
       operationId = operationId,
       requestBody = requestBody,
+      security = security,
       responses = Map(
         "200" -> OpenAPIResponse(
           description = successDescription,
@@ -123,12 +125,16 @@ trait ServiceCall extends HttpHandler {
         xFullClass = className
       )
     } else {
+      val requiredFields = map.collect {
+        case (key, d) if !d.defType.isOpt => key
+      }.toList
       OpenAPISchema.Component(
         `type` = "object",
         format = format,
         properties = map.map {
           case (key, d) => key -> schemaFrom(d, schema.properties.getOrElse(key, Schema()), format, nullable)
         },
+        required = requiredFields,
         xFullClass = className
       )
     }
@@ -237,7 +243,10 @@ trait ServiceCall extends HttpHandler {
         nullable = nullable
       )
       case dt => throw new UnsupportedOperationException(s"DefType not supported: $dt")
-    }).withSchema(schema)
+    }) match {
+      case c: OpenAPISchema.Component => c.withDefinition(d).withSchema(schema)
+      case other => other.withSchema(schema)
+    }
   }
 
   private def applyDescription(schema: OpenAPISchema, description: Option[String]): OpenAPISchema = {

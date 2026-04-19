@@ -1,7 +1,7 @@
 package spice.openapi
 
 import fabric.*
-import fabric.filter.{RemoveEmptyFilter, RemoveNullsFilter}
+import fabric.filter.{JsonFilter, RemoveNullsFilter}
 import fabric.io.{JsonFormatter, YamlFormatter}
 import fabric.rw.*
 
@@ -26,9 +26,19 @@ case class OpenAPI(openapi: String = "3.2.0",
 object OpenAPI {
   given rw: RW[OpenAPI] = RW.gen
 
+  /** Removes empty objects and arrays, but preserves empty arrays inside "security"
+    * entries (OpenAPI uses empty arrays to mean "no scopes required"). */
+  private object OpenAPIRemoveEmptyFilter extends JsonFilter {
+    override def apply(value: Json, path: JsonPath): Option[Json] = value match {
+      case Obj(map) if map.isEmpty => None
+      case Arr(vector, _) if vector.isEmpty && !path.toString.contains("security") => None
+      case _ => Some(value)
+    }
+  }
+
   private def asJson(api: OpenAPI): Json = api
     .json
     .filterOne(RemoveNullsFilter)
-    .filterOne(RemoveEmptyFilter)
+    .filterOne(OpenAPIRemoveEmptyFilter)
     .filterOne(OpenAPI32Filter)
 }

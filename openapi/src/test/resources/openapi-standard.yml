@@ -31,6 +31,9 @@ components:
           type: 'string'
         type:
           $ref: '#/components/schemas/UserType'
+      required:
+        - 'name'
+        - 'type'
       x-full-class: 'spec.OpenAPIServerSpec.User'
     UserType:
       type: 'string'

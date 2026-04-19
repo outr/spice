@@ -176,6 +176,9 @@ private class ApiOpenAPIBuilder(basePath: String) {
           case None => oneOf
         }
       case dt => throw new UnsupportedOperationException(s"Unsupported DefType: $dt")
+    } match {
+      case c: OpenAPISchema.Component => c.withDefinition(d)
+      case other => other
     }
   }
 

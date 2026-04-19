@@ -9,4 +9,5 @@ case class OpenAPIPathEntry(summary: String,
                             requestBody: Option[OpenAPIRequestBody] = None,
                             responses: Map[String, OpenAPIResponse],
                             parameters: List[OpenAPIParameter] = Nil,
+                            security: Option[List[Map[String, List[String]]]] = None,
                             deprecated: Option[Boolean] = None) derives RW

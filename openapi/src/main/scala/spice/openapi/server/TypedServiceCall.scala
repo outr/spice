@@ -20,6 +20,7 @@ case class TypedServiceCall[Req, Res](call: ServiceRequest[Req] => Task[ServiceR
                                       responseRW: RW[Res],
                                       requestSchema: Option[Schema],
                                       responseSchema: Option[Schema],
+                                      override val security: Option[List[Map[String, List[String]]]] = None,
                                       override val errorResponses: Map[String, OpenAPIResponse] = Map.empty) extends ServiceCall {
   override type Request = Req
   override type Response = Res

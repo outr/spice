@@ -1,7 +1,7 @@
 package spice.openapi
 
 import fabric.*
-import fabric.define.{DefType, Definition}
+import fabric.define.{DefType, Definition, Format}
 import fabric.rw.*
 import fabric.dsl.*
 import spice.openapi.server.Schema
@@ -51,6 +51,28 @@ object OpenAPISchema {
       maxItems = schema.maxItems,
       minItems = schema.minItems
     )
+
+    /** Apply metadata from a Fabric Definition (constraints, format, deprecated, description).
+      * Existing non-None values are preserved. */
+    def withDefinition(d: Definition): Component = {
+      val c = d.constraints
+      copy(
+        description = description.orElse(d.description),
+        minLength = minLength.orElse(c.minLength),
+        maxLength = maxLength.orElse(c.maxLength),
+        pattern = pattern.orElse(c.pattern),
+        minimum = minimum.orElse(c.minimum.map(num)),
+        maximum = maximum.orElse(c.maximum.map(num)),
+        exclusiveMinimum = exclusiveMinimum.orElse(c.exclusiveMinimum.map(num)),
+        exclusiveMaximum = exclusiveMaximum.orElse(c.exclusiveMaximum.map(num)),
+        multipleOf = multipleOf.orElse(c.multipleOf.map(num)),
+        minItems = minItems.orElse(c.minItems),
+        maxItems = maxItems.orElse(c.maxItems),
+        uniqueItems = uniqueItems.orElse(c.uniqueItems),
+        format = format.orElse(if (d.format == Format.Raw) None else Some(d.format.name)),
+        deprecated = deprecated.orElse(if (d.deprecated) Some(true) else None)
+      )
+    }
   }
 
   object Component {
