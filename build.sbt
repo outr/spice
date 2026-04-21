@@ -5,7 +5,7 @@ ThisBuild / version := "1.7.0-SNAPSHOT"
 val scala3: String = "3.8.3"
 
 ThisBuild / scalaVersion := scala3
-ThisBuild / scalacOptions ++= Seq("-deprecation")
+ThisBuild / scalacOptions ++= Seq("-deprecation", "-Xmax-inlines", "64")
 ThisBuild / javacOptions ++= Seq("-source", "11", "-target", "11")
 
 publishMavenStyle := true
