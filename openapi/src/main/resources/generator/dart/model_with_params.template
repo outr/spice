@@ -8,19 +8,19 @@ part '%%FILENAME%%.g.dart';
 
 /// GENERATED CODE: Do not edit!
 /// Model with Params
-@JsonSerializable(explicitToJson: true)
+%%ANNOTATIONS%%
 @CopyWith()
-class %%CLASSNAME%% %%EXTENDS%%{
+class %%CLASSNAME_DECL%% %%EXTENDS%%{
   %%FIELDS%%
 
   const %%CLASSNAME%%(%%PARAMS%%);
 
-  static %%CLASSNAME%% fromJson(Map<String, dynamic> json) => _$%%CLASSNAME%%FromJson(json);
+  %%FROMJSON%%
 
   %%TOJSON%%
 
   @override
   List<Object?> get props => [%%PROPS%%];
 
-  %%CLASSNAME%% deepClone() => fromJson(toJson());
+  %%DEEPCLONE%%
 }

@@ -81,10 +81,52 @@ case class OpenAPIDartGenerator(api: OpenAPI, config: OpenAPIGeneratorConfig) ex
       typeNameForComponent(t, component)
     }
 
+    /** Like `refType`, but includes resolved generic args — `Foo<Bar>` rather
+     * than just `Foo`. Use this for parameter / return-type positions in the
+     * generated service method signatures so callers see the typed shape. */
+    private def refTypeWithGenerics: String = {
+      val base = refType
+      if (ref.genericTypeArgs.isEmpty) base
+      else s"$base<${ref.genericTypeArgs.map(_.typeName).mkString(", ")}>"
+    }
+
     private def component: OpenAPISchema.Component = api.componentByRef(ref.ref).get match {
       case c: OpenAPISchema.Component => c
       case _ => throw new RuntimeException(s"Expected Component schema but got: ${api.componentByRef(ref.ref)}")
     }
+  }
+
+  /** Factory plumbing for generic types referenced by the service emitter.
+   *
+   * When a request/response type is parameterized in Scala (e.g.
+   * `SimpleAuthenticatedRequest[User]`), the generated Dart class is
+   * `SimpleAuthenticatedRequest<User>` with `genericArgumentFactories: true`.
+   * Its `toJson(...)` and `fromJson(...)` require closures that handle each
+   * type-arg's own (de)serialization. Service-method emission threads those
+   * closures here.
+   */
+  private def toJsonFactoryCalls(ref: OpenAPISchema.Ref): String =
+    ref.genericTypeArgs.map(_ => "(v) => v.toJson()").mkString(", ")
+
+  private def fromJsonFactoryCalls(ref: OpenAPISchema.Ref,
+                                    imports: mutable.Set[String]): String =
+    ref.genericTypeArgs.map { gt =>
+      safeAddImport(imports, gt.typeName.type2File)
+      s"(e) => ${gt.typeName}.fromJson(e as Map<String, dynamic>)"
+    }.mkString(", ")
+
+  /** `request.toJson()` if non-generic, `request.toJson(<factories>)` otherwise. */
+  private def requestToJsonExpr(ref: OpenAPISchema.Ref): String =
+    if (ref.genericTypeArgs.isEmpty) "request.toJson()"
+    else s"request.toJson(${toJsonFactoryCalls(ref)})"
+
+  /** Function reference for `restful` / `restPost` — bare `Type.fromJson` if
+   * non-generic, or a wrapping closure that supplies the factories otherwise. */
+  private def responseFromJsonExpr(ref: OpenAPISchema.Ref,
+                                    responseTypeName: String,
+                                    imports: mutable.Set[String]): String = {
+    if (ref.genericTypeArgs.isEmpty) s"$responseTypeName.fromJson"
+    else s"(json) => $responseTypeName.fromJson(json, ${fromJsonFactoryCalls(ref, imports)})"
   }
 
   private lazy val renameMap = Map(
@@ -368,6 +410,7 @@ case class OpenAPIDartGenerator(api: OpenAPI, config: OpenAPIGeneratorConfig) ex
       case "integer" => "int"
       case "number" => "double"
       case "boolean" => "bool"
+      case "object" => "Object"
       case other => other
     }
     val fileName = s"${typeName.type2File}.dart"
@@ -455,24 +498,113 @@ case class OpenAPIDartGenerator(api: OpenAPI, config: OpenAPIGeneratorConfig) ex
         ""
       }
       val props = schema.properties.toList.map(_._1.prop).mkString(", ")
-      val toJson = parent match {
-        case Some(_) =>
+
+      // ---- Generic-class plumbing ----------------------------------------
+      // When the source Scala class is parameterized (e.g. `Auth[T]`), emit a
+      // matching Dart declaration `class Auth<T>` and thread factory functions
+      // through fromJson / toJson per json_serializable's
+      // `genericArgumentFactories` contract. For each formal parameter `X` we
+      // add a positional `fromJsonX: X Function(Object?)` argument to fromJson
+      // and `toJsonX: Object? Function(X)` to toJson. These are forwarded to
+      // the build_runner-generated `_$XxxFromJson` / `_$XxxToJson` so any
+      // T-typed nested fields can be re-hydrated.
+      //
+      // For phantom parameters (T appears only on the Scala side via type
+      // class constraints — common in this codebase, where `Id[T]` collapses
+      // to `String`), the factory is unused at runtime but the signatures
+      // still need to be in place so call sites can pass them.
+      //
+      // **Polymorphic exception:** if the class has a non-generic abstract
+      // parent (i.e. `parent.isDefined`), we suppress the type parameter on
+      // the child here. Otherwise the child's overridden toJson signature
+      // wouldn't match the parent's abstract zero-arg `toJson()`. The
+      // upstream Scala trait would need to be generic too for this to work
+      // cleanly, which is an outr-core change. Until then the child class
+      // is type-erased — acceptable while there's only one concrete User /
+      // Organization in the consuming app.
+      val typeParamsList: List[String] = if (parent.isDefined) Nil else schema.xTypeParameters
+      val isGeneric: Boolean = typeParamsList.nonEmpty
+      val typeParamDecl: String =
+        if (isGeneric) typeParamsList.mkString("<", ", ", ">") else ""
+      val classNameWithParams: String =
+        if (isGeneric) s"$typeName$typeParamDecl" else typeName
+
+      val annotations: String =
+        if (isGeneric) "@JsonSerializable(explicitToJson: true, genericArgumentFactories: true)"
+        else "@JsonSerializable(explicitToJson: true)"
+
+      val fromJsonFactoryParams: String =
+        if (isGeneric) typeParamsList.map(t => s"$t Function(Object?) fromJson$t").mkString(", ") else ""
+      val fromJsonFactoryArgs: String =
+        if (isGeneric) typeParamsList.map(t => s"fromJson$t").mkString(", ") else ""
+      val toJsonFactoryParams: String =
+        if (isGeneric) typeParamsList.map(t => s"Object? Function($t) toJson$t").mkString(", ") else ""
+      val toJsonFactoryArgs: String =
+        if (isGeneric) typeParamsList.map(t => s"toJson$t").mkString(", ") else ""
+
+      // For generic classes we emit a `factory` constructor (rather than a
+      // `static` method) because build_runner's json_serializable specifically
+      // looks for a factory `ClassName.fromJson` when wiring up nested generic
+      // calls under `genericArgumentFactories: true`. With a static method,
+      // build_runner emits a single-arg call and the build fails.
+      val fromJson: String = if (isGeneric) {
+        s"""factory $typeName.fromJson(
+           |    Map<String, dynamic> json,
+           |    $fromJsonFactoryParams,
+           |  ) => _$$${typeName}FromJson(json, $fromJsonFactoryArgs);""".stripMargin
+      } else {
+        s"static $typeName fromJson(Map<String, dynamic> json) => _$$${typeName}FromJson(json);"
+      }
+
+      val toJson: String = (parent, isGeneric) match {
+        case (Some(_), false) =>
           s"""@override Map<String, dynamic> toJson() {
              |    Map<String, dynamic> map = _$$${typeName}ToJson(this);
              |    map['type'] = '${config.discriminatorValue(rawTypeName)}';
              |    return map;
              |  }""".stripMargin
-        case None => s"Map<String, dynamic> toJson() => _$$${typeName}ToJson(this);"
+        case (Some(_), true) =>
+          // Discriminator-bearing AND generic — uncommon, but emit the
+          // factory-aware shape and still inject the discriminator.
+          s"""@override Map<String, dynamic> toJson($toJsonFactoryParams) {
+             |    Map<String, dynamic> map = _$$${typeName}ToJson(this, $toJsonFactoryArgs);
+             |    map['type'] = '${config.discriminatorValue(rawTypeName)}';
+             |    return map;
+             |  }""".stripMargin
+        case (None, true) =>
+          s"Map<String, dynamic> toJson($toJsonFactoryParams) => _$$${typeName}ToJson(this, $toJsonFactoryArgs);"
+        case (None, false) =>
+          s"Map<String, dynamic> toJson() => _$$${typeName}ToJson(this);"
       }
+
+      // deepClone: round-trip through json. For generic classes we don't have
+      // the type-erased factories at hand, so route the clone through
+      // `copyWith()` which copy_with_extension provides natively (and which
+      // already respects type parameters).
+      val deepCloneSnippet: String = if (isGeneric) {
+        s"$classNameWithParams deepClone() => copyWith.call();"
+      } else {
+        s"$typeName deepClone() => fromJson(toJson());"
+      }
+
+      // Pick the right template for the static body, then patch in the
+      // generic-aware members after-the-fact. ModelTemplate is for parameterless
+      // constructors; both templates support `%%CLASSNAME%%` interpolation.
+      // For generic classes we inject `<T>` into key positions via the
+      // %%CLASSNAME_DECL%% placeholder when present in the template.
       val source = (if (params.isEmpty) ModelTemplate else ModelWithParamsTemplate)
         .replace("%%IMPORTS%%", importsTemplate)
         .replace("%%FILENAME%%", typeName.type2File)
+        .replace("%%ANNOTATIONS%%", annotations)
+        .replace("%%CLASSNAME_DECL%%", classNameWithParams)
         .replace("%%CLASSNAME%%", typeName)
         .replace("%%EXTENDS%%", extending)
         .replace("%%FIELDS%%", fieldsString)
         .replace("%%PARAMS%%", params)
         .replace("%%PROPS%%", props)
+        .replace("%%FROMJSON%%", fromJson)
         .replace("%%TOJSON%%", toJson)
+        .replace("%%DEEPCLONE%%", deepCloneSnippet)
       SourceFile(
         language = "Dart",
         name = typeName,
@@ -538,6 +670,11 @@ case class OpenAPIDartGenerator(api: OpenAPI, config: OpenAPIGeneratorConfig) ex
       val modelType = c.ref.ref2Type
       val dartType = c.ref.ref2DartType(c)
       safeAddImport(imports, modelType.type2File)
+      // Also import each resolved generic argument so `Auth<User>` (and similar)
+      // compiles — the generic arg is a concrete type name, not a phantom.
+      c.genericTypeArgs.foreach { gt =>
+        safeAddImport(imports, gt.typeName.type2File)
+      }
       ParsedField(dartType, fieldName, c.nullable.getOrElse(false))
     case c: OpenAPISchema.OneOf =>
       val refs = c.schemas.map(_.asInstanceOf[OpenAPISchema.Ref].ref.ref2Type)
@@ -694,21 +831,24 @@ case class OpenAPIDartGenerator(api: OpenAPI, config: OpenAPIGeneratorConfig) ex
           val entry = path.methods(HttpMethod.Get)
           val successResponse = entry.responses("200").content.get
           val (_, apiPath) = successResponse.content.head
-          val responseType = apiPath.schema match {
+          val (responseType, responseTypeWithGenerics, fromJsonExpr) = apiPath.schema match {
             case c: OpenAPISchema.Ref =>
               val rt = c.ref.ref2Type
               safeAddImport(imports, rt.type2File)
-              rt
+              c.genericTypeArgs.foreach(gt => safeAddImport(imports, gt.typeName.type2File))
+              val withG = if (c.genericTypeArgs.isEmpty) rt
+                          else s"$rt<${c.genericTypeArgs.map(_.typeName).mkString(", ")}>"
+              (rt, withG, responseFromJsonExpr(c, rt, imports))
             case c: OpenAPISchema.Component if c.`type` == "object" && c.properties.nonEmpty =>
               val rt = c.xFullClass.map(cn => cn.substring(cn.lastIndexOf('.') + 1)).getOrElse(name.capitalize + "Response")
-              rt
-            case _ => "Map<String, dynamic>"
+              (rt, rt, s"$rt.fromJson")
+            case _ => ("Map<String, dynamic>", "Map<String, dynamic>", "Map<String, dynamic>.fromJson")
           }
           Some(s"""  /// ${entry.description}
-             |  static Future<$responseType> $name() async {
+             |  static Future<$responseTypeWithGenerics> $name() async {
              |    return await restGet(
              |      "$pathString",
-             |      $responseType.fromJson
+             |      $fromJsonExpr
              |    );
              |  }""".stripMargin)
         } else if (path.methods.contains(HttpMethod.Post)) {
@@ -722,37 +862,46 @@ case class OpenAPIDartGenerator(api: OpenAPI, config: OpenAPIGeneratorConfig) ex
         Some(apiPath.schema match {
           case c: OpenAPISchema.Component if c.`type` == "null" =>
             // void return type — fire and forget
-            val requestType = requestContent.refType
-            safeAddImport(imports, requestType.type2File)
+            val requestRef = requestContent.ref
+            val requestType = requestContent.refTypeWithGenerics
+            safeAddImport(imports, requestContent.refType.type2File)
+            requestRef.genericTypeArgs.foreach(gt => safeAddImport(imports, gt.typeName.type2File))
             s"""  /// ${entry.description}
                |  static Future<void> $name($requestType request) async {
                |    await restPost(
                |      "$pathString",
-               |      request.toJson()
+               |      ${requestToJsonExpr(requestRef)}
                |    );
                |  }""".stripMargin
           case c: OpenAPISchema.Component => c.format match {
             case Some("binary") =>
-              val requestType = requestContent.refType
-              safeAddImport(imports, requestType.type2File)
+              val requestRef = requestContent.ref
+              val requestType = requestContent.refTypeWithGenerics
+              safeAddImport(imports, requestContent.refType.type2File)
+              requestRef.genericTypeArgs.foreach(gt => safeAddImport(imports, gt.typeName.type2File))
               s"""  /// ${entry.description}
                  |  static Future<void> $name($requestType request, String fileName) async {
-                 |    await restDownload(fileName, "$pathString", request.toJson());
+                 |    await restDownload(fileName, "$pathString", ${requestToJsonExpr(requestRef)});
                  |  }""".stripMargin
             case format => throw new RuntimeException(s"Unsupported schema format: $format (schema: $c, path: $pathString)")
           }
           case c: OpenAPISchema.Ref if c.ref == "#/components/schemas/Content" =>
-            val requestType = requestContent.refType
-            safeAddImport(imports, requestType.type2File)
+            val requestRef = requestContent.ref
+            val requestType = requestContent.refTypeWithGenerics
+            safeAddImport(imports, requestContent.refType.type2File)
+            requestRef.genericTypeArgs.foreach(gt => safeAddImport(imports, gt.typeName.type2File))
             s"""  /// ${entry.description}
                |  static Future<void> $name($requestType request, String fileName) async {
-               |    await restDownload(fileName, "$pathString", request.toJson());
+               |    await restDownload(fileName, "$pathString", ${requestToJsonExpr(requestRef)});
                |  }""".stripMargin
           case _: OpenAPISchema.Ref =>
+            val responseRef = successResponse.ref
             val responseType = successResponse.refType
+            val responseTypeWithGenerics = successResponse.refTypeWithGenerics
             val component = successResponse.component
             val binary = component.format.contains("binary")
             safeAddImport(imports, responseType.type2File)
+            responseRef.genericTypeArgs.foreach(gt => safeAddImport(imports, gt.typeName.type2File))
             if (requestContentType == ContentType.`multipart/form-data`) {
               apiContentType.schema match {
                 case c: OpenAPISchema.Component =>
@@ -765,7 +914,7 @@ case class OpenAPIDartGenerator(api: OpenAPI, config: OpenAPIGeneratorConfig) ex
                           safeAddImport(imports, parentName.type2File)
                           parentName
                         case child: OpenAPISchema.Component => s"${child.`type`.dartType}"
-                        case ref: OpenAPISchema.Ref => ref.ref.ref2Type
+                        case ref: OpenAPISchema.Ref => ref.ref.ref2DartType(ref)
                         case _ => throw new UnsupportedOperationException(s"Unsupported schema for $key: $schema")
                       }
                       s"$paramType $key"
@@ -780,41 +929,49 @@ case class OpenAPIDartGenerator(api: OpenAPI, config: OpenAPIGeneratorConfig) ex
                       }
                     case (key, ref: OpenAPISchema.Ref) =>
                       safeAddImport(imports, ref.ref.ref2Type.type2File)
-                      s"${ws}request.fields['$key'] = json.encode($key.toJson());"
+                      ref.genericTypeArgs.foreach(gt => safeAddImport(imports, gt.typeName.type2File))
+                      val toJsonCall =
+                        if (ref.genericTypeArgs.isEmpty) s"$key.toJson()"
+                        else s"$key.toJson(${toJsonFactoryCalls(ref)})"
+                      s"${ws}request.fields['$key'] = json.encode($toJsonCall);"
                     case (key, schema) => throw new UnsupportedOperationException(s"Unable to support $key: $schema")
                   }.mkString("\n")
                   s"""  /// ${entry.description}
-                     |  static Future<$responseType> $name($params) async {
+                     |  static Future<$responseTypeWithGenerics> $name($params) async {
                      |    return await multiPart(
                      |      "$pathString",
                      |      (request) {
                      |$conversions
                      |      },
-                     |      $responseType.fromJson
+                     |      ${responseFromJsonExpr(responseRef, responseType, imports)}
                      |    );
                      |  }""".stripMargin
                 case _ => throw new UnsupportedOperationException(s"Unsupported schema: ${apiContentType.schema}")
               }
             } else if (binary) {
-              val requestType = requestContent.refType
-              safeAddImport(imports, requestType.type2File)
+              val requestRef = requestContent.ref
+              val requestType = requestContent.refTypeWithGenerics
+              safeAddImport(imports, requestContent.refType.type2File)
+              requestRef.genericTypeArgs.foreach(gt => safeAddImport(imports, gt.typeName.type2File))
               s"""  /// ${entry.description}
                  |  static Future<void> $name($requestType request) async {
                  |    return await restDownload(
                  |      downloadFileName,
                  |      "$pathString",
-                 |      request.toJson()
+                 |      ${requestToJsonExpr(requestRef)}
                  |    );
                  |  }""".stripMargin
             } else {
-              val requestType = requestContent.refType
-              safeAddImport(imports, requestType.type2File)
+              val requestRef = requestContent.ref
+              val requestType = requestContent.refTypeWithGenerics
+              safeAddImport(imports, requestContent.refType.type2File)
+              requestRef.genericTypeArgs.foreach(gt => safeAddImport(imports, gt.typeName.type2File))
               s"""  /// ${entry.description}
-                 |  static Future<$responseType> $name($requestType request) async {
+                 |  static Future<$responseTypeWithGenerics> $name($requestType request) async {
                  |    return await restful(
                  |      "$pathString",
-                 |      request.toJson(),
-                 |      $responseType.fromJson
+                 |      ${requestToJsonExpr(requestRef)},
+                 |      ${responseFromJsonExpr(responseRef, responseType, imports)}
                  |    );
                  |  }""".stripMargin
             }

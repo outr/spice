@@ -190,19 +190,25 @@ private class ApiOpenAPIBuilder(basePath: String) {
   private def componentSchema(d: Definition, map: Map[String, Definition]): OpenAPISchema = {
     val className = d.className
     val description = d.description
+    // Formal type-parameter names declared on the class itself (e.g. `T` for
+    // `Auth[T]`). Distinct from the resolved values that appear at use-sites
+    // — those flow through `Ref.genericTypeArgs` instead.
+    val typeParams = d.genericTypes.map(_.name)
     if (map.keySet == Set("[key]")) {
       OpenAPISchema.Component(
         `type` = "object",
         description = description,
         additionalProperties = Some(schemaFrom(map("[key]"))),
-        xFullClass = className
+        xFullClass = className,
+        xTypeParameters = typeParams
       )
     } else {
       OpenAPISchema.Component(
         `type` = "object",
         description = description,
         properties = map.map { case (key, d) => key -> schemaFrom(d) },
-        xFullClass = className
+        xFullClass = className,
+        xTypeParameters = typeParams
       )
     }
   }

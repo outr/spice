@@ -116,13 +116,19 @@ trait ServiceCall extends HttpHandler {
 
   private def componentSchema(d: Definition, schema: Schema, map: Map[String, Definition], format: Option[String], nullable: Option[Boolean]): OpenAPISchema = {
     val className = d.className
+    // Formal type-parameter names from the source class (e.g. `T` for
+    // `Auth[T]`). Distinct from `Ref.genericTypeArgs`, which carries the
+    // resolved arguments at use sites — code generators use this to emit
+    // parameterized class declarations.
+    val typeParams = d.genericTypes.map(_.name)
     val c = if (map.keySet == Set("[key]")) {
       val t = map("[key]")
       OpenAPISchema.Component(
         `type` = "object",
         format = format,
         additionalProperties = Some(schemaFrom(t, Schema(), format, nullable)),
-        xFullClass = className
+        xFullClass = className,
+        xTypeParameters = typeParams
       )
     } else {
       val requiredFields = map.collect {
@@ -135,7 +141,8 @@ trait ServiceCall extends HttpHandler {
           case (key, d) => key -> schemaFrom(d, schema.properties.getOrElse(key, Schema()), format, nullable)
         },
         required = requiredFields,
-        xFullClass = className
+        xFullClass = className,
+        xTypeParameters = typeParams
       )
     }
     if (nullable.getOrElse(false)) {

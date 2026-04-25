@@ -39,7 +39,13 @@ object OpenAPISchema {
                        xml: Option[XML] = None,
                        externalDocs: Option[ExternalDocs] = None,
                        deprecated: Option[Boolean] = None,
-                       xFullClass: Option[String] = None) extends OpenAPISchema {
+                       xFullClass: Option[String] = None,
+                       /** Formal type-parameter names declared on the source class
+                        * (e.g. `List("T")` for `case class Auth[T]`). Distinct from
+                        * `Ref.genericTypeArgs`, which carries the resolved arguments
+                        * at use sites. Code generators emit parameterized class
+                        * declarations from this. */
+                       xTypeParameters: List[String] = Nil) extends OpenAPISchema {
     override def makeNullable: OpenAPISchema = copy(nullable = Some(true))
 
     override def withSchema(schema: Schema): OpenAPISchema = copy(
