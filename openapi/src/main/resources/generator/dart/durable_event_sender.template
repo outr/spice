@@ -8,8 +8,8 @@ class %%SERVICE_NAME%%DurableSender {
 
   %%SERVICE_NAME%%DurableSender(this.client);
 
-  /// Push an event to the server (sequenced, durable).
-  int push(Map<String, dynamic> event) => client.push(event);
+  /// Push a typed %%WIRE_TYPE%% to the server (sequenced, durable).
+  int push(%%WIRE_TYPE%% %%WIRE_PARAM%%) => client.push(%%WIRE_PARAM%%);
 
 %%METHODS%%
 }

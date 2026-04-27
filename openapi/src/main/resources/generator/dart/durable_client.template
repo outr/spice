@@ -4,6 +4,7 @@ import 'dart:convert';
 import 'dart:math';
 
 import 'package:web_socket_channel/web_socket_channel.dart';
+%%WIRE_IMPORT%%
 
 %%INFO_CLASS%%
 
@@ -63,8 +64,7 @@ class %%SERVICE_NAME%%DurableClient {
   final _errorController = StreamController<Map<String, dynamic>>.broadcast();
   final _stateController = StreamController<DurableSocketState>.broadcast();
 
-  /// Durable events from the server: (seq, eventData).
-  Stream<(int, Map<String, dynamic>)> get onEvent => _eventController.stream;
+%%TYPED_STREAM_GETTER%%
 
   /// Ephemeral messages (no type field or unrecognized type).
   Stream<Map<String, dynamic>> get onEphemeral => _ephemeralController.stream;
@@ -102,12 +102,7 @@ class %%SERVICE_NAME%%DurableClient {
   // Push events (client → server, sequenced)
   // ---------------------------------------------------------------------------
 
-  int push(Map<String, dynamic> event) {
-    _outboundSeq++;
-    final seq = _outboundSeq;
-    _sendRaw({'type': 'event', 'seq': seq, 'data': event});
-    return seq;
-  }
+%%PUSH_METHOD%%
 
   /// Send an ephemeral message (bypasses durable protocol).
   void sendEphemeral(Map<String, dynamic> json) {

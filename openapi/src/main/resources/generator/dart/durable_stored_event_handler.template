@@ -5,14 +5,16 @@ import '%%TYPES_IMPORT%%';
 /// Base handler for %%SERVICE_NAME%% durable and ephemeral events.
 /// Override methods to implement business logic.
 class %%SERVICE_NAME%%DurableHandler {
-  // --- Durable event: EventFrame (conversationId + event) ---
-  void onEvent(String id, String conversationId, Event event) {}
+  // --- Durable event: %%WIRE_TYPE%%Frame (conversationId + event) ---
+  void on%%WIRE_TYPE%%(String id, String conversationId, %%WIRE_TYPE%% event) {}
 
-  // --- Session/ephemeral event (not stored, not replayed) ---
-  void onSessionEvent(Event event) {}
+  // --- Session/ephemeral message (not stored, not replayed; free-form JSON,
+  //     not constrained to %%WIRE_TYPE%% — heartbeats, ping/pong, debug
+  //     telemetry, etc. fit here without being a wire-type subtype). ---
+  void onSessionMessage(Map<String, dynamic> json) {}
 
   /// Called when an event fails to parse. Override to display an error in the UI.
-  void onEventParseError(String id, String conversationId, Object error) {}
+  void on%%WIRE_TYPE%%ParseError(String id, String conversationId, Object error) {}
 
   // --- Transient events (pushed via durable channel but not persisted) ---
 %%TRANSIENT_STUBS%%
@@ -24,20 +26,20 @@ class %%SERVICE_NAME%%DurableDispatcher {
 
   %%SERVICE_NAME%%DurableDispatcher(this.handler);
 
-  /// Dispatch a durable event or EventFrame (from onEvent or ephemeral replay).
-  void dispatchEvent(Map<String, dynamic> data) {
-    // EventFrame format: { conversationId, event: { type, id, ... } }
+  /// Dispatch a durable event or %%WIRE_TYPE%%Frame (from on%%WIRE_TYPE%% or ephemeral replay).
+  void dispatch%%WIRE_TYPE%%(Map<String, dynamic> data) {
+    // %%WIRE_TYPE%%Frame format: { conversationId, event: { type, id, ... } }
     final eventJson = data['event'] as Map<String, dynamic>?;
     if (eventJson != null) {
       final conversationId = data['conversationId'] as String? ?? '';
       try {
-        final event = Event.fromJson(eventJson);
+        final event = %%WIRE_TYPE%%.fromJson(eventJson);
         final id = eventJson['id'] as String? ?? '';
-        handler.onEvent(id, conversationId, event);
+        handler.on%%WIRE_TYPE%%(id, conversationId, event);
       } catch (e, st) {
-        print('[DISPATCHER] Event.fromJson failed: $e\n  type: ${eventJson['type']}\n  $st');
+        print('[DISPATCHER] %%WIRE_TYPE%%.fromJson failed: $e\n  type: ${eventJson['type']}\n  $st');
         final id = eventJson['id'] as String? ?? '';
-        handler.onEventParseError(id, conversationId, e);
+        handler.on%%WIRE_TYPE%%ParseError(id, conversationId, e);
       }
       return;
     }
@@ -51,8 +53,12 @@ class %%SERVICE_NAME%%DurableDispatcher {
     }
   }
 
-  /// Dispatch a typed ephemeral/session Event.
-  void dispatchEphemeral(Event event) {
-    handler.onSessionEvent(event);
+  /// Dispatch a session/ephemeral message — untyped, free-form JSON.
+  /// Consumers that expect a wire-typed payload deserialize at the call
+  /// site (e.g. `%%WIRE_TYPE%%.fromJson(json)`); the dispatcher itself
+  /// makes no assumption about shape so heartbeats, ping/pong, and
+  /// other transport-level chatter don't get rejected.
+  void dispatchEphemeral(Map<String, dynamic> json) {
+    handler.onSessionMessage(json);
   }
 }

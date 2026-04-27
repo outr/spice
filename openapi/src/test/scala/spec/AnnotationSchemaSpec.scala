@@ -129,7 +129,7 @@ class AnnotationSchemaSpec extends AnyWordSpec with Matchers {
       val d = summon[RW[ValidatedUser]].definition
       val config = DurableSocketDartConfig(
         serviceName = "Test",
-        defTypes = List("ValidatedUser" -> d)
+        wireType = "ValidatedUser" -> d
       )
       val files = DurableSocketDartGenerator(config).generate()
       val source = files.find(_.fileName == "validated_user.dart").get.source
@@ -142,7 +142,7 @@ class AnnotationSchemaSpec extends AnyWordSpec with Matchers {
       val d = summon[RW[ValidatedUser]].definition
       val config = DurableSocketDartConfig(
         serviceName = "Test",
-        defTypes = List("ValidatedUser" -> d)
+        wireType = "ValidatedUser" -> d
       )
       val files = DurableSocketDartGenerator(config).generate()
       val source = files.find(_.fileName == "validated_user.dart").get.source

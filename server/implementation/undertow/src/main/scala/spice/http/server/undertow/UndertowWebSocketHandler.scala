@@ -29,7 +29,9 @@ object UndertowWebSocketHandler {
           if (len > 1_000_000) {
             scribe.warn(s"[WS-SEND] Large text frame: ${len} bytes (${len / 1024}KB). Preview: ${message.take(200)}...")
           }
-          WebSockets.sendText(message, channel, null)
+          safely(s"send.text dispatch — len=$len preview='${textPreview(message)}'") {
+            WebSockets.sendText(message, channel, null)
+          }
         }
         webSocketListener.send.binary.attach {
           case ByteBufferData(message) =>
@@ -37,7 +39,9 @@ object UndertowWebSocketHandler {
             if (len > 1_000_000) {
               scribe.warn(s"[WS-SEND] Large binary frame: ${len} bytes (${len / 1024}KB)")
             }
-            WebSockets.sendBinary(message, channel, null)
+            safely(s"send.binary dispatch — ${binaryPreview(message)}") {
+              WebSockets.sendBinary(message, channel, null)
+            }
         }
         webSocketListener.send.close.attach { _ =>
           if (channel.isOpen) {
@@ -53,12 +57,19 @@ object UndertowWebSocketHandler {
             if (len > 1_000_000) {
               scribe.warn(s"[WS-RECV] Large text frame: ${len} bytes (${len / 1024}KB). Preview: ${data.take(200)}...")
             }
-            webSocketListener.receive.text @= data
+            safely(s"receive.text listener — len=$len preview='${textPreview(data)}'") {
+              webSocketListener.receive.text @= data
+            }
             super.onFullTextMessage(channel, message)
           }
 
           override def onFullBinaryMessage(channel: WebSocketChannel, message: BufferedBinaryMessage): Unit = {
-            message.getData.getResource.foreach(bb => webSocketListener.receive.binary @= ByteBufferData(bb))
+            val buffers = message.getData.getResource
+            buffers.foreach { bb =>
+              safely(s"receive.binary listener — ${binaryPreview(bb)}") {
+                webSocketListener.receive.binary @= ByteBufferData(bb)
+              }
+            }
             super.onFullBinaryMessage(channel, message)
           }
 
@@ -68,29 +79,56 @@ object UndertowWebSocketHandler {
               scribe.debug(s"WebSocket disconnected by peer: remote=$remote reason=${rootMessage(error)}")
             } else {
               scribe.error(s"WebSocket error: remote=$remote reason=${rootMessage(error)}", error)
-              webSocketListener.error @= error
+              safely("error listener")(webSocketListener.error @= error)
             }
             super.onError(channel, error)
           }
 
           override def onFullCloseMessage(channel: WebSocketChannel, message: BufferedBinaryMessage): Unit = {
-            webSocketListener.receive.close.set(())
+            safely("receive.close listener")(webSocketListener.receive.close.set(()))
             super.onFullCloseMessage(channel, message)
           }
 
           override def onClose(webSocketChannel: WebSocketChannel, channel: StreamSourceFrameChannel): Unit = {
-            webSocketListener.disconnect()
+            safely("listener disconnect")(webSocketListener.disconnect())
             super.onClose(webSocketChannel, channel)
           }
         })
         channel.resumeReceives()
-        webSocketListener.connect().sync()
+        safely("listener connect")(webSocketListener.connect().sync())
       }
     })
     if (server.config.webSocketCompression()) {
       handler.addExtension(new PerMessageDeflateHandshake)
     }
     handler.handleRequest(undertow)
+  }
+
+  /** Run user-supplied listener code, logging any exception with full stack trace
+    * instead of letting it propagate up into Undertow's channel listener invoker
+    * (which produces opaque "XNIO001007" errors with no useful context).
+    * The `context` is by-name so message-preview formatting only happens on failure. */
+  private def safely(context: => String)(body: => Unit): Unit = {
+    try body
+    catch {
+      case t: Throwable =>
+        scribe.error(s"WebSocket listener threw in [$context]: ${t.getClass.getName}: ${rootMessage(t)}", t)
+    }
+  }
+
+  private def textPreview(data: String): String = {
+    val cleaned = data.replace('\n', ' ').replace('\r', ' ')
+    if (cleaned.length <= 300) cleaned else s"${cleaned.take(300)}…(+${cleaned.length - 300} bytes)"
+  }
+
+  private def binaryPreview(bb: java.nio.ByteBuffer): String = {
+    val total = bb.remaining()
+    val sample = math.min(total, 64)
+    val dup = bb.duplicate()
+    val bytes = new Array[Byte](sample)
+    dup.get(bytes)
+    val hex = bytes.map(b => f"${b & 0xff}%02x").mkString(" ")
+    if (total <= sample) s"len=$total hex=[$hex]" else s"len=$total hex=[$hex …]"
   }
 
   private def isExpectedDisconnect(error: Throwable): Boolean = {

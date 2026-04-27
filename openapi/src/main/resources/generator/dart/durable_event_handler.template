@@ -8,6 +8,10 @@ class %%SERVICE_NAME%%DurableHandler {
 
   // --- Ephemeral event stubs (fire-and-forget) ---
 %%EPHEMERAL_STUBS%%
+
+  // --- Session/ephemeral catch-all (untyped, free-form JSON; heartbeats,
+  //     ping/pong, debug telemetry, anything not constrained to %%WIRE_TYPE%%) ---
+  void onSessionMessage(Map<String, dynamic> json) {}
 }
 
 /// Dispatches incoming durable events and ephemeral messages to handler methods.
@@ -24,8 +28,10 @@ class %%SERVICE_NAME%%DurableDispatcher {
     }
   }
 
-  /// Dispatch a typed ephemeral WireEvent.
-  void dispatchEphemeral(WireEvent event) {
-    handler.onSessionEvent(event);
+  /// Dispatch a session/ephemeral message — untyped, free-form JSON.
+  /// Consumers that expect a wire-typed payload deserialize at the call
+  /// site (e.g. `%%WIRE_TYPE%%.fromJson(json)`).
+  void dispatchEphemeral(Map<String, dynamic> json) {
+    handler.onSessionMessage(json);
   }
 }

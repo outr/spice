@@ -365,6 +365,24 @@ case class OpenAPIDartGenerator(api: OpenAPI, config: OpenAPIGeneratorConfig) ex
     if (classChain.nonEmpty) classChain.mkString else cn.replace(" ", "").replace(".", "")
   }
 
+  /** Extract the wire discriminator value from a full Scala className.
+    * Matches Fabric's `Product.productPrefix` — just the leaf class name.
+    * "spec.OpenAPIHttpServerSpec.Auth" → "Auth"
+    * "sigil.event.Message" → "Message" */
+  private def wireDiscriminator(cn: String): String = {
+    val (_, classChain) = splitClassName(cn)
+    classChain.lastOption.getOrElse(cn.replace(" ", ""))
+  }
+
+  /** Look up the FQN for a generated Dart class name by scanning components. */
+  private def fqnForDartType(dartType: String): Option[String] = {
+    api.components.toList.flatMap(_.schemas.toList).collectFirst {
+      case (key, c: OpenAPISchema.Component) if typeNameForComponent(key, c) == dartType =>
+        c.xFullClass.getOrElse(key)
+      case (key, _) if key.contains('.') && dartNameForFullClass(key) == dartType => key
+    }
+  }
+
   private def typeNameForComponent(rawTypeName: => String, schema: OpenAPISchema.Component): String = schema.xFullClass match {
     case Some(cn) => dartNameForFullClass(cn)
     case None =>
@@ -563,7 +581,7 @@ case class OpenAPIDartGenerator(api: OpenAPI, config: OpenAPIGeneratorConfig) ex
         case (Some(_), false) =>
           s"""@override Map<String, dynamic> toJson() {
              |    Map<String, dynamic> map = _$$${typeName}ToJson(this);
-             |    map['type'] = '${config.discriminatorValue(rawTypeName)}';
+             |    map['type'] = '${config.discriminatorValue(wireDiscriminator(rawTypeName))}';
              |    return map;
              |  }""".stripMargin
         case (Some(_), true) =>
@@ -571,7 +589,7 @@ case class OpenAPIDartGenerator(api: OpenAPI, config: OpenAPIGeneratorConfig) ex
           // factory-aware shape and still inject the discriminator.
           s"""@override Map<String, dynamic> toJson($toJsonFactoryParams) {
              |    Map<String, dynamic> map = _$$${typeName}ToJson(this, $toJsonFactoryArgs);
-             |    map['type'] = '${config.discriminatorValue(rawTypeName)}';
+             |    map['type'] = '${config.discriminatorValue(wireDiscriminator(rawTypeName))}';
              |    return map;
              |  }""".stripMargin
         case (None, true) =>
@@ -799,7 +817,10 @@ case class OpenAPIDartGenerator(api: OpenAPI, config: OpenAPIGeneratorConfig) ex
         val importString = imports.map(t => renderImport(t, parentPath)).mkString("\n")
         val fromJson = children.zip(typedChildren).map {
           case (child, typed) =>
-            val discriminator = config.discriminatorValue(child)
+            // Discriminator matches Fabric's wire format: simple class name (Product.productPrefix).
+            // `child` is a Dart class name; recover the FQN to extract the leaf simple name.
+            val simpleLeaf = fqnForDartType(child).map(wireDiscriminator).getOrElse(child)
+            val discriminator = config.discriminatorValue(simpleLeaf)
             s"""if (t == '$discriminator') {
                |      return $typed.fromJson(json);
                |    }""".stripMargin

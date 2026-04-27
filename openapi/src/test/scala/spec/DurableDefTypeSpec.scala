@@ -46,7 +46,7 @@ class DurableDefTypeSpec extends AnyWordSpec with Matchers {
   private def generateFiles(name: String, defn: Definition) = {
     val config = DurableSocketDartConfig(
       serviceName = "Test",
-      defTypes = List(name -> defn)
+      wireType = name -> defn
     )
     DurableSocketDartGenerator(config).generate()
   }
@@ -88,9 +88,9 @@ class DurableDefTypeSpec extends AnyWordSpec with Matchers {
       val all = allSources(files)
       all should include("abstract class Animal")
       all should include("static Animal fromJson")
-      // Discriminator now uses full Scala className for cross-package uniqueness
-      all should include("if (type == 'spec.DurableDefTypeSpec.Dog') return Dog.fromJson(json);")
-      all should include("if (type == 'spec.DurableDefTypeSpec.Cat') return Cat.fromJson(json);")
+      // Discriminator matches Fabric's wire format: simple class name (Product.productPrefix)
+      all should include("if (type == 'Dog') return Dog.fromJson(json);")
+      all should include("if (type == 'Cat') return Cat.fromJson(json);")
       all should include("class Dog extends Animal")
       all should include("class Cat extends Animal")
     }
@@ -102,7 +102,7 @@ class DurableDefTypeSpec extends AnyWordSpec with Matchers {
       all should include("class Active")
       all should include("class Inactive")
       all should include("class Pending")
-      all should include("if (type == 'spec.DurableDefTypeSpec.Status.Active') return Active.fromJson(json);")
+      all should include("if (type == 'Active') return Active.fromJson(json);")
     }
 
     "recursively discover nested types" in {
@@ -203,6 +203,35 @@ class DurableDefTypeSpec extends AnyWordSpec with Matchers {
       recordSource should include("final Id<User> userId;")
       recordSource should include("final Id<Post> postId;")
       recordSource should include("final String name;")
+    }
+
+    "generate typed push and on<WireType> stream from wireType" in {
+      val config = DurableSocketDartConfig(
+        serviceName = "Test",
+        wireType = "Animal" -> summon[RW[Animal]].definition
+      )
+      val files = DurableSocketDartGenerator(config).generate()
+      val client = files.find(_.fileName == "test_durable_client.dart").get.source
+
+      // Typed push method — only typed API exists
+      client should include("int push(Animal animal)")
+      client should include("'data': animal.toJson()")
+      // Typed stream getter
+      client should include("Stream<(int, Animal)> get onAnimal")
+      client should include("Animal.fromJson(e.")
+      // Imports the types file
+      client should include("import 'test_types.dart';")
+
+      // Untyped escape hatches removed
+      client should not include "int pushRaw"
+      client should not include "Stream<(int, Map<String, dynamic>)> get onEvent"
+      client should not include "int push(Map<String, dynamic>"
+
+      // Wire type is auto-generated even though it wasn't in defTypes
+      val all = allSources(files)
+      all should include("abstract class Animal")
+      all should include("class Dog extends Animal")
+      all should include("class Cat extends Animal")
     }
   }
 }

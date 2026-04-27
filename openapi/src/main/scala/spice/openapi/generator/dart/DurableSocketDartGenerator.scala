@@ -50,7 +50,13 @@ case class DurableSocketDartConfig(
   /** Manually maintained Dart files to include in the barrel export.
     * These files are NOT generated — they must already exist in the output directory.
     * Paths are relative to the model directory (e.g. "geo.dart", "point.dart"). */
-  manualExports: List[String] = Nil
+  manualExports: List[String] = Nil,
+  /** Wire type for the client↔server protocol. The generated client emits:
+    *   - `int push(<Type> msg)` that internally calls `msg.toJson()`
+    *   - `Stream<(int, <Type>)> get on<Type>` that maps inbound JSON via `<Type>.fromJson`
+    * The Definition is auto-included in the generated types file — no need to also
+    * list it in `defTypes`. */
+  wireType: (String, Definition)
 )
 
 /** Generates Dart code for a DurableSocket client, event handler, event sender,
@@ -74,9 +80,17 @@ case class DurableSocketDartGenerator(config: DurableSocketDartConfig) {
   /** Rename fields that would be private in Dart (underscore prefix). */
   private def dartFieldName(name: String): String = if (name.startsWith("_")) name.drop(1) else name
 
+  /** Effective list of (name, Definition) to emit as Dart types. Auto-includes the wireType
+    * so the user doesn't have to also add it to `defTypes`. */
+  private lazy val effectiveDefTypes: List[(String, Definition)] = {
+    val (wireName, wireDefn) = config.wireType
+    if (config.defTypes.exists(_._1 == wireName)) config.defTypes
+    else config.defTypes :+ (wireName -> wireDefn)
+  }
+
   def generate(): List[SourceFile] = {
     val base = List(generateClient(), generateHandler(), generateSender(), generateRestClient())
-    if (config.defTypes.nonEmpty || config.enums.nonEmpty || config.typedRestTools.nonEmpty)
+    if (effectiveDefTypes.nonEmpty || config.enums.nonEmpty || config.typedRestTools.nonEmpty)
       base ++ generateDefTypeFiles()
     else
       base
@@ -106,10 +120,30 @@ case class DurableSocketDartGenerator(config: DurableSocketDartConfig) {
   // ---------------------------------------------------------------------------
 
   private def generateClient(): SourceFile = {
+    val (typeName, _) = config.wireType
+    val typesImport = s"import '${snakeCase(sn)}_types.dart';"
+    val getterName = s"on$typeName"
+    val typedGetter =
+      s"""
+         |  /// Typed durable events from the server, deserialized via $typeName.fromJson.
+         |  Stream<(int, $typeName)> get $getterName =>
+         |      _eventController.stream.map((e) => (e.${"$"}1, $typeName.fromJson(e.${"$"}2)));""".stripMargin
+    val paramName = s"${typeName.head.toLower}${typeName.tail}"
+    val push =
+      s"""  /// Push a typed $typeName to the server. Returns the assigned sequence number.
+         |  int push($typeName $paramName) {
+         |    _outboundSeq++;
+         |    final seq = _outboundSeq;
+         |    _sendRaw({'type': 'event', 'seq': seq, 'data': $paramName.toJson()});
+         |    return seq;
+         |  }""".stripMargin
     val source = ClientTemplate
       .replace("%%SERVICE_NAME%%", sn)
       .replace("%%INFO_CLASS%%", generateInfoClass())
       .replace("%%INFO_TO_JSON%%", infoToJson())
+      .replace("%%WIRE_IMPORT%%", typesImport)
+      .replace("%%TYPED_STREAM_GETTER%%", typedGetter)
+      .replace("%%PUSH_METHOD%%", push)
 
     SourceFile("Dart", s"${sn}DurableClient", s"${snakeCase(sn)}_durable_client.dart", "lib/ws/durable", source)
   }
@@ -162,6 +196,9 @@ case class DurableSocketDartGenerator(config: DurableSocketDartConfig) {
       s"      case '${ek.kind}':\n        handler.${camelCase(ek.kind)}($args);\n        break;"
     }.mkString("\n")
 
+    val (wireTypeName, _) = config.wireType
+    val wireParam = s"${wireTypeName.head.toLower}${wireTypeName.tail}"
+
     HandlerTemplate
       .replace("%%SERVICE_NAME%%", sn)
       .replace("%%SERVICE_SNAKE%%", snakeCase(sn))
@@ -169,6 +206,8 @@ case class DurableSocketDartGenerator(config: DurableSocketDartConfig) {
       .replace("%%EPHEMERAL_STUBS%%", ephemeralStubs)
       .replace("%%EVENT_CASES%%", eventCases)
       .replace("%%EPHEMERAL_CASES%%", ephemeralCases)
+      .replace("%%WIRE_TYPE%%", wireTypeName)
+      .replace("%%WIRE_PARAM%%", wireParam)
   }
 
   private def generateStoredModeHandler(): String = {
@@ -185,12 +224,14 @@ case class DurableSocketDartGenerator(config: DurableSocketDartConfig) {
     }.mkString("\n")
 
     val typesImport = s"${snakeCase(sn)}_types.dart"
+    val (wireTypeName, _) = config.wireType
 
     StoredHandlerTemplate
       .replace("%%SERVICE_NAME%%", sn)
       .replace("%%TYPES_IMPORT%%", typesImport)
       .replace("%%TRANSIENT_STUBS%%", transientStubs)
       .replace("%%TRANSIENT_CASES%%", transientCases)
+      .replace("%%WIRE_TYPE%%", wireTypeName)
   }
 
   // ---------------------------------------------------------------------------
@@ -198,7 +239,9 @@ case class DurableSocketDartGenerator(config: DurableSocketDartConfig) {
   // ---------------------------------------------------------------------------
 
   private def generateSender(): SourceFile = {
-    // Typed methods from clientEventDefs — uses generated class constructors + toJson()
+    // Typed methods from clientEventDefs — construct the wire-typed class and pass it to push().
+    // No `.toJson()` here: the sender's `push` (and the underlying client `push`) already takes
+    // the wire type and serializes internally.
     val methods = config.clientEventDefs.flatMap { case (name, defn) =>
       defn.defType match {
         case o: DefType.Obj if o.map.nonEmpty =>
@@ -215,7 +258,7 @@ case class DurableSocketDartGenerator(config: DurableSocketDartConfig) {
           }.mkString(", ")
           Some(
             s"""  void $methodName({$params}) {
-               |    push($dartClass($args).toJson());
+               |    push($dartClass($args));
                |  }""".stripMargin)
         case _: DefType.Obj =>
           // Empty class (no fields)
@@ -224,22 +267,25 @@ case class DurableSocketDartGenerator(config: DurableSocketDartConfig) {
           val methodName = s"${stripped.head.toLower}${stripped.tail}"
           Some(
             s"""  void $methodName() {
-               |    push($dartClass().toJson());
+               |    push($dartClass());
                |  }""".stripMargin)
         case _ => None
       }
     }
 
     val allMethods = methods.mkString("\n\n")
-    val typeImports = if (config.clientEventDefs.nonEmpty) {
-      s"import '${snakeCase(sn)}_types.dart';\n"
-    } else ""
+    // Always import the wire-type's class file (sender's `push` takes wireType).
+    val typeImports = s"import '${snakeCase(sn)}_types.dart';\n"
+    val (wireTypeName, _) = config.wireType
+    val wireParam = s"${wireTypeName.head.toLower}${wireTypeName.tail}"
 
     val source = SenderTemplate
       .replace("%%SERVICE_NAME%%", sn)
       .replace("%%SERVICE_SNAKE%%", snakeCase(sn))
       .replace("%%TYPE_IMPORTS%%", typeImports)
       .replace("%%METHODS%%", allMethods)
+      .replace("%%WIRE_TYPE%%", wireTypeName)
+      .replace("%%WIRE_PARAM%%", wireParam)
 
     SourceFile("Dart", s"${sn}DurableSender", s"${snakeCase(sn)}_durable_sender.dart", "lib/ws/durable", source)
   }
@@ -305,7 +351,7 @@ case class DurableSocketDartGenerator(config: DurableSocketDartConfig) {
 
     // Collect all types that need to be emitted, recursively
     val toEmit = mutable.LinkedHashMap.empty[String, Definition]
-    config.defTypes.foreach { case (name, defn) => collectTypes(name, defn, toEmit) }
+    effectiveDefTypes.foreach { case (name, defn) => collectTypes(name, defn, toEmit) }
     config.typedRestTools.foreach { tool =>
       tool.inputDef.defType match {
         case o: DefType.Obj => o.map.foreach { case (_, fDefn) => collectNestedType(fDefn, toEmit) }
@@ -405,10 +451,8 @@ case class DurableSocketDartGenerator(config: DurableSocketDartConfig) {
             val rewrittenImports = rawImports.map(t => s"import '${importPath(subDir, t)}';")
             val parentImport = parent.map(p => s"import '${importPath(subDir, p)}';").toList
             val allImports = (rewrittenImports ++ parentImport).distinct.sorted
-            // Discriminator: full className (without type args) when known, otherwise the simple Dart name
-            val discriminator = defn.className.map(baseClassName)
             files += SourceFile("Dart", dn, fileName, filePath,
-              wrapClass(dn, fileName, generateDartClassBody(dn, o, toEmit, parent, discriminator), allImports, hasFields = o.map.nonEmpty))
+              wrapClass(dn, fileName, generateDartClassBody(dn, name, o, toEmit, parent), allImports, hasFields = o.map.nonEmpty))
             exportNames += (if (subDir.nonEmpty) s"$subDir/$fileName" else fileName)
           case p: DefType.Poly =>
             val subImports = p.values.map { case (key, subDefn) =>
@@ -419,7 +463,7 @@ case class DurableSocketDartGenerator(config: DurableSocketDartConfig) {
             val commonFieldImports = detectCommonFieldImports(p).map(t => s"import '${importPath(subDir, t)}';")
             val allImports = (subImports ++ parentImport ++ commonFieldImports).distinct.sorted
             files += SourceFile("Dart", dn, fileName, filePath,
-              wrapPoly(dn, generateDartPoly(dn, p, toEmit, parent, defn.className), allImports))
+              wrapPoly(dn, generateDartPoly(dn, p, toEmit, parent), allImports))
             exportNames += (if (subDir.nonEmpty) s"$subDir/$fileName" else fileName)
           case _ =>
         }
@@ -554,14 +598,23 @@ case class DurableSocketDartGenerator(config: DurableSocketDartConfig) {
        |""".stripMargin
   }
 
-  /** Generate the class body (without file wrapper) for a concrete class. */
+  /** Generate the class body (without file wrapper) for a concrete class.
+    *
+    * `dartName` is the (possibly renamed) Dart class name — used for the
+    * `class X` declaration and constructor name. `wireName` is the
+    * original Scala class name used by Fabric's poly discriminator —
+    * embedded in `toJson()['type']` so the server-side poly RW
+    * recognizes the value when it's read back. The two diverge for
+    * Flutter-reserved names like `Text`/`TextContent`,
+    * `Image`/`ImageContent` (see [[dartRename]]).
+    */
   private def generateDartClassBody(
-    name: String,
+    dartName: String,
+    wireName: String,
     o: DefType.Obj,
     knownTypes: mutable.LinkedHashMap[String, Definition],
-    parentName: Option[String] = None,
-    discriminator: Option[String] = None
-  ): String = generateDartClass(name, o, knownTypes, parentName, discriminator)
+    parentName: Option[String] = None
+  ): String = generateDartClass(dartName, wireName, o, knownTypes, parentName)
 
   /** Recursively collect named types from a Definition tree into `out` (in dependency order). */
   private def collectTypes(name: String, defn: Definition, out: mutable.LinkedHashMap[String, Definition]): Unit = {
@@ -661,19 +714,23 @@ case class DurableSocketDartGenerator(config: DurableSocketDartConfig) {
   }
 
   private def generateDartClass(
-    name: String,
+    dartName: String,
+    wireName: String,
     o: DefType.Obj,
     knownTypes: mutable.LinkedHashMap[String, Definition],
-    parentName: Option[String] = None,
-    discriminator: Option[String] = None
+    parentName: Option[String] = None
   ): String = {
     val extendsClause = parentName.map(p => s" extends $p").getOrElse("")
-    val typeValue = discriminator.getOrElse(name)
+    // Discriminator on the wire is Fabric's poly key (original Scala class
+    // name), not the Dart-renamed class name. Otherwise the server-side
+    // poly write rejects the payload with "Unknown type discriminator" for
+    // every renamed class (Text/TextContent, Image/ImageContent, …).
+    val typeValue = wireName
     if (o.map.isEmpty) {
       // Empty class (e.g., case object with no fields)
-      s"""class $name$extendsClause {
-         |  $name();
-         |  $name.fromJson(Map<String, dynamic> json);
+      s"""class $dartName$extendsClause {
+         |  $dartName();
+         |  $dartName.fromJson(Map<String, dynamic> json);
          |
          |  Map<String, dynamic> toJson() => {'type': '$typeValue'};
          |}""".stripMargin
@@ -698,12 +755,12 @@ case class DurableSocketDartGenerator(config: DurableSocketDartConfig) {
         s"'$fname': ${defTypeToJsonExpr(dartFieldName(fname), fDefn)}"
       }.mkString(", ")
 
-      s"""class $name$extendsClause {
+      s"""class $dartName$extendsClause {
          |$fields
          |
-         |  $name({$ctorParams});
+         |  $dartName({$ctorParams});
          |
-         |  $name.fromJson(Map<String, dynamic> json)
+         |  $dartName.fromJson(Map<String, dynamic> json)
          |      : $fromJsonInits;
          |
          |  Map<String, dynamic> toJson() => {'type': '$typeValue', $toJsonEntries};
@@ -715,20 +772,14 @@ case class DurableSocketDartGenerator(config: DurableSocketDartConfig) {
     name: String,
     p: DefType.Poly,
     knownTypes: mutable.LinkedHashMap[String, Definition],
-    parentName: Option[String] = None,
-    parentFullClass: Option[String] = None
+    parentName: Option[String] = None
   ): String = {
     val extendsClause = parentName.map(p => s" extends $p").getOrElse("")
     val cases = p.values.map { case (key, defn) =>
       val subName = dartName(shortName(key, defn))
-      // Use full className as discriminator when meaningful (not an anonymous class name).
-      // For anonymous case objects in enums, derive from parent's full path + key.
-      val discriminatorValue = defn.className match {
-        case Some(cn) if !cn.contains("anon") => baseClassName(cn)
-        case _ =>
-          parentFullClass.map(p => s"${baseClassName(p)}.$key").getOrElse(key)
-      }
-      s"""    if (type == '$discriminatorValue') return $subName.fromJson(json);"""
+      // Discriminator value matches Fabric's wire format: simple class name (Product.productPrefix).
+      // The Poly key from the macro IS the simple name.
+      s"""    if (type == '$key') return $subName.fromJson(json);"""
     }.mkString("\n")
 
     // Detect common fields across all subtypes
