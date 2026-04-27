@@ -249,7 +249,6 @@ trait ServiceCall extends HttpHandler {
         format = format,
         nullable = nullable
       )
-      case dt => throw new UnsupportedOperationException(s"DefType not supported: $dt")
     }) match {
       case c: OpenAPISchema.Component => c.withDefinition(d).withSchema(schema)
       case other => other.withSchema(schema)

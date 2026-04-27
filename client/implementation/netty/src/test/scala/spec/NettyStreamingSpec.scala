@@ -54,8 +54,9 @@ class NettyStreamingSpec extends AnyWordSpec with Matchers {
 
         val totalSpan = timestamps.last - timestamps.head
         println(s"Time span: ${totalSpan}ms")
-        timestamps.sliding(2).zipWithIndex.foreach { case (Seq(a, b), i) =>
-          println(s"  chunk $i -> ${i + 1}: ${b - a}ms")
+        timestamps.sliding(2).zipWithIndex.foreach {
+          case (Seq(a, b), i) => println(s"  chunk $i -> ${i + 1}: ${b - a}ms")
+          case _ => ()
         }
 
         // If truly streaming, tokens should be spread over >200ms

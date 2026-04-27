@@ -204,7 +204,7 @@ case class DurableSocketDartGenerator(config: DurableSocketDartConfig) {
         case o: DefType.Obj if o.map.nonEmpty =>
           val dartClass = dartName(name)
           val stripped = name.replaceAll("^Client", "")
-          val methodName = stripped.head.toLower + stripped.tail
+          val methodName = s"${stripped.head.toLower}${stripped.tail}"
           val params = o.map.toList.map { case (fname, fDefn) =>
             val dartType = defTypeToDartType(fDefn)
             val dartField = dartFieldName(fname)
@@ -221,7 +221,7 @@ case class DurableSocketDartGenerator(config: DurableSocketDartConfig) {
           // Empty class (no fields)
           val dartClass = dartName(name)
           val stripped = name.replaceAll("^Client", "")
-          val methodName = stripped.head.toLower + stripped.tail
+          val methodName = s"${stripped.head.toLower}${stripped.tail}"
           Some(
             s"""  void $methodName() {
                |    push($dartClass().toJson());
@@ -1034,7 +1034,6 @@ case class DurableSocketDartGenerator(config: DurableSocketDartConfig) {
           s"$sub.fromJson($access as Map<String, dynamic>)"
         case None => s"$access as dynamic"
       }
-    case _ => s"$access as dynamic"
   }
 
   private def isPrimitive(dt: DefType): Boolean = dt match {

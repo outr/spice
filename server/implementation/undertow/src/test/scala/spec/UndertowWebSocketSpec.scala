@@ -14,8 +14,10 @@ import spice.http.server.dsl.given
 import spice.http.server.handler.{HttpHandler, WebSocketHandler}
 import spice.net.*
 
+import scala.compiletime.uninitialized
+
 class UndertowWebSocketSpec extends AnyWordSpec with Matchers {
-  private var webSocketClient: WebSocket = _
+  private var webSocketClient: WebSocket = uninitialized
   private var fromServer = List.empty[String]
 
   "Undertow WebSocket" should {
