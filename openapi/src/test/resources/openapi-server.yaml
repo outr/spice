@@ -15,14 +15,14 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/ReverseRequest'
+              $ref: '#/components/schemas/spec.OpenAPIHttpServerSpec.ReverseRequest'
       responses:
         200:
           description: 'OK'
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ReverseResponse'
+                $ref: '#/components/schemas/spec.OpenAPIHttpServerSpec.ReverseResponse'
   /combine:
     post:
       summary: 'Combines the values of an enum'
@@ -32,14 +32,14 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/CombineRequest'
+              $ref: '#/components/schemas/spec.OpenAPIHttpServerSpec.CombineRequest'
       responses:
         200:
           description: 'OK'
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/CombineResponse'
+                $ref: '#/components/schemas/spec.OpenAPIHttpServerSpec.CombineResponse'
   /upload:
     post:
       summary: 'Uploads a file'
@@ -66,10 +66,10 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/FileUploadResponse'
+                $ref: '#/components/schemas/spec.OpenAPIHttpServerSpec.FileUploadResponse'
 components:
   schemas:
-    Auth:
+    spec.OpenAPIHttpServerSpec.Auth:
       type: 'object'
       properties:
         username:
@@ -80,26 +80,26 @@ components:
         - 'username'
         - 'password'
       x-full-class: 'spec.OpenAPIHttpServerSpec.Auth'
-    CombineRequest:
+    spec.OpenAPIHttpServerSpec.CombineRequest:
       type: 'object'
       properties:
         auth:
-          $ref: '#/components/schemas/Auth'
+          $ref: '#/components/schemas/spec.OpenAPIHttpServerSpec.Auth'
         map:
           type: 'object'
           additionalProperties:
-            $ref: '#/components/schemas/NumEnum'
+            $ref: '#/components/schemas/spec.OpenAPIHttpServerSpec.NumEnum'
       required:
         - 'auth'
         - 'map'
       x-full-class: 'spec.OpenAPIHttpServerSpec.CombineRequest'
-    CombineResponse:
+    spec.OpenAPIHttpServerSpec.CombineResponse:
       type: 'object'
       properties:
         list:
           type: 'array'
           items:
-            $ref: '#/components/schemas/NumEnum'
+            $ref: '#/components/schemas/spec.OpenAPIHttpServerSpec.NumEnum'
         error:
           type:
             - 'string'
@@ -107,7 +107,7 @@ components:
       required:
         - 'list'
       x-full-class: 'spec.OpenAPIHttpServerSpec.CombineResponse'
-    FileUploadResponse:
+    spec.OpenAPIHttpServerSpec.FileUploadResponse:
       type: 'object'
       properties:
         userId:
@@ -118,7 +118,7 @@ components:
         - 'userId'
         - 'length'
       x-full-class: 'spec.OpenAPIHttpServerSpec.FileUploadResponse'
-    NumEnum:
+    spec.OpenAPIHttpServerSpec.NumEnum:
       type: 'string'
       description: 'spec.OpenAPIHttpServerSpec.NumEnum'
       enum:
@@ -126,18 +126,18 @@ components:
         - 'Two'
         - 'Three'
       x-full-class: 'spec.OpenAPIHttpServerSpec.NumEnum'
-    ReverseRequest:
+    spec.OpenAPIHttpServerSpec.ReverseRequest:
       type: 'object'
       properties:
         auth:
-          $ref: '#/components/schemas/Auth'
+          $ref: '#/components/schemas/spec.OpenAPIHttpServerSpec.Auth'
         text:
           type: 'string'
       required:
         - 'auth'
         - 'text'
       x-full-class: 'spec.OpenAPIHttpServerSpec.ReverseRequest'
-    ReverseResponse:
+    spec.OpenAPIHttpServerSpec.ReverseResponse:
       type: 'object'
       properties:
         text:

@@ -88,8 +88,9 @@ class DurableDefTypeSpec extends AnyWordSpec with Matchers {
       val all = allSources(files)
       all should include("abstract class Animal")
       all should include("static Animal fromJson")
-      all should include("if (type == 'Dog') return Dog.fromJson(json);")
-      all should include("if (type == 'Cat') return Cat.fromJson(json);")
+      // Discriminator now uses full Scala className for cross-package uniqueness
+      all should include("if (type == 'spec.DurableDefTypeSpec.Dog') return Dog.fromJson(json);")
+      all should include("if (type == 'spec.DurableDefTypeSpec.Cat') return Cat.fromJson(json);")
       all should include("class Dog extends Animal")
       all should include("class Cat extends Animal")
     }
@@ -101,7 +102,7 @@ class DurableDefTypeSpec extends AnyWordSpec with Matchers {
       all should include("class Active")
       all should include("class Inactive")
       all should include("class Pending")
-      all should include("if (type == 'Active') return Active.fromJson(json);")
+      all should include("if (type == 'spec.DurableDefTypeSpec.Status.Active') return Active.fromJson(json);")
     }
 
     "recursively discover nested types" in {

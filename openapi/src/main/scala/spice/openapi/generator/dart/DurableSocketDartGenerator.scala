@@ -370,14 +370,20 @@ case class DurableSocketDartGenerator(config: DurableSocketDartConfig) {
       }
     }
 
-    /** Resolve an import path from one type's subDir to another type's file. */
+    /** Resolve an import path from one type's subDir to another type's file.
+      * Supports multi-level package paths via standard relative-path computation. */
     def importPath(fromSubDir: String, targetTypeName: String): String = {
       val (_, targetSubDir) = typeLocations.getOrElse(targetTypeName, (targetTypeName, ""))
       val targetFile = s"${snakeCase(targetTypeName)}.dart"
       if (fromSubDir == targetSubDir) targetFile
-      else if (fromSubDir.isEmpty && targetSubDir.nonEmpty) s"$targetSubDir/$targetFile"
-      else if (fromSubDir.nonEmpty && targetSubDir.isEmpty) s"../$targetFile"
-      else s"../$targetSubDir/$targetFile"
+      else {
+        val fromParts = fromSubDir.split("/").toList.filter(_.nonEmpty)
+        val toParts = targetSubDir.split("/").toList.filter(_.nonEmpty)
+        val commonLen = fromParts.zip(toParts).takeWhile { case (a, b) => a == b }.length
+        val ups = "../" * (fromParts.length - commonLen)
+        val downs = toParts.drop(commonLen).mkString("/")
+        if (downs.nonEmpty) s"$ups$downs/$targetFile" else s"$ups$targetFile"
+      }
     }
 
     // Generate each type
@@ -395,20 +401,14 @@ case class DurableSocketDartGenerator(config: DurableSocketDartConfig) {
             exportNames += (if (subDir.nonEmpty) s"$subDir/$fileName" else fileName)
           case o: DefType.Obj =>
             val rawImports = collectImports(o.map.values.toList, dn, toEmit, childToParent)
-            // Rewrite imports to use package-relative paths
-            val rewrittenImports = rawImports.map { imp =>
-              val nameMatch = """import '(.+)\.dart';""".r.findFirstMatchIn(imp)
-              nameMatch.map { m =>
-                val targetSnake = m.group(1)
-                // Find the type by snake_case name
-                val targetType = typeLocations.keys.find(k => snakeCase(k) == targetSnake).getOrElse(targetSnake)
-                s"import '${importPath(subDir, targetType)}';"
-              }.getOrElse(imp)
-            }
+            // Resolve each Dart class name to a package-relative import path
+            val rewrittenImports = rawImports.map(t => s"import '${importPath(subDir, t)}';")
             val parentImport = parent.map(p => s"import '${importPath(subDir, p)}';").toList
             val allImports = (rewrittenImports ++ parentImport).distinct.sorted
+            // Discriminator: full className (without type args) when known, otherwise the simple Dart name
+            val discriminator = defn.className.map(baseClassName)
             files += SourceFile("Dart", dn, fileName, filePath,
-              wrapClass(dn, fileName, generateDartClassBody(dn, o, toEmit, parent), allImports, hasFields = o.map.nonEmpty))
+              wrapClass(dn, fileName, generateDartClassBody(dn, o, toEmit, parent, discriminator), allImports, hasFields = o.map.nonEmpty))
             exportNames += (if (subDir.nonEmpty) s"$subDir/$fileName" else fileName)
           case p: DefType.Poly =>
             val subImports = p.values.map { case (key, subDefn) =>
@@ -416,17 +416,10 @@ case class DurableSocketDartGenerator(config: DurableSocketDartConfig) {
               s"import '${importPath(subDir, subName)}';"
             }.toList
             val parentImport = parent.map(p => s"import '${importPath(subDir, p)}';").toList
-            val commonFieldImports = detectCommonFieldImports(p).map { imp =>
-              val nameMatch = """import '(.+)\.dart';""".r.findFirstMatchIn(imp)
-              nameMatch.map { m =>
-                val targetSnake = m.group(1)
-                val targetType = typeLocations.keys.find(k => snakeCase(k) == targetSnake).getOrElse(targetSnake)
-                s"import '${importPath(subDir, targetType)}';"
-              }.getOrElse(imp)
-            }
+            val commonFieldImports = detectCommonFieldImports(p).map(t => s"import '${importPath(subDir, t)}';")
             val allImports = (subImports ++ parentImport ++ commonFieldImports).distinct.sorted
             files += SourceFile("Dart", dn, fileName, filePath,
-              wrapPoly(dn, generateDartPoly(dn, p, toEmit, parent), allImports))
+              wrapPoly(dn, generateDartPoly(dn, p, toEmit, parent, defn.className), allImports))
             exportNames += (if (subDir.nonEmpty) s"$subDir/$fileName" else fileName)
           case _ =>
         }
@@ -476,29 +469,32 @@ case class DurableSocketDartGenerator(config: DurableSocketDartConfig) {
   }
 
   /** Collect import statements for field types that reference other generated types. */
+  /** Collect Dart class names that the given field types reference, excluding the self type.
+    * Returns a sorted list of Dart class names (no `import` formatting). The caller resolves
+    * paths via `importPath` to produce the final import statements. */
   private def collectImports(
     fieldTypes: List[Definition],
     selfName: String,
     knownTypes: mutable.LinkedHashMap[String, Definition],
     childToParent: mutable.Map[String, String]
   ): List[String] = {
-    val imports = mutable.Set.empty[String]
+    val names = mutable.Set.empty[String]
     def scan(d: Definition): Unit = {
       d.className.foreach { cn =>
         d.defType match {
           case DefType.Str | DefType.Int | DefType.Dec | DefType.Bool =>
             // Typed wrapper (e.g., UserId)
             val name = simpleName(cn)
-            if (name != selfName) imports += s"import '${snakeCase(name)}.dart';"
+            if (name != selfName) names += name
           case _: DefType.Obj =>
             val name = dartName(simpleName(cn))
-            if (name != selfName) imports += s"import '${snakeCase(name)}.dart';"
+            if (name != selfName) names += name
           case _: DefType.Poly if isSimpleEnum(d.defType.asInstanceOf[DefType.Poly]) =>
             val name = simpleName(cn)
-            if (name != selfName && !dartReserved.contains(name)) imports += s"import '${snakeCase(name)}.dart';"
+            if (name != selfName && !dartReserved.contains(name)) names += name
           case _: DefType.Poly =>
             val name = dartName(simpleName(cn))
-            if (name != selfName) imports += s"import '${snakeCase(name)}.dart';"
+            if (name != selfName) names += name
           case _ =>
         }
       }
@@ -509,7 +505,7 @@ case class DurableSocketDartGenerator(config: DurableSocketDartConfig) {
       }
     }
     fieldTypes.foreach(scan)
-    imports.toList.sorted
+    names.toList.sorted
   }
 
   /** Wrap a typed wrapper class in a standalone file. */
@@ -563,8 +559,9 @@ case class DurableSocketDartGenerator(config: DurableSocketDartConfig) {
     name: String,
     o: DefType.Obj,
     knownTypes: mutable.LinkedHashMap[String, Definition],
-    parentName: Option[String] = None
-  ): String = generateDartClass(name, o, knownTypes, parentName)
+    parentName: Option[String] = None,
+    discriminator: Option[String] = None
+  ): String = generateDartClass(name, o, knownTypes, parentName, discriminator)
 
   /** Recursively collect named types from a Definition tree into `out` (in dependency order). */
   private def collectTypes(name: String, defn: Definition, out: mutable.LinkedHashMap[String, Definition]): Unit = {
@@ -667,16 +664,18 @@ case class DurableSocketDartGenerator(config: DurableSocketDartConfig) {
     name: String,
     o: DefType.Obj,
     knownTypes: mutable.LinkedHashMap[String, Definition],
-    parentName: Option[String] = None
+    parentName: Option[String] = None,
+    discriminator: Option[String] = None
   ): String = {
     val extendsClause = parentName.map(p => s" extends $p").getOrElse("")
+    val typeValue = discriminator.getOrElse(name)
     if (o.map.isEmpty) {
       // Empty class (e.g., case object with no fields)
       s"""class $name$extendsClause {
          |  $name();
          |  $name.fromJson(Map<String, dynamic> json);
          |
-         |  Map<String, dynamic> toJson() => {'type': '$name'};
+         |  Map<String, dynamic> toJson() => {'type': '$typeValue'};
          |}""".stripMargin
     } else {
       val fields = o.map.map { case (fname, fDefn) =>
@@ -707,7 +706,7 @@ case class DurableSocketDartGenerator(config: DurableSocketDartConfig) {
          |  $name.fromJson(Map<String, dynamic> json)
          |      : $fromJsonInits;
          |
-         |  Map<String, dynamic> toJson() => {'type': '$name', $toJsonEntries};
+         |  Map<String, dynamic> toJson() => {'type': '$typeValue', $toJsonEntries};
          |}""".stripMargin
     }
   }
@@ -716,12 +715,20 @@ case class DurableSocketDartGenerator(config: DurableSocketDartConfig) {
     name: String,
     p: DefType.Poly,
     knownTypes: mutable.LinkedHashMap[String, Definition],
-    parentName: Option[String] = None
+    parentName: Option[String] = None,
+    parentFullClass: Option[String] = None
   ): String = {
     val extendsClause = parentName.map(p => s" extends $p").getOrElse("")
     val cases = p.values.map { case (key, defn) =>
       val subName = dartName(shortName(key, defn))
-      s"""    if (type == '$key') return $subName.fromJson(json);"""
+      // Use full className as discriminator when meaningful (not an anonymous class name).
+      // For anonymous case objects in enums, derive from parent's full path + key.
+      val discriminatorValue = defn.className match {
+        case Some(cn) if !cn.contains("anon") => baseClassName(cn)
+        case _ =>
+          parentFullClass.map(p => s"${baseClassName(p)}.$key").getOrElse(key)
+      }
+      s"""    if (type == '$discriminatorValue') return $subName.fromJson(json);"""
     }.mkString("\n")
 
     // Detect common fields across all subtypes
@@ -779,6 +786,8 @@ case class DurableSocketDartGenerator(config: DurableSocketDartConfig) {
   }
 
   /** Detect which imports are needed for common fields in a poly type. */
+  /** Collect Dart class names appearing as common fields across all subtypes of a Poly,
+    * excluding primitives and collections. Caller resolves paths to produce import statements. */
   private def detectCommonFieldImports(p: DefType.Poly): List[String] = {
     val subtypeFields: List[Map[String, (String, Boolean)]] = p.values.values.toList.flatMap { defn =>
       extractObjFields(defn).map(_.map { case (fieldName, fieldDefn, optional) =>
@@ -792,12 +801,8 @@ case class DurableSocketDartGenerator(config: DurableSocketDartConfig) {
       val types = subtypeFields.flatMap(_.get(fieldName)).map(_._1).distinct
       if (types.size == 1) Some(types.head) else None
     }.toSet
-    // Map non-primitive dart types to their import files
     val primitives = Set("String", "int", "double", "bool", "num", "dynamic", "Object", "void", "List", "Map")
-    commonTypes.filterNot(t => primitives.contains(t) || t.startsWith("List<") || t.startsWith("Map<")).flatMap { dartType =>
-      val snaked = snakeCase(dartType)
-      Some(s"import '$snaked.dart';")
-    }.toList
+    commonTypes.filterNot(t => primitives.contains(t) || t.startsWith("List<") || t.startsWith("Map<")).toList
   }
 
   /** Track typed wrappers discovered during generation. Key = base className (no type params), Value = (dartName, primitiveDartType). */
@@ -832,24 +837,20 @@ case class DurableSocketDartGenerator(config: DurableSocketDartConfig) {
     base
   }
 
-  /** Extract a package subdirectory from a fully qualified className.
-    * Uses the last 2 meaningful package segments to create a subdirectory.
-    * "scalagentic.conversation.event.Deleted" → "event"
-    * "scalagentic.provider.Content.Markdown" → "provider"
-    * "com.outr.workflow.step.StepResultStatus.Completed" → "step"
-    * Names without packages get no subdirectory (empty string). */
+  /** Extract the full package path from a className as a slash-separated string.
+    * Walks the className taking leading lowercase-first segments as package parts.
+    * "scalagentic.conversation.event.Deleted" → "scalagentic/conversation/event"
+    * "com.outr.workflow.step.StepResultStatus.Completed" → "com/outr/workflow/step"
+    * "spec.OpenAPIHttpServerSpec.Auth" → "spec"
+    * Names without packages get an empty string. */
   private def packageSubDir(cn: String): String = {
-    val bare = baseClassName(cn)
-    val parts = bare.split('.')
-    if (parts.length <= 2) "" // No meaningful package
-    else {
-      // Take the second-to-last segment as the subdirectory
-      // This groups by the most specific package (event, provider, step, model, etc.)
-      parts(parts.length - 2)
-    }
+    val bare = baseClassName(cn).replace("$", ".")
+    val parts = bare.split('.').toList.filter(_.nonEmpty)
+    val pkgParts = parts.takeWhile(p => p.charAt(0).isLower)
+    pkgParts.mkString("/")
   }
 
-  /** Tracks className → (simpleName, packageSubDir) for all emitted types.
+  /** Tracks className → (dartName, packagePath) for all emitted types.
     * Used to resolve cross-package import paths. */
   private val typeLocations = mutable.Map.empty[String, (String, String)]
 

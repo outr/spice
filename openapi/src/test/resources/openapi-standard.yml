@@ -21,21 +21,21 @@ paths:
               schema:
                 type: 'array'
                 items:
-                  $ref: '#/components/schemas/User'
+                  $ref: '#/components/schemas/spec.OpenAPIServerSpec.User'
 components:
   schemas:
-    User:
+    spec.OpenAPIServerSpec.User:
       type: 'object'
       properties:
         name:
           type: 'string'
         type:
-          $ref: '#/components/schemas/UserType'
+          $ref: '#/components/schemas/spec.OpenAPIServerSpec.UserType'
       required:
         - 'name'
         - 'type'
       x-full-class: 'spec.OpenAPIServerSpec.User'
-    UserType:
+    spec.OpenAPIServerSpec.UserType:
       type: 'string'
       description: 'spec.OpenAPIServerSpec.UserType'
       enum:

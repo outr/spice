@@ -8,7 +8,6 @@ import spice.http.server.MutableHttpServer
 import spice.net.*
 import spice.openapi.{OpenAPI, OpenAPIComponents, OpenAPIInfo, OpenAPIParameter, OpenAPIPath, OpenAPISchema, OpenAPIServer, OpenAPITag}
 
-import scala.annotation.tailrec
 import scala.collection.immutable.VectorMap
 
 trait OpenAPIHttpServer extends MutableHttpServer {
@@ -22,39 +21,15 @@ trait OpenAPIHttpServer extends MutableHttpServer {
   }
 
   def register(fullName: String)(f: => OpenAPISchema): String = synchronized {
-    fullNameMap.get(fullName) match {
-      case Some(name) => name
-      case None =>
-        val schema: OpenAPISchema = f
-        val name = determineAvailableName(fullName)
-        fullNameMap += fullName -> name
-        componentsMap += name -> schema
-        name
+    if (!fullNameMap.contains(fullName)) {
+      val schema: OpenAPISchema = f
+      fullNameMap += fullName -> fullName
+      componentsMap += fullName -> schema
     }
+    fullName
   }
 
   def components: Map[String, OpenAPISchema] = VectorMap(componentsMap.toList.sortBy(_._1)*)
-
-  private def determineAvailableName(fullName: String): String = {
-    val index = fullName.lastIndexOf('.')
-    val shortName = fullName.substring(index + 1)
-
-    @tailrec
-    def recurse(i: Int): String = {
-      val n = if (i == 0) {
-        shortName
-      } else {
-        s"$shortName$i"
-      }
-      if (!fullNameMap.valuesIterator.contains(n)) {
-        n
-      } else {
-        recurse(i + 1)
-      }
-    }
-
-    recurse(0)
-  }
 
   def openAPIVersion: String = "3.2.0"
 

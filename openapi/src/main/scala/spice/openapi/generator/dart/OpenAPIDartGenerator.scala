@@ -111,7 +111,7 @@ case class OpenAPIDartGenerator(api: OpenAPI, config: OpenAPIGeneratorConfig) ex
   private def fromJsonFactoryCalls(ref: OpenAPISchema.Ref,
                                     imports: mutable.Set[String]): String =
     ref.genericTypeArgs.map { gt =>
-      safeAddImport(imports, gt.typeName.type2File)
+      safeAddImport(imports, gt.typeName)
       s"(e) => ${gt.typeName}.fromJson(e as Map<String, dynamic>)"
     }.mkString(", ")
 
@@ -198,7 +198,7 @@ case class OpenAPIDartGenerator(api: OpenAPI, config: OpenAPIGeneratorConfig) ex
     if (schema.xFullClass.isDefined) return false
 
     // If it's a polymorphic subtype (has a parent in the type map), it needs a class
-    if (baseForTypeMap.contains(typeName)) return false
+    if (baseForTypeMap.contains(dartNameForFullClass(typeName))) return false
 
     // Otherwise, it's just a primitive type that doesn't need a separate file
     true
@@ -216,11 +216,30 @@ case class OpenAPIDartGenerator(api: OpenAPI, config: OpenAPIGeneratorConfig) ex
     }
   }
 
-  private def parseOneOf(typeName: String, schema: OpenAPISchema.OneOf): Option[SourceFile] = {
+  /** Look up a target component's directory path by its Dart class name (e.g., "Auth" → "lib/model/spec"). */
+  private def pathForDartType(dartType: String): String = {
+    api.components.toList.flatMap(_.schemas.toList).collectFirst {
+      case (_, c: OpenAPISchema.Component) if typeNameForComponent("", c) == dartType =>
+        modelPathForSchema(c)
+    }.orElse(
+      parentFiles.get(dartType).map(_.path)
+    ).getOrElse("lib/model")
+  }
+
+  /** Render an import statement with the relative path from the source location to the target type. */
+  private def renderImport(dartType: String, fromPath: String): String = {
+    val toPath = pathForDartType(dartType)
+    val fileName = s"${dartType.type2File}.dart"
+    s"import '${relativeImport(fromPath, toPath, fileName)}';"
+  }
+
+  private def parseOneOf(rawTypeName: String, schema: OpenAPISchema.OneOf): Option[SourceFile] = {
+    val typeName = if (rawTypeName.contains('.')) dartNameForFullClass(rawTypeName) else rawTypeName
+    val parentPath = if (rawTypeName.contains('.')) modelPathFor(rawTypeName) else "lib/model"
     // If all schemas are $ref, generate a proper parent class via addParent (goes to parentFiles)
     val refs = schema.schemas.collect { case ref: OpenAPISchema.Ref => ref }
     if (refs.size == schema.schemas.size) {
-      addParent(typeName)
+      addParent(typeName, fullClassName = Some(rawTypeName))
       None // Will be included from parentFiles
     } else {
       // Mixed or inline schemas — generate a stub abstract class
@@ -250,14 +269,17 @@ case class OpenAPIDartGenerator(api: OpenAPI, config: OpenAPIGeneratorConfig) ex
         language = "Dart",
         name = typeName,
         fileName = fileName,
-        path = "lib/model",
+        path = parentPath,
         source = source
       ))
     }
   }
 
-  private def parseAllOf(typeName: String, schema: OpenAPISchema.AllOf): SourceFile = {
-    // For AllOf schemas, we create a class that combines all the schemas
+  /** Generate a stub abstract class for AllOf/AnyOf/Not — placeholder schemas with composition semantics
+    * not yet fully implemented. Uses path-based file location derived from the rawTypeName. */
+  private def parseCompositionStub(rawTypeName: String, kind: String, comment: String): SourceFile = {
+    val typeName = if (rawTypeName.contains('.')) dartNameForFullClass(rawTypeName) else rawTypeName
+    val path = if (rawTypeName.contains('.')) modelPathFor(rawTypeName) else "lib/model"
     val fileName = s"${typeName.type2File}.dart"
     val source = s"""/// GENERATED CODE: Do not edit!
                     |import 'package:equatable/equatable.dart';
@@ -267,7 +289,7 @@ case class OpenAPIDartGenerator(api: OpenAPI, config: OpenAPIGeneratorConfig) ex
                     |
                     |@JsonSerializable()
                     |class $typeName extends Equatable {
-                    |  // This class combines multiple schemas - implement specific fields based on the schemas
+                    |  // $comment
                     |  const $typeName();
                     |
                     |  factory $typeName.fromJson(Map<String, dynamic> json) {
@@ -279,97 +301,77 @@ case class OpenAPIDartGenerator(api: OpenAPI, config: OpenAPIGeneratorConfig) ex
                     |  @override
                     |  List<Object?> get props => [];
                     |}""".stripMargin
-    
+
     SourceFile(
       language = "Dart",
       name = typeName,
       fileName = fileName,
-      path = "lib/model",
+      path = path,
       source = source
     )
   }
 
-  private def parseAnyOf(typeName: String, schema: OpenAPISchema.AnyOf): SourceFile = {
-    // For AnyOf schemas, we create a flexible class that can handle any of the types
-    val fileName = s"${typeName.type2File}.dart"
-    val source = s"""/// GENERATED CODE: Do not edit!
-                    |import 'package:equatable/equatable.dart';
-                    |import 'package:json_annotation/json_annotation.dart';
-                    |
-                    |part '${typeName.type2File}.g.dart';
-                    |
-                    |@JsonSerializable()
-                    |class $typeName extends Equatable {
-                    |  // This class can be any of the specified types - implement based on your needs
-                    |  const $typeName();
-                    |
-                    |  factory $typeName.fromJson(Map<String, dynamic> json) {
-                    |    return _$$${typeName}FromJson(json);
-                    |  }
-                    |
-                    |  Map<String, dynamic> toJson() => _$$${typeName}ToJson(this);
-                    |
-                    |  @override
-                    |  List<Object?> get props => [];
-                    |}""".stripMargin
-    
-    SourceFile(
-      language = "Dart",
-      name = typeName,
-      fileName = fileName,
-      path = "lib/model",
-      source = source
-    )
-  }
+  private def parseAllOf(typeName: String, schema: OpenAPISchema.AllOf): SourceFile =
+    parseCompositionStub(typeName, "AllOf", "This class combines multiple schemas - implement specific fields based on the schemas")
 
-  private def parseNot(typeName: String, schema: OpenAPISchema.Not): SourceFile = {
-    // For Not schemas, we create a class that excludes the specified schema
-    val fileName = s"${typeName.type2File}.dart"
-    val source = s"""/// GENERATED CODE: Do not edit!
-                    |import 'package:equatable/equatable.dart';
-                    |import 'package:json_annotation/json_annotation.dart';
-                    |
-                    |part '${typeName.type2File}.g.dart';
-                    |
-                    |@JsonSerializable()
-                    |class $typeName extends Equatable {
-                    |  // This class excludes the specified schema - implement based on your needs
-                    |  const $typeName();
-                    |
-                    |  factory $typeName.fromJson(Map<String, dynamic> json) {
-                    |    return _$$${typeName}FromJson(json);
-                    |  }
-                    |
-                    |  Map<String, dynamic> toJson() => _$$${typeName}ToJson(this);
-                    |
-                    |  @override
-                    |  List<Object?> get props => [];
-                    |}""".stripMargin
-    
-    SourceFile(
-      language = "Dart",
-      name = typeName,
-      fileName = fileName,
-      path = "lib/model",
-      source = source
-    )
-  }
+  private def parseAnyOf(typeName: String, schema: OpenAPISchema.AnyOf): SourceFile =
+    parseCompositionStub(typeName, "AnyOf", "This class can be any of the specified types - implement based on your needs")
+
+  private def parseNot(typeName: String, schema: OpenAPISchema.Not): SourceFile =
+    parseCompositionStub(typeName, "Not", "This class excludes the specified schema - implement based on your needs")
 
   private def stripTypeArgs(s: String): String = {
     val idx = s.indexOf('[')
     if (idx == -1) s else s.substring(0, idx)
   }
 
+  /** Splits a className into (package segments, class chain segments).
+    * Package segments are leading lowercase-first parts; class chain segments are uppercase-first parts. */
+  private def splitClassName(cn: String): (List[String], List[String]) = {
+    val clean = stripTypeArgs(cn).replace("$", ".")
+    val parts = clean.split('.').toList.filter(_.nonEmpty)
+    val (pkg, cls) = parts.span(p => p.charAt(0).isLower)
+    (pkg, cls)
+  }
+
+  /** Compute the directory path under `lib/model` for a class, e.g.:
+    * "com.example.foo.Bar" → "lib/model/com/example/foo"
+    * "spec.OpenAPIHttpServerSpec.Auth" → "lib/model/spec" */
+  private def modelPathFor(cn: String): String = {
+    val (pkg, _) = splitClassName(cn)
+    if (pkg.isEmpty) "lib/model" else s"lib/model/${pkg.mkString("/")}"
+  }
+
+  /** Compute the directory path for the schema's xFullClass (or fall back to "lib/model"). */
+  private def modelPathForSchema(schema: OpenAPISchema.Component): String =
+    schema.xFullClass.map(modelPathFor).getOrElse("lib/model")
+
+  /** Compute relative path from one directory to another file. Both paths are absolute starting with "lib/". */
+  private def relativeImport(fromDir: String, toDir: String, fileName: String): String = {
+    if (fromDir == toDir) fileName
+    else {
+      val fromParts = fromDir.split("/").toList.filter(_.nonEmpty)
+      val toParts = toDir.split("/").toList.filter(_.nonEmpty)
+      val commonLen = fromParts.zip(toParts).takeWhile { case (a, b) => a == b }.length
+      val ups = "../" * (fromParts.length - commonLen)
+      val downs = toParts.drop(commonLen).mkString("/")
+      if (downs.nonEmpty) s"$ups$downs/$fileName" else s"$ups$fileName"
+    }
+  }
+
+  /** Convert a full Scala className to its Dart class name by concatenating the class chain segments. */
+  private def dartNameForFullClass(cn: String): String = {
+    val (_, classChain) = splitClassName(cn)
+    if (classChain.nonEmpty) classChain.mkString else cn.replace(" ", "").replace(".", "")
+  }
+
   private def typeNameForComponent(rawTypeName: => String, schema: OpenAPISchema.Component): String = schema.xFullClass match {
-    case Some(cn) =>
-      val clean = stripTypeArgs(cn)
-      val parts = clean.substring(clean.lastIndexOf('$') + 1).split('.')
-      if (parts.length > 1 && parts(parts.length - 2).charAt(0).isUpper) {
-        s"${parts(parts.length - 2)}${parts.last}"
-      } else {
-        parts.last
-      }
-    case None => rawTypeName.replace(" ", "")
+    case Some(cn) => dartNameForFullClass(cn)
+    case None =>
+      val raw = rawTypeName
+      // If rawTypeName looks like a full className (contains dots), derive Dart name from it
+      if (raw.contains('.')) dartNameForFullClass(raw)
+      else raw.replace(" ", "")
   }
 
   private def dartTypeWithGenerics(baseName: String, ref: OpenAPISchema.Ref): String = {
@@ -377,7 +379,7 @@ case class OpenAPIDartGenerator(api: OpenAPI, config: OpenAPIGeneratorConfig) ex
     else s"$baseName<${ref.genericTypeArgs.map(_.typeName).mkString(", ")}>"
   }
 
-  private def parseEnum(typeName: String, `enum`: List[String]): SourceFile = {
+  private def parseEnum(typeName: String, `enum`: List[String], path: String = "lib/model"): SourceFile = {
     val fileName = s"${typeName.type2File}.dart"
     val fields = `enum`.map { e =>
       val className = e.filter(_.isLetterOrDigit) match {
@@ -399,7 +401,7 @@ case class OpenAPIDartGenerator(api: OpenAPI, config: OpenAPIGeneratorConfig) ex
       language = "Dart",
       name = typeName,
       fileName = fileName,
-      path = "lib/model",
+      path = path,
       source = source
     )
   }
@@ -440,20 +442,21 @@ case class OpenAPIDartGenerator(api: OpenAPI, config: OpenAPIGeneratorConfig) ex
       language = "Dart",
       name = typeName,
       fileName = fileName,
-      path = "lib/model",
+      path = modelPathForSchema(schema),
       source = source
     )
   }
 
   private def parseComponent(rawTypeName: String, schema: OpenAPISchema.Component): SourceFile = {
     val typeName: String = typeNameForComponent(rawTypeName, schema)
+    val componentPath: String = modelPathForSchema(schema)
     if (schema.`enum`.nonEmpty) {
       val `enum` = schema.`enum`.map {
         case Str(s, _) => s
         case json => throw new UnsupportedOperationException(s"Enum only supports Str: $json")
       }
-      parseEnum(typeName, `enum`)
-    } else if (schema.properties.isEmpty && schema.`type`.nonEmpty && schema.xFullClass.isDefined && !baseForTypeMap.contains(rawTypeName)) {
+      parseEnum(typeName, `enum`, componentPath)
+    } else if (schema.properties.isEmpty && schema.`type`.nonEmpty && schema.xFullClass.isDefined && !baseForTypeMap.contains(typeName)) {
       // Simple type wrapper (e.g., Id wrapping String, Timestamp wrapping int) — not a poly subtype
       parseTypedWrapper(typeName, schema)
     } else {
@@ -461,20 +464,20 @@ case class OpenAPIDartGenerator(api: OpenAPI, config: OpenAPIGeneratorConfig) ex
 
       val fileName: String = s"${typeName.type2File}.dart"
       val fields: List[String] = schema.properties.toList.map {
-        case (fieldName, schema) => parseField(fieldName, schema, imports).toString
+        case (fieldName, schema) => parseField(fieldName, schema, imports, componentPath).toString
       }
       val fieldsString = fields.mkString("\n  ") match {
         case "" => "// No fields defined"
         case s => s
       }
-      val parent = baseForTypeMap.get(rawTypeName)
+      val parent = baseForTypeMap.get(typeName)
       val extending = parent match {
         case Some(parentName) =>
-          imports += parentName.type2File
+          imports += parentName
           s"extends $parentName with EquatableMixin "
         case None => "extends Equatable "
       }
-      val importsTemplate = imports.toList.sorted.map(s => s"import '$s.dart';").mkString("\n") match {
+      val importsTemplate = imports.toList.sorted.map(t => renderImport(t, componentPath)).mkString("\n") match {
         case "" => "// No imports necessary"
         case s => s
       }
@@ -609,7 +612,7 @@ case class OpenAPIDartGenerator(api: OpenAPI, config: OpenAPIGeneratorConfig) ex
         language = "Dart",
         name = typeName,
         fileName = fileName,
-        path = "lib/model",
+        path = componentPath,
         source = source
       )
     }
@@ -617,7 +620,8 @@ case class OpenAPIDartGenerator(api: OpenAPI, config: OpenAPIGeneratorConfig) ex
 
   private def parseField(fieldName: String,
                          schema: OpenAPISchema,
-                         imports: mutable.Set[String]): ParsedField = schema match {
+                         imports: mutable.Set[String],
+                         fromPath: String = "lib/model"): ParsedField = schema match {
     case c: OpenAPISchema.Component if c.`enum`.nonEmpty =>
       val parentName = typeNameForComponent(
         rawTypeName = baseForTypeMap.getOrElse(c.`enum`.head.asString, throw new NullPointerException(s"Unable to find enum entry ${c.`enum`.head} for $fieldName")),
@@ -627,7 +631,7 @@ case class OpenAPIDartGenerator(api: OpenAPI, config: OpenAPIGeneratorConfig) ex
         case Str(s, _) => s
         case json => throw new UnsupportedOperationException(s"Enum only supports Str: $json")
       }
-      safeAddImport(imports, parentName.type2File)
+      safeAddImport(imports, parentName)
       addParent(parentName, `enum`)
       ParsedField(parentName, fieldName, c.nullable.getOrElse(false))
     case c: OpenAPISchema.Component if c.`type` == "array" =>
@@ -646,7 +650,7 @@ case class OpenAPIDartGenerator(api: OpenAPI, config: OpenAPIGeneratorConfig) ex
           rawTypeName = baseForTypeMap.getOrElse(c.`enum`.head.asString, throw new NullPointerException(s"Unable to find enum entry ${c.`enum`.head} for $fieldName")),
           schema = c
         )
-        safeAddImport(imports, parentName.type2File)
+        safeAddImport(imports, parentName)
         addParent(parentName, `enum`)
         parentName.dartType
       } else if (c.`type` == "object") {
@@ -669,11 +673,11 @@ case class OpenAPIDartGenerator(api: OpenAPI, config: OpenAPIGeneratorConfig) ex
     case c: OpenAPISchema.Ref =>
       val modelType = c.ref.ref2Type
       val dartType = c.ref.ref2DartType(c)
-      safeAddImport(imports, modelType.type2File)
+      safeAddImport(imports, modelType)
       // Also import each resolved generic argument so `Auth<User>` (and similar)
       // compiles — the generic arg is a concrete type name, not a phantom.
       c.genericTypeArgs.foreach { gt =>
-        safeAddImport(imports, gt.typeName.type2File)
+        safeAddImport(imports, gt.typeName)
       }
       ParsedField(dartType, fieldName, c.nullable.getOrElse(false))
     case c: OpenAPISchema.OneOf =>
@@ -683,20 +687,23 @@ case class OpenAPIDartGenerator(api: OpenAPI, config: OpenAPIGeneratorConfig) ex
         case parent :: Nil => parent
         case _ => throw new RuntimeException(s"Multiple parents found for ${refs.mkString(", ")}: ${parents.mkString(", ")}")
       }
-      val parentType = parentName.type2File
-      safeAddImport(imports, parentType)
+      safeAddImport(imports, parentName)
       addParent(parentName)
       ParsedField(parentName, fieldName, c.nullable.getOrElse(false))
     case _ => throw new UnsupportedOperationException(s"Schema for '$fieldName' is unsupported: $schema")
   }
 
-  private def addParent(tn: String, `enum`: List[String] = Nil): Unit = {
+  private def addParent(tn: String, `enum`: List[String] = Nil, fullClassName: Option[String] = None): Unit = {
     val typeName = tn.replace(" ", "")
+    val parentPath = fullClassName.map(modelPathFor).getOrElse("lib/model")
     if (!parentFiles.contains(typeName)) {
       if (`enum`.nonEmpty) {
-        parentFiles += typeName -> parseEnum(typeName, `enum`)
+        parentFiles += typeName -> parseEnum(typeName, `enum`, parentPath)
       } else {
-        val children = resolvedBaseNames.find(_._1 == typeName.ref).get._2.toList.sorted
+        // Find children: try both Dart-name and full-className lookup in baseNames
+        val children = resolvedBaseNames.find(_._1 == typeName.ref).map(_._2.toList.sorted)
+          .orElse(fullClassName.flatMap(fcn => resolvedBaseNames.find(_._1 == fcn).map(_._2.toList.sorted)))
+          .getOrElse(throw new RuntimeException(s"Unable to find children for parent $typeName (full: $fullClassName)"))
         val typedChildren = children.map(_.ref2Type)
         var imports = mutable.Set.empty[String]
         imports ++= typedChildren
@@ -713,7 +720,7 @@ case class OpenAPIDartGenerator(api: OpenAPI, config: OpenAPIGeneratorConfig) ex
               schema match {
                 case ref: OpenAPISchema.Ref =>
                   val refType = ref.ref.ref2Type
-                  safeAddImport(imports, refType.type2File)
+                  safeAddImport(imports, refType)
                 case _ => // Handle other schema types if needed
               }
           }
@@ -735,7 +742,7 @@ case class OpenAPIDartGenerator(api: OpenAPI, config: OpenAPIGeneratorConfig) ex
                     case Str(s, _) => s
                     case json => throw new UnsupportedOperationException(s"Enum only supports Str: $json")
                   }
-                  safeAddImport(imports, parentName.type2File)
+                  safeAddImport(imports, parentName)
                   addParent(parentName, `enum`)
 
                   if (c.nullable.contains(true)) {
@@ -766,13 +773,12 @@ case class OpenAPIDartGenerator(api: OpenAPI, config: OpenAPIGeneratorConfig) ex
                     case parent :: Nil => parent
                     case _ => throw new RuntimeException(s"Multiple parents found for ${refs.mkString(", ")}: ${parents.mkString(", ")}")
                   }
-                  val c = parentName.type2File
-                  safeAddImport(imports, c)
+                  safeAddImport(imports, parentName)
                   addParent(parentName)
                   if (o.nullable.contains(true)) {
-                    s"$c?"
+                    s"$parentName?"
                   } else {
-                    c
+                    parentName
                   }
                 case s => throw new RuntimeException(s"Unsupported schema: $s")
               }
@@ -790,9 +796,7 @@ case class OpenAPIDartGenerator(api: OpenAPI, config: OpenAPIGeneratorConfig) ex
           case (key, value) => s"$value get $key;";
         }.mkString("\n  ")
         val fileName = s"${typeName.type2File}.dart"
-        val importString = imports.map { c =>
-          s"import '${c.type2File}.dart';"
-        }.mkString("\n")
+        val importString = imports.map(t => renderImport(t, parentPath)).mkString("\n")
         val fromJson = children.zip(typedChildren).map {
           case (child, typed) =>
             val discriminator = config.discriminatorValue(child)
@@ -812,7 +816,7 @@ case class OpenAPIDartGenerator(api: OpenAPI, config: OpenAPIGeneratorConfig) ex
           language = "Dart",
           name = typeName,
           fileName = fileName,
-          path = "lib/model",
+          path = parentPath,
           source = source
         )
       }
@@ -834,8 +838,8 @@ case class OpenAPIDartGenerator(api: OpenAPI, config: OpenAPIGeneratorConfig) ex
           val (responseType, responseTypeWithGenerics, fromJsonExpr) = apiPath.schema match {
             case c: OpenAPISchema.Ref =>
               val rt = c.ref.ref2Type
-              safeAddImport(imports, rt.type2File)
-              c.genericTypeArgs.foreach(gt => safeAddImport(imports, gt.typeName.type2File))
+              safeAddImport(imports, rt)
+              c.genericTypeArgs.foreach(gt => safeAddImport(imports, gt.typeName))
               val withG = if (c.genericTypeArgs.isEmpty) rt
                           else s"$rt<${c.genericTypeArgs.map(_.typeName).mkString(", ")}>"
               (rt, withG, responseFromJsonExpr(c, rt, imports))
@@ -864,8 +868,8 @@ case class OpenAPIDartGenerator(api: OpenAPI, config: OpenAPIGeneratorConfig) ex
             // void return type — fire and forget
             val requestRef = requestContent.ref
             val requestType = requestContent.refTypeWithGenerics
-            safeAddImport(imports, requestContent.refType.type2File)
-            requestRef.genericTypeArgs.foreach(gt => safeAddImport(imports, gt.typeName.type2File))
+            safeAddImport(imports, requestContent.refType)
+            requestRef.genericTypeArgs.foreach(gt => safeAddImport(imports, gt.typeName))
             s"""  /// ${entry.description}
                |  static Future<void> $name($requestType request) async {
                |    await restPost(
@@ -877,8 +881,8 @@ case class OpenAPIDartGenerator(api: OpenAPI, config: OpenAPIGeneratorConfig) ex
             case Some("binary") =>
               val requestRef = requestContent.ref
               val requestType = requestContent.refTypeWithGenerics
-              safeAddImport(imports, requestContent.refType.type2File)
-              requestRef.genericTypeArgs.foreach(gt => safeAddImport(imports, gt.typeName.type2File))
+              safeAddImport(imports, requestContent.refType)
+              requestRef.genericTypeArgs.foreach(gt => safeAddImport(imports, gt.typeName))
               s"""  /// ${entry.description}
                  |  static Future<void> $name($requestType request, String fileName) async {
                  |    await restDownload(fileName, "$pathString", ${requestToJsonExpr(requestRef)});
@@ -888,8 +892,8 @@ case class OpenAPIDartGenerator(api: OpenAPI, config: OpenAPIGeneratorConfig) ex
           case c: OpenAPISchema.Ref if c.ref == "#/components/schemas/Content" =>
             val requestRef = requestContent.ref
             val requestType = requestContent.refTypeWithGenerics
-            safeAddImport(imports, requestContent.refType.type2File)
-            requestRef.genericTypeArgs.foreach(gt => safeAddImport(imports, gt.typeName.type2File))
+            safeAddImport(imports, requestContent.refType)
+            requestRef.genericTypeArgs.foreach(gt => safeAddImport(imports, gt.typeName))
             s"""  /// ${entry.description}
                |  static Future<void> $name($requestType request, String fileName) async {
                |    await restDownload(fileName, "$pathString", ${requestToJsonExpr(requestRef)});
@@ -900,8 +904,8 @@ case class OpenAPIDartGenerator(api: OpenAPI, config: OpenAPIGeneratorConfig) ex
             val responseTypeWithGenerics = successResponse.refTypeWithGenerics
             val component = successResponse.component
             val binary = component.format.contains("binary")
-            safeAddImport(imports, responseType.type2File)
-            responseRef.genericTypeArgs.foreach(gt => safeAddImport(imports, gt.typeName.type2File))
+            safeAddImport(imports, responseType)
+            responseRef.genericTypeArgs.foreach(gt => safeAddImport(imports, gt.typeName))
             if (requestContentType == ContentType.`multipart/form-data`) {
               apiContentType.schema match {
                 case c: OpenAPISchema.Component =>
@@ -911,7 +915,7 @@ case class OpenAPIDartGenerator(api: OpenAPI, config: OpenAPIGeneratorConfig) ex
                         case child: OpenAPISchema.Component if child.format.contains("binary") => "PlatformFile"
                         case child: OpenAPISchema.Component if child.`enum`.nonEmpty =>
                           val parentName = baseForTypeMap.getOrElse(child.`enum`.head.asString, throw new NullPointerException(s"Unable to find enum entry ${child.`enum`.head} for $key"))
-                          safeAddImport(imports, parentName.type2File)
+                          safeAddImport(imports, parentName)
                           parentName
                         case child: OpenAPISchema.Component => s"${child.`type`.dartType}"
                         case ref: OpenAPISchema.Ref => ref.ref.ref2DartType(ref)
@@ -928,8 +932,8 @@ case class OpenAPIDartGenerator(api: OpenAPI, config: OpenAPIGeneratorConfig) ex
                         s"${ws}request.fields['$key'] = json.encode($key);"
                       }
                     case (key, ref: OpenAPISchema.Ref) =>
-                      safeAddImport(imports, ref.ref.ref2Type.type2File)
-                      ref.genericTypeArgs.foreach(gt => safeAddImport(imports, gt.typeName.type2File))
+                      safeAddImport(imports, ref.ref.ref2Type)
+                      ref.genericTypeArgs.foreach(gt => safeAddImport(imports, gt.typeName))
                       val toJsonCall =
                         if (ref.genericTypeArgs.isEmpty) s"$key.toJson()"
                         else s"$key.toJson(${toJsonFactoryCalls(ref)})"
@@ -951,8 +955,8 @@ case class OpenAPIDartGenerator(api: OpenAPI, config: OpenAPIGeneratorConfig) ex
             } else if (binary) {
               val requestRef = requestContent.ref
               val requestType = requestContent.refTypeWithGenerics
-              safeAddImport(imports, requestContent.refType.type2File)
-              requestRef.genericTypeArgs.foreach(gt => safeAddImport(imports, gt.typeName.type2File))
+              safeAddImport(imports, requestContent.refType)
+              requestRef.genericTypeArgs.foreach(gt => safeAddImport(imports, gt.typeName))
               s"""  /// ${entry.description}
                  |  static Future<void> $name($requestType request) async {
                  |    return await restDownload(
@@ -964,8 +968,8 @@ case class OpenAPIDartGenerator(api: OpenAPI, config: OpenAPIGeneratorConfig) ex
             } else {
               val requestRef = requestContent.ref
               val requestType = requestContent.refTypeWithGenerics
-              safeAddImport(imports, requestContent.refType.type2File)
-              requestRef.genericTypeArgs.foreach(gt => safeAddImport(imports, gt.typeName.type2File))
+              safeAddImport(imports, requestContent.refType)
+              requestRef.genericTypeArgs.foreach(gt => safeAddImport(imports, gt.typeName))
               s"""  /// ${entry.description}
                  |  static Future<$responseTypeWithGenerics> $name($requestType request) async {
                  |    return await restful(
@@ -981,7 +985,8 @@ case class OpenAPIDartGenerator(api: OpenAPI, config: OpenAPIGeneratorConfig) ex
           None
         }
     }
-    val importsTemplate = imports.toList.sorted.map(s => s"import 'model/$s.dart';").mkString("\n")
+    // service.dart lives at lib/, so all model imports are relative to lib/
+    val importsTemplate = imports.toList.sorted.map(t => renderImport(t, "lib")).mkString("\n")
     val methodsTemplate = methods.mkString("\n\n")
     val source = ServiceTemplate
       .replace("%%IMPORTS%%", importsTemplate)

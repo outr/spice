@@ -923,5 +923,40 @@ class DartGeneratorPreMigrationSpec extends AnyWordSpec with Matchers {
       recordFile.source should include("final Id<Post> postId;")
       recordFile.source should include("final String name;")
     }
+
+    "place components into package-derived directories so same-named cross-package types coexist" in {
+      // Two types both named "Dog" in different packages should land in different directories
+      // and not collide. The components map is keyed by full Scala className.
+      val api = OpenAPI(
+        info = OpenAPIInfo(title = "Test", version = "1.0"),
+        components = Some(OpenAPIComponents(
+          schemas = Map(
+            "com.foo.Dog" -> OpenAPISchema.Component(
+              `type` = "object",
+              properties = Map("breed" -> OpenAPISchema.Component(`type` = "string")),
+              xFullClass = Some("com.foo.Dog")
+            ),
+            "com.bar.Dog" -> OpenAPISchema.Component(
+              `type` = "object",
+              properties = Map("color" -> OpenAPISchema.Component(`type` = "string")),
+              xFullClass = Some("com.bar.Dog")
+            )
+          )
+        ))
+      )
+      val generator = OpenAPIDartGenerator(api, OpenAPIGeneratorConfig())
+      val result = generator.generate()
+      val modelFiles = result.filter(_.path.startsWith("lib/model"))
+
+      // Both "Dog" types should be generated, each in its own package-derived directory
+      val fooDog = modelFiles.find(f => f.path == "lib/model/com/foo" && f.fileName == "dog.dart")
+      val barDog = modelFiles.find(f => f.path == "lib/model/com/bar" && f.fileName == "dog.dart")
+      fooDog should not be empty
+      barDog should not be empty
+
+      // Each file's content should reflect its own properties
+      fooDog.get.source should include("final String breed;")
+      barDog.get.source should include("final String color;")
+    }
   }
 }
