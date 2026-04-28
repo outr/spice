@@ -726,13 +726,24 @@ case class OpenAPIDartGenerator(api: OpenAPI, config: OpenAPIGeneratorConfig) ex
         var imports = mutable.Set.empty[String]
         imports ++= typedChildren
         
+        // children are Dart class names (from buildBaseNames); components.schemas is keyed by
+        // the full Scala className. Resolve each Dart name to its FQN before lookup.
+        def lookupComponent(child: String): OpenAPISchema.Component = {
+          val components = api.components.get
+          val key = fqnForDartType(child).getOrElse(child)
+          components.schemas.getOrElse(key,
+            throw new RuntimeException(s"Unable to find component for child '$child' (looked up as '$key'). Available: ${components.schemas.keys.mkString(", ")}")
+          ) match {
+            case c: OpenAPISchema.Component => c
+            case other =>
+              throw new RuntimeException(s"Expected OpenAPISchema.Component for '$child', got: ${other.getClass.getSimpleName}")
+          }
+        }
+
         // Also collect imports from all child schemas, not just common properties
         // This ensures that types like PhoneNumberType are imported even if they're not in common properties
         children.foreach { child =>
-          val components = api.components.get
-          val component = components
-            .schemas.getOrElse(child, throw new NullPointerException(s"Unable to find $child in ${components.schemas.keys.mkString(", ")}"))
-            .asInstanceOf[OpenAPISchema.Component]
+          val component = lookupComponent(child)
           component.properties.foreach {
             case (_, schema) =>
               schema match {
@@ -743,12 +754,9 @@ case class OpenAPIDartGenerator(api: OpenAPI, config: OpenAPIGeneratorConfig) ex
               }
           }
         }
-        
+
         val maps = children.map { child =>
-          val components = api.components.get
-          val component = components
-            .schemas.getOrElse(child, throw new NullPointerException(s"Unable to find $child in ${components.schemas.keys.mkString(", ")}"))
-            .asInstanceOf[OpenAPISchema.Component]
+          val component = lookupComponent(child)
           component.properties.map {
             case (key, schema) =>
               def recurseType(schema: OpenAPISchema): String = schema match {

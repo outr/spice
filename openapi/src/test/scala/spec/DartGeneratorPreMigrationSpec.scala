@@ -958,5 +958,57 @@ class DartGeneratorPreMigrationSpec extends AnyWordSpec with Matchers {
       fooDog.get.source should include("final String breed;")
       barDog.get.source should include("final String color;")
     }
+
+    "resolve OneOf parent's children when components are FQN-keyed (nested Scala types)" in {
+      // Mirrors the LN case: a sealed family `SourceType` with case objects
+      // `SourceType.Private` and `SourceType.Public` in their parent's companion.
+      // Component map keys are the full Scala classNames; Dart class names concatenate
+      // the class chain (SourceTypePrivate, SourceTypePublic).
+      val api = OpenAPI(
+        info = OpenAPIInfo(title = "Test", version = "1.0"),
+        components = Some(OpenAPIComponents(
+          schemas = Map(
+            "com.example.SourceType.Private" -> OpenAPISchema.Component(
+              `type` = "object",
+              properties = Map("label" -> OpenAPISchema.Component(`type` = "string")),
+              xFullClass = Some("com.example.SourceType.Private")
+            ),
+            "com.example.SourceType.Public" -> OpenAPISchema.Component(
+              `type` = "object",
+              properties = Map("label" -> OpenAPISchema.Component(`type` = "string")),
+              xFullClass = Some("com.example.SourceType.Public")
+            ),
+            "com.example.SourceType" -> OpenAPISchema.OneOf(
+              schemas = List(
+                OpenAPISchema.Ref("#/components/schemas/com.example.SourceType.Private"),
+                OpenAPISchema.Ref("#/components/schemas/com.example.SourceType.Public")
+              ),
+              discriminator = Some(OpenAPISchema.Discriminator(
+                propertyName = "type",
+                mapping = Map(
+                  "Private" -> "#/components/schemas/com.example.SourceType.Private",
+                  "Public" -> "#/components/schemas/com.example.SourceType.Public"
+                )
+              ))
+            )
+          )
+        ))
+      )
+      val generator = OpenAPIDartGenerator(api, OpenAPIGeneratorConfig())
+      // Should not throw — the bug was an NPE in addParent when looking up children
+      val result = generator.generate()
+
+      // The parent abstract class is generated
+      val parentFile = result.find(_.name == "SourceType")
+      parentFile should not be empty
+      parentFile.get.source should include("abstract class SourceType")
+      // Discriminator dispatch uses simple wire-format names (Fabric's productPrefix)
+      parentFile.get.source should include("if (t == 'Private')")
+      parentFile.get.source should include("if (t == 'Public')")
+
+      // Child classes use concatenated Dart names
+      result.find(_.name == "SourceTypePrivate") should not be empty
+      result.find(_.name == "SourceTypePublic") should not be empty
+    }
   }
 }
