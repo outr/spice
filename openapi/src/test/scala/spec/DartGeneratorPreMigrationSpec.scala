@@ -1025,6 +1025,71 @@ class DartGeneratorPreMigrationSpec extends AnyWordSpec with Matchers {
       // No FQN-derived import paths — Dart can't parse those
       sourceFile.source should not include "com.example._source_type"
       sourceFile.source should not include "com.example.source_type"
+
+      // Source and SourceType both live at lib/model/com/example, so the import
+      // should be a sibling reference, not a flat-layout reference up the tree.
+      sourceFile.path should be("lib/model/com/example")
+      sourceFile.source should include("import 'source_type.dart';")
+      sourceFile.source should not include "../../../source_type.dart"
+      sourceFile.source should not include "../source_type.dart"
+    }
+
+    "emit a browser-download stub when a service returns Content (FQN-keyed)" in {
+      // Mirrors the LN entityDownloadExport case: a POST that returns spice.http.content.Content
+      // should produce a typed download method (Future<void> ... String fileName, restDownload(...)),
+      // not a generic JSON-response method returning Future<Content>.
+      val api = OpenAPI(
+        info = OpenAPIInfo(title = "Test", version = "1.0"),
+        paths = Map(
+          "/download" -> OpenAPIPath(
+            methods = Map(
+              HttpMethod.Post -> OpenAPIPathEntry(
+                summary = "Download",
+                description = "Download as file",
+                requestBody = Some(OpenAPIRequestBody(
+                  required = true,
+                  content = OpenAPIContent(
+                    ContentType.`application/json` -> OpenAPIContentType(
+                      schema = OpenAPISchema.Ref("#/components/schemas/com.example.DownloadRequest")
+                    )
+                  )
+                )),
+                responses = Map(
+                  "200" -> OpenAPIResponse(
+                    description = "OK",
+                    content = Some(OpenAPIContent(
+                      ContentType.`application/json` -> OpenAPIContentType(
+                        schema = OpenAPISchema.Ref("#/components/schemas/spice.http.content.Content")
+                      )
+                    ))
+                  )
+                )
+              )
+            )
+          )
+        ),
+        components = Some(OpenAPIComponents(
+          schemas = Map(
+            "com.example.DownloadRequest" -> OpenAPISchema.Component(
+              `type` = "object",
+              properties = Map("id" -> OpenAPISchema.Component(`type` = "string")),
+              xFullClass = Some("com.example.DownloadRequest")
+            ),
+            "spice.http.content.Content" -> OpenAPISchema.Component(
+              `type` = "object",
+              xFullClass = Some("spice.http.content.Content")
+            )
+          )
+        ))
+      )
+      val generator = OpenAPIDartGenerator(api, OpenAPIGeneratorConfig())
+      val result = generator.generate()
+      val service = result.find(_.fileName == "service.dart").get.source
+
+      service should include("static Future<void> download(DownloadRequest request, String fileName) async")
+      service should include("await restDownload(fileName,")
+      // Should NOT be the generic JSON-response form
+      service should not include "static Future<Content> download"
     }
 
     "use Dart class names (not raw FQNs) in abstract Parent common getters" in {

@@ -221,11 +221,19 @@ case class OpenAPIDartGenerator(api: OpenAPI, config: OpenAPIGeneratorConfig) ex
     }
   }
 
-  /** Look up a target component's directory path by its Dart class name (e.g., "Auth" → "lib/model/spec"). */
+  /** Look up a target component's directory path by its Dart class name (e.g., "Auth" → "lib/model/spec").
+    * Handles all OpenAPISchema variants — Components (via xFullClass), and non-Component schemas
+    * (OneOf/AllOf/AnyOf/Not) where the path comes from the FQN-shaped components map key. */
   private def pathForDartType(dartType: String): String = {
     api.components.toList.flatMap(_.schemas.toList).collectFirst {
       case (_, c: OpenAPISchema.Component) if typeNameForComponent("", c) == dartType =>
         modelPathForSchema(c)
+      case (key, _) if key.contains('.') && dartNameForFullClass(key) == dartType =>
+        // FQN-keyed non-Component schema (typically a OneOf parent)
+        modelPathFor(key)
+      case (key, _) if key == dartType =>
+        // Non-FQN key (e.g., a plain "Status") — lives at the model root
+        "lib/model"
     }.orElse(
       parentFiles.get(dartType).map(_.path)
     ).getOrElse("lib/model")
@@ -925,7 +933,10 @@ case class OpenAPIDartGenerator(api: OpenAPI, config: OpenAPIGeneratorConfig) ex
                  |  }""".stripMargin
             case format => throw new RuntimeException(s"Unsupported schema format: $format (schema: $c, path: $pathString)")
           }
-          case c: OpenAPISchema.Ref if c.ref == "#/components/schemas/Content" =>
+          case c: OpenAPISchema.Ref if c.ref.ref2Type == "Content" =>
+            // Response is spice.http.content.Content — emit a browser download stub.
+            // The match resolves the ref via ref2Type so it survives the FQN component-key
+            // refactor (where the ref is now `#/components/schemas/spice.http.content.Content`).
             val requestRef = requestContent.ref
             val requestType = requestContent.refTypeWithGenerics
             safeAddImport(imports, requestContent.refType)
