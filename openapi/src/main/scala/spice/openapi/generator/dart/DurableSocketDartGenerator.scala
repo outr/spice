@@ -681,26 +681,37 @@ case class DurableSocketDartGenerator(config: DurableSocketDartConfig) {
     p.values.nonEmpty && p.values.values.forall(_.defType.isNull)
 
   /** Generate a Dart enum from a Poly that represents a simple enum. */
-  private def generateDartEnumFromPoly(name: String, p: DefType.Poly): String = {
-    val values = p.values.keys.map(dartIdentifier).mkString(",\n  ")
-    s"""enum $name {
-       |  $values;
-       |
-       |  static $name? fromString(String? value) {
-       |    if (value == null) return null;
-       |    final lower = value.toLowerCase();
-       |    return $name.values.cast<$name?>().firstWhere(
-       |      (v) => v?.name.toLowerCase() == lower,
-       |      orElse: () => null,
-       |    );
-       |  }
-       |}""".stripMargin
-  }
+  private def generateDartEnumFromPoly(name: String, p: DefType.Poly): String =
+    renderDartEnum(name, p.values.keys.toList)
 
-  private def generateSimpleDartEnum(name: String, values: List[String]): String = {
-    val vals = values.map(dartIdentifier).mkString(",\n  ")
+  private def generateSimpleDartEnum(name: String, values: List[String]): String =
+    renderDartEnum(name, values)
+
+  /** Render a Dart enum with both case-insensitive `fromString` decoding
+    * AND a `wireName` getter that returns the *original* Scala case
+    * name. Dart's `.name` lowercases the first character (we have to —
+    * Dart enum cases must start with a lowercase letter to avoid lint
+    * errors), so using `.name` directly on the wire would emit
+    * `"complete"` while the Scala server's case-sensitive `RW[T]`
+    * expects `"Complete"`. `wireName` preserves the original. The
+    * generated `toJson` paths (see `defTypeToJsonExpr`) use it. */
+  private def renderDartEnum(name: String, originals: List[String]): String = {
+    val cases = originals.map(dartIdentifier).mkString(",\n  ")
+    val wireMap = originals.map { orig =>
+      s"    $name.${dartIdentifier(orig)}: '$orig'"
+    }.mkString(",\n")
     s"""enum $name {
-       |  $vals;
+       |  $cases;
+       |
+       |  /** Maps each Dart enum case back to its original Scala case
+       |    * name (capitalized) so `toJson` round-trips against
+       |    * fabric's case-sensitive poly RW. */
+       |  static const Map<$name, String> _wireNames = {
+       |$wireMap
+       |  };
+       |
+       |  /** Original Scala case name — used by `toJson`. */
+       |  String get wireName => _wireNames[this]!;
        |
        |  static $name? fromString(String? value) {
        |    if (value == null) return null;
@@ -1119,7 +1130,12 @@ case class DurableSocketDartGenerator(config: DurableSocketDartConfig) {
         d.className match {
           case Some(cn) =>
             val sub = simpleName(cn)
-            if (dartReserved.contains(sub)) access else s"$access.name"
+            // `wireName` returns the original (case-preserved) Scala
+            // case name so the server-side fabric RW round-trips. Using
+            // Dart's built-in `.name` would emit lowercased values
+            // (Dart cases must start lowercase) and mismatch fabric's
+            // case-sensitive poly discriminator.
+            if (dartReserved.contains(sub)) access else s"$access.wireName"
           case None => access
         }
       case _: DefType.Obj if d.className.isDefined => s"$access.toJson()"
