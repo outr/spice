@@ -31,14 +31,18 @@ case class OpenAPIDartGenerator(api: OpenAPI, config: OpenAPIGeneratorConfig) ex
     private def ref: String = s.substring(s.lastIndexOf('/') + 1)
 
     private def ref2Type: String = {
+      // Convert any FQN-style ref name into a Dart-safe class name (concatenated class chain).
+      // Without this, refs to OneOf/AllOf/AnyOf/Not components — whose map keys are FQNs —
+      // would emit raw dotted identifiers as both Dart type names and file paths.
+      def safeName: String = if (ref.contains('.')) dartNameForFullClass(ref) else ref
       api.componentByRef(s) match {
         case Some(c: OpenAPISchema.Component) => typeNameForComponent(ref, c)
-        case Some(_: OpenAPISchema.Ref) => ref
-        case Some(_: OpenAPISchema.OneOf) => ref
-        case Some(_: OpenAPISchema.AllOf) => ref
-        case Some(_: OpenAPISchema.AnyOf) => ref
-        case Some(_: OpenAPISchema.Not) => ref
-        case _ => ref
+        case Some(_: OpenAPISchema.Ref) => safeName
+        case Some(_: OpenAPISchema.OneOf) => safeName
+        case Some(_: OpenAPISchema.AllOf) => safeName
+        case Some(_: OpenAPISchema.AnyOf) => safeName
+        case Some(_: OpenAPISchema.Not) => safeName
+        case _ => safeName
       }
     }
     private def ref2DartType(r: OpenAPISchema.Ref): String = {
@@ -49,9 +53,10 @@ case class OpenAPIDartGenerator(api: OpenAPI, config: OpenAPIGeneratorConfig) ex
       }
     }
     private def type2File: String = {
-      val s = ref2Type
-      val pre = s.charAt(0).toLower
-      val suffix = "\\p{Lu}".r.replaceAllIn(s.substring(1), m => {
+      // Always derive the file name from the Dart class name, never from a raw FQN.
+      val name = ref2Type
+      val pre = name.charAt(0).toLower
+      val suffix = "\\p{Lu}".r.replaceAllIn(name.substring(1), m => {
         s"_${m.group(0).toLowerCase}"
       })
       s"$pre$suffix".replace(" ", "")
@@ -779,7 +784,9 @@ case class OpenAPIDartGenerator(api: OpenAPI, config: OpenAPIGeneratorConfig) ex
                 case c: OpenAPISchema.Component if c.nullable.contains(true) => s"${c.`type`.dartType}?"
                 case c: OpenAPISchema.Component => c.`type`.dartType
                 case r: OpenAPISchema.Ref =>
-                  val c = r.ref.substring(r.ref.lastIndexOf('/') + 1)
+                  // Resolve the ref via ref2Type so FQN-keyed components produce a Dart class name
+                  // (e.g., "com.outr.model.phone.PhoneNumberType" → "PhoneNumberType"), not the raw FQN.
+                  val c = r.ref.ref2Type
                   safeAddImport(imports, c)
                   if (r.nullable.contains(true)) {
                     s"$c?"

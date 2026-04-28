@@ -964,6 +964,8 @@ class DartGeneratorPreMigrationSpec extends AnyWordSpec with Matchers {
       // `SourceType.Private` and `SourceType.Public` in their parent's companion.
       // Component map keys are the full Scala classNames; Dart class names concatenate
       // the class chain (SourceTypePrivate, SourceTypePublic).
+      // A parent record (`Source`) holds a field `sourceType: SourceType` so the
+      // field-emission path is exercised end-to-end.
       val api = OpenAPI(
         info = OpenAPIInfo(title = "Test", version = "1.0"),
         components = Some(OpenAPIComponents(
@@ -990,25 +992,96 @@ class DartGeneratorPreMigrationSpec extends AnyWordSpec with Matchers {
                   "Public" -> "#/components/schemas/com.example.SourceType.Public"
                 )
               ))
+            ),
+            "com.example.Source" -> OpenAPISchema.Component(
+              `type` = "object",
+              properties = Map(
+                "sourceType" -> OpenAPISchema.Ref("#/components/schemas/com.example.SourceType")
+              ),
+              xFullClass = Some("com.example.Source")
             )
           )
         ))
       )
       val generator = OpenAPIDartGenerator(api, OpenAPIGeneratorConfig())
-      // Should not throw — the bug was an NPE in addParent when looking up children
       val result = generator.generate()
 
-      // The parent abstract class is generated
+      // Parent abstract class
       val parentFile = result.find(_.name == "SourceType")
       parentFile should not be empty
       parentFile.get.source should include("abstract class SourceType")
-      // Discriminator dispatch uses simple wire-format names (Fabric's productPrefix)
       parentFile.get.source should include("if (t == 'Private')")
       parentFile.get.source should include("if (t == 'Public')")
 
       // Child classes use concatenated Dart names
       result.find(_.name == "SourceTypePrivate") should not be empty
       result.find(_.name == "SourceTypePublic") should not be empty
+
+      // The Source record's field type must be the Dart class name "SourceType",
+      // NOT the raw FQN "com.example.SourceType". Likewise for the import path.
+      val sourceFile = result.find(_.name == "Source").get
+      sourceFile.source should include("final SourceType sourceType;")
+      sourceFile.source should not include "com.example.SourceType sourceType"
+      // No FQN-derived import paths — Dart can't parse those
+      sourceFile.source should not include "com.example._source_type"
+      sourceFile.source should not include "com.example.source_type"
+    }
+
+    "use Dart class names (not raw FQNs) in abstract Parent common getters" in {
+      // Mirrors the LN ParsedPhone case: a OneOf parent whose subclasses share a
+      // field whose type is itself a FQN-keyed component. The common getter on the
+      // abstract parent must use the Dart class name, not the raw FQN.
+      val phoneTypeFqn = "com.outr.model.phone.PhoneNumberType"
+      val api = OpenAPI(
+        info = OpenAPIInfo(title = "Test", version = "1.0"),
+        components = Some(OpenAPIComponents(
+          schemas = Map(
+            phoneTypeFqn -> OpenAPISchema.Component(
+              `type` = "string",
+              `enum` = List(str("Mobile"), str("Landline")),
+              xFullClass = Some(phoneTypeFqn)
+            ),
+            "com.outr.model.phone.ParsedPhone.US" -> OpenAPISchema.Component(
+              `type` = "object",
+              properties = Map(
+                "location" -> OpenAPISchema.Component(`type` = "string", nullable = Some(true)),
+                "phoneType" -> OpenAPISchema.Ref(s"#/components/schemas/$phoneTypeFqn")
+              ),
+              xFullClass = Some("com.outr.model.phone.ParsedPhone.US")
+            ),
+            "com.outr.model.phone.ParsedPhone.International" -> OpenAPISchema.Component(
+              `type` = "object",
+              properties = Map(
+                "location" -> OpenAPISchema.Component(`type` = "string", nullable = Some(true)),
+                "phoneType" -> OpenAPISchema.Ref(s"#/components/schemas/$phoneTypeFqn")
+              ),
+              xFullClass = Some("com.outr.model.phone.ParsedPhone.International")
+            ),
+            "com.outr.model.phone.ParsedPhone" -> OpenAPISchema.OneOf(
+              schemas = List(
+                OpenAPISchema.Ref("#/components/schemas/com.outr.model.phone.ParsedPhone.US"),
+                OpenAPISchema.Ref("#/components/schemas/com.outr.model.phone.ParsedPhone.International")
+              ),
+              discriminator = Some(OpenAPISchema.Discriminator(
+                propertyName = "type",
+                mapping = Map(
+                  "US" -> "#/components/schemas/com.outr.model.phone.ParsedPhone.US",
+                  "International" -> "#/components/schemas/com.outr.model.phone.ParsedPhone.International"
+                )
+              ))
+            )
+          )
+        ))
+      )
+      val generator = OpenAPIDartGenerator(api, OpenAPIGeneratorConfig())
+      val result = generator.generate()
+
+      val parentFile = result.find(_.name == "ParsedPhone").get
+      // Common getters: the abstract parent must declare them with Dart class names
+      parentFile.source should include("PhoneNumberType get phoneType;")
+      parentFile.source should not include "com.outr.model.phone.PhoneNumberType"
+      // String? location is a primitive, should still appear normally
+      parentFile.source should include("String? get location;")
     }
   }
 }
