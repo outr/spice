@@ -88,30 +88,36 @@ class DurableDefTypeSpec extends AnyWordSpec with Matchers {
       val all = allSources(files)
       all should include("abstract class Animal")
       all should include("static Animal fromJson")
-      // Discriminator matches Fabric's wire format: simple class name (Product.productPrefix)
-      all should include("if (type == 'Dog') return Dog.fromJson(json);")
-      all should include("if (type == 'Cat') return Cat.fromJson(json);")
-      all should include("class Dog extends Animal")
-      all should include("class Cat extends Animal")
+      // Test types are nested in `DurableDefTypeSpec`, so the FQN class chain includes
+      // the test class — Dog → DurableDefTypeSpecDog. Wire discriminator stays the simple
+      // case name (Fabric's productPrefix).
+      all should include("if (type == 'Dog') return DurableDefTypeSpecDog.fromJson(json);")
+      all should include("if (type == 'Cat') return DurableDefTypeSpecCat.fromJson(json);")
+      all should include("class DurableDefTypeSpecDog extends Animal")
+      all should include("class DurableDefTypeSpecCat extends Animal")
     }
 
     "generate proper class names for empty case objects in enums" in {
       val files = generateFiles("Status", summon[RW[Status]].definition)
       val all = allSources(files)
       all should not include "class 1"
-      all should include("class Active")
-      all should include("class Inactive")
-      all should include("class Pending")
-      all should include("if (type == 'Active') return Active.fromJson(json);")
+      // Anonymous case objects (Active/Inactive) fall back to parent + key qualification
+      // since their className is `Status$$anon$N`. Pending has a real className.
+      all should include("class StatusActive")
+      all should include("class StatusInactive")
+      all should include("class DurableDefTypeSpecStatusPending")
+      all should include("if (type == 'Active') return StatusActive.fromJson(json);")
     }
 
     "recursively discover nested types" in {
       val files = generateFiles("Wrapper", summon[RW[Wrapper]].definition)
       val all = allSources(files)
+      // The top-level type uses the explicit name passed to generateFiles ("Wrapper").
+      // Discovered nested types derive their names from the FQN class chain.
       all should include("class Wrapper")
       all should include("abstract class Animal")
-      all should include("class Dog")
-      all should include("class Cat")
+      all should include("class DurableDefTypeSpecDog")
+      all should include("class DurableDefTypeSpecCat")
       all should include("abstract class Status")
     }
 
@@ -230,8 +236,70 @@ class DurableDefTypeSpec extends AnyWordSpec with Matchers {
       // Wire type is auto-generated even though it wasn't in defTypes
       val all = allSources(files)
       all should include("abstract class Animal")
-      all should include("class Dog extends Animal")
-      all should include("class Cat extends Animal")
+      // Subtypes' Dart names include the test class wrapper from the FQN class chain
+      all should include("class DurableDefTypeSpecDog extends Animal")
+      all should include("class DurableDefTypeSpecCat extends Animal")
+    }
+
+    "qualify cross-poly nested case classes (Sigil-style Text/Image collision)" in {
+      // Two distinct polymorphic parents each declare a `Text` case nested in their
+      // companion. With the class-chain rule, they MUST produce distinct Dart class
+      // names (ResponseContentText / ContextFrameText) and not collapse onto a single
+      // class — that was the cross-poly collision reported by downstream consumers.
+      // Wire format stays simple ("Text" via Fabric's productPrefix).
+      val responseContentDef = Definition(
+        DefType.Poly(scala.collection.immutable.VectorMap(
+          "Text" -> Definition(
+            DefType.Obj(scala.collection.immutable.VectorMap("text" -> Definition(DefType.Str))),
+            className = Some("sigil.tool.model.ResponseContent.Text")
+          ),
+          "Image" -> Definition(
+            DefType.Obj(scala.collection.immutable.VectorMap("url" -> Definition(DefType.Str))),
+            className = Some("sigil.tool.model.ResponseContent.Image")
+          )
+        )),
+        className = Some("sigil.tool.model.ResponseContent")
+      )
+      val contextFrameDef = Definition(
+        DefType.Poly(scala.collection.immutable.VectorMap(
+          "Text" -> Definition(
+            DefType.Obj(scala.collection.immutable.VectorMap("content" -> Definition(DefType.Str))),
+            className = Some("sigil.conversation.ContextFrame.Text")
+          ),
+          "System" -> Definition(
+            DefType.Obj(scala.collection.immutable.VectorMap("level" -> Definition(DefType.Str))),
+            className = Some("sigil.conversation.ContextFrame.System")
+          )
+        )),
+        className = Some("sigil.conversation.ContextFrame")
+      )
+      // Wrap both polys in a single root so both are processed
+      val rootDef = Definition(
+        DefType.Obj(scala.collection.immutable.VectorMap(
+          "content" -> responseContentDef,
+          "frame" -> contextFrameDef
+        )),
+        className = Some("test.Root")
+      )
+      val config = DurableSocketDartConfig(
+        serviceName = "Test",
+        wireType = "Root" -> rootDef
+      )
+      val files = DurableSocketDartGenerator(config).generate()
+      val all = allSources(files)
+
+      // Distinct Dart class names — no collision
+      all should include("class ResponseContentText extends ResponseContent")
+      all should include("class ResponseContentImage extends ResponseContent")
+      all should include("class ContextFrameText extends ContextFrame")
+      all should include("class ContextFrameSystem extends ContextFrame")
+
+      // Each parent's dispatch resolves to its OWN child, not the sibling's
+      all should include("if (type == 'Text') return ResponseContentText.fromJson(json);")
+      all should include("if (type == 'Text') return ContextFrameText.fromJson(json);")
+
+      // Wire format unchanged — still just the simple case name
+      all should include("'type': 'Text'")
     }
   }
 }

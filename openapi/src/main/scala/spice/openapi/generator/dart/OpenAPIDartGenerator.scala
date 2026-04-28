@@ -333,59 +333,19 @@ case class OpenAPIDartGenerator(api: OpenAPI, config: OpenAPIGeneratorConfig) ex
   private def parseNot(typeName: String, schema: OpenAPISchema.Not): SourceFile =
     parseCompositionStub(typeName, "Not", "This class excludes the specified schema - implement based on your needs")
 
-  private def stripTypeArgs(s: String): String = {
-    val idx = s.indexOf('[')
-    if (idx == -1) s else s.substring(0, idx)
-  }
-
-  /** Splits a className into (package segments, class chain segments).
-    * Package segments are leading lowercase-first parts; class chain segments are uppercase-first parts. */
-  private def splitClassName(cn: String): (List[String], List[String]) = {
-    val clean = stripTypeArgs(cn).replace("$", ".")
-    val parts = clean.split('.').toList.filter(_.nonEmpty)
-    val (pkg, cls) = parts.span(p => p.charAt(0).isLower)
-    (pkg, cls)
-  }
-
-  /** Compute the directory path under `lib/model` for a class, e.g.:
-    * "com.example.foo.Bar" → "lib/model/com/example/foo"
-    * "spec.OpenAPIHttpServerSpec.Auth" → "lib/model/spec" */
-  private def modelPathFor(cn: String): String = {
-    val (pkg, _) = splitClassName(cn)
-    if (pkg.isEmpty) "lib/model" else s"lib/model/${pkg.mkString("/")}"
-  }
-
-  /** Compute the directory path for the schema's xFullClass (or fall back to "lib/model"). */
+  // Naming/path helpers delegate to `DartNames` — the single source of truth shared with
+  // `DurableSocketDartGenerator`. Both generators MUST go through `DartNames` so the rules
+  // (class-chain Dart names, leaf-only wire discriminator, FQN-mirroring file paths) cannot
+  // drift between the two. Do not reintroduce inline implementations here.
+  private def stripTypeArgs(s: String): String = DartNames.stripTypeArgs(s)
+  private def splitClassName(cn: String): (List[String], List[String]) = DartNames.splitClassName(cn)
+  private def modelPathFor(cn: String): String = DartNames.modelPathFor(cn)
   private def modelPathForSchema(schema: OpenAPISchema.Component): String =
     schema.xFullClass.map(modelPathFor).getOrElse("lib/model")
-
-  /** Compute relative path from one directory to another file. Both paths are absolute starting with "lib/". */
-  private def relativeImport(fromDir: String, toDir: String, fileName: String): String = {
-    if (fromDir == toDir) fileName
-    else {
-      val fromParts = fromDir.split("/").toList.filter(_.nonEmpty)
-      val toParts = toDir.split("/").toList.filter(_.nonEmpty)
-      val commonLen = fromParts.zip(toParts).takeWhile { case (a, b) => a == b }.length
-      val ups = "../" * (fromParts.length - commonLen)
-      val downs = toParts.drop(commonLen).mkString("/")
-      if (downs.nonEmpty) s"$ups$downs/$fileName" else s"$ups$fileName"
-    }
-  }
-
-  /** Convert a full Scala className to its Dart class name by concatenating the class chain segments. */
-  private def dartNameForFullClass(cn: String): String = {
-    val (_, classChain) = splitClassName(cn)
-    if (classChain.nonEmpty) classChain.mkString else cn.replace(" ", "").replace(".", "")
-  }
-
-  /** Extract the wire discriminator value from a full Scala className.
-    * Matches Fabric's `Product.productPrefix` — just the leaf class name.
-    * "spec.OpenAPIHttpServerSpec.Auth" → "Auth"
-    * "sigil.event.Message" → "Message" */
-  private def wireDiscriminator(cn: String): String = {
-    val (_, classChain) = splitClassName(cn)
-    classChain.lastOption.getOrElse(cn.replace(" ", ""))
-  }
+  private def relativeImport(fromDir: String, toDir: String, fileName: String): String =
+    DartNames.relativeImport(fromDir, toDir, fileName)
+  private def dartNameForFullClass(cn: String): String = DartNames.dartClassName(cn)
+  private def wireDiscriminator(cn: String): String = DartNames.wireDiscriminator(cn)
 
   /** Look up the FQN for a generated Dart class name by scanning components. */
   private def fqnForDartType(dartType: String): Option[String] = {
