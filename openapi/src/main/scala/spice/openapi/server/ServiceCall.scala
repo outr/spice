@@ -77,12 +77,12 @@ trait ServiceCall extends HttpHandler {
         required = true,
         content = OpenAPIContent(
           contentType -> OpenAPIContentType(
-            schema = if (contentType == ContentType.`multipart/form-data`) {
+            schema = Some(if (contentType == ContentType.`multipart/form-data`) {
               val map = requestDef.defType.asInstanceOf[DefType.Obj].map
               componentSchema(requestDef, requestSchema.getOrElse(Schema()), map, None, nullable = None)
             } else {
               schemaFrom(requestDef, requestSchema.getOrElse(Schema()), None, nullable = None)
-            }
+            })
           )
         )
       ))
@@ -99,9 +99,14 @@ trait ServiceCall extends HttpHandler {
           description = successDescription,
           content = Some(OpenAPIContent(
             responseTypes.map { rt =>
-              rt.contentType -> OpenAPIContentType(
-                schema = schemaFrom(responseRW.definition, responseSchema.getOrElse(Schema()), rt.format, nullable = None)
-              )
+              val schema = schemaFrom(responseRW.definition, responseSchema.getOrElse(Schema()), rt.format, nullable = None)
+              // OpenAPI 3.2: `text/event-stream` uses `itemSchema` for the per-event type.
+              // Other content types use `schema` for the whole body.
+              if (rt.contentType.toString == "text/event-stream") {
+                rt.contentType -> OpenAPIContentType(itemSchema = Some(schema))
+              } else {
+                rt.contentType -> OpenAPIContentType(schema = Some(schema))
+              }
             }*
           ))
         )
@@ -168,7 +173,7 @@ trait ServiceCall extends HttpHandler {
         val cn = className.get
         val refName = service.server.register(cn)(componentSchema(d, schema, map, format, None))
         OpenAPISchema.Ref(s"#/components/schemas/$refName", nullable, toOpenAPIGenericTypes(d))
-      case DefType.Poly(values) if isSimpleEnum(values) && className.isDefined =>
+      case DefType.Poly(values, _) if isSimpleEnum(values) && className.isDefined =>
         val cn = className.get
         val enumValues = values.keys.map(s => fabric.Str(s)).toList
         val refName = service.server.register(cn)(OpenAPISchema.Component(
@@ -180,7 +185,7 @@ trait ServiceCall extends HttpHandler {
           xFullClass = Some(cn)
         ))
         OpenAPISchema.Ref(s"#/components/schemas/$refName", nullable)
-      case DefType.Poly(values) if isSimpleEnum(values) =>
+      case DefType.Poly(values, _) if isSimpleEnum(values) =>
         val enumValues = values.keys.map(s => fabric.Str(s)).toList
         OpenAPISchema.Component(
           `type` = "string",
@@ -222,7 +227,7 @@ trait ServiceCall extends HttpHandler {
         `type` = "null",
         format = format
       )
-      case DefType.Poly(values) =>
+      case DefType.Poly(values, _) =>
         val schemas = values.map { case (name, innerDef) =>
           name -> schemaFrom(innerDef, schema, format, None)
         }

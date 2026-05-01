@@ -294,7 +294,7 @@ class DartGeneratorPreMigrationSpec extends AnyWordSpec with Matchers {
                     description = "OK",
                     content = Some(OpenAPIContent(
                       ContentType.`application/json` -> OpenAPIContentType(
-                        schema = OpenAPISchema.Ref("#/components/schemas/ReverseResponse")
+                        schema = Some(OpenAPISchema.Ref("#/components/schemas/ReverseResponse"))
                       )
                     ))
                   )
@@ -303,7 +303,7 @@ class DartGeneratorPreMigrationSpec extends AnyWordSpec with Matchers {
                   required = true,
                   content = OpenAPIContent(
                     ContentType.`application/json` -> OpenAPIContentType(
-                      schema = OpenAPISchema.Ref("#/components/schemas/ReverseRequest")
+                      schema = Some(OpenAPISchema.Ref("#/components/schemas/ReverseRequest"))
                     )
                   )
                 ))
@@ -350,7 +350,7 @@ class DartGeneratorPreMigrationSpec extends AnyWordSpec with Matchers {
                     description = "OK",
                     content = Some(OpenAPIContent(
                       ContentType.`application/json` -> OpenAPIContentType(
-                        schema = OpenAPISchema.Ref("#/components/schemas/StatusResponse")
+                        schema = Some(OpenAPISchema.Ref("#/components/schemas/StatusResponse"))
                       )
                     ))
                   )
@@ -391,7 +391,7 @@ class DartGeneratorPreMigrationSpec extends AnyWordSpec with Matchers {
                     description = "OK",
                     content = Some(OpenAPIContent(
                       ContentType.`application/json` -> OpenAPIContentType(
-                        schema = OpenAPISchema.Component(`type` = "null")
+                        schema = Some(OpenAPISchema.Component(`type` = "null"))
                       )
                     ))
                   )
@@ -400,7 +400,7 @@ class DartGeneratorPreMigrationSpec extends AnyWordSpec with Matchers {
                   required = true,
                   content = OpenAPIContent(
                     ContentType.`application/json` -> OpenAPIContentType(
-                      schema = OpenAPISchema.Ref("#/components/schemas/NotifyRequest")
+                      schema = Some(OpenAPISchema.Ref("#/components/schemas/NotifyRequest"))
                     )
                   )
                 ))
@@ -643,7 +643,7 @@ class DartGeneratorPreMigrationSpec extends AnyWordSpec with Matchers {
                     description = "OK",
                     content = Some(OpenAPIContent(
                       ContentType.`application/json` -> OpenAPIContentType(
-                        schema = OpenAPISchema.Ref("#/components/schemas/ReverseResponse")
+                        schema = Some(OpenAPISchema.Ref("#/components/schemas/ReverseResponse"))
                       )
                     ))
                   )
@@ -652,7 +652,7 @@ class DartGeneratorPreMigrationSpec extends AnyWordSpec with Matchers {
                   required = true,
                   content = OpenAPIContent(
                     ContentType.`application/json` -> OpenAPIContentType(
-                      schema = OpenAPISchema.Ref("#/components/schemas/ReverseRequest")
+                      schema = Some(OpenAPISchema.Ref("#/components/schemas/ReverseRequest"))
                     )
                   )
                 ))
@@ -729,7 +729,7 @@ class DartGeneratorPreMigrationSpec extends AnyWordSpec with Matchers {
                     description = "OK",
                     content = Some(OpenAPIContent(
                       ContentType.`application/json` -> OpenAPIContentType(
-                        schema = OpenAPISchema.Component(`type` = "string")
+                        schema = Some(OpenAPISchema.Component(`type` = "string"))
                       )
                     ))
                   )
@@ -1050,7 +1050,7 @@ class DartGeneratorPreMigrationSpec extends AnyWordSpec with Matchers {
                   required = true,
                   content = OpenAPIContent(
                     ContentType.`application/json` -> OpenAPIContentType(
-                      schema = OpenAPISchema.Ref("#/components/schemas/com.example.DownloadRequest")
+                      schema = Some(OpenAPISchema.Ref("#/components/schemas/com.example.DownloadRequest"))
                     )
                   )
                 )),
@@ -1059,7 +1059,7 @@ class DartGeneratorPreMigrationSpec extends AnyWordSpec with Matchers {
                     description = "OK",
                     content = Some(OpenAPIContent(
                       ContentType.`application/json` -> OpenAPIContentType(
-                        schema = OpenAPISchema.Ref("#/components/schemas/spice.http.content.Content")
+                        schema = Some(OpenAPISchema.Ref("#/components/schemas/spice.http.content.Content"))
                       )
                     ))
                   )

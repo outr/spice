@@ -1,6 +1,7 @@
 package spice.mcp
 
 import fabric.*
+import fabric.filter.RemoveNullsFilter
 import fabric.rw.*
 
 case class JsonRPCRequest(jsonrpc: String, id: Option[Json], method: String, params: Option[Json])
@@ -12,7 +13,11 @@ object JsonRPCRequest {
 case class JsonRPCResponse(jsonrpc: String, id: Json, result: Option[Json] = None, error: Option[JsonRPCError] = None)
 
 object JsonRPCResponse {
-  given rw: RW[JsonRPCResponse] = RW.gen
+  // JSON-RPC 2.0 requires exactly one of `result` / `error` per response —
+  // never both, never null. Strip null fields from the encoded JSON so strict
+  // clients (MCP Inspector, Claude Code) accept the response shape.
+  given rw: RW[JsonRPCResponse] =
+    RW.gen[JsonRPCResponse].withPostRead((_, json) => json.filterOne(RemoveNullsFilter))
 
   def success(id: Json, result: Json): JsonRPCResponse =
     JsonRPCResponse(jsonrpc = "2.0", id = id, result = Some(result))

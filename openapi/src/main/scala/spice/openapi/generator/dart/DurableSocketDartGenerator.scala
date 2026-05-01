@@ -56,7 +56,21 @@ case class DurableSocketDartConfig(
     *   - `Stream<(int, <Type>)> get on<Type>` that maps inbound JSON via `<Type>.fromJson`
     * The Definition is auto-included in the generated types file — no need to also
     * list it in `defTypes`. */
-  wireType: (String, Definition)
+  wireType: (String, Definition),
+  /** Set of wire-type subtype discriminator values (Fabric `Product.productPrefix`
+    * for case classes, the case name for Scala 3 enum cases) whose `push` should
+    * be framed via the durable channel (`type: 'event'`, sequenced, replayable).
+    * Subtypes NOT in this set are framed via the ephemeral channel (no seq, no
+    * replay) — appropriate for transient pulses (Notices) and target-mutating
+    * updates (Deltas) that the server-side `protocol.onEvent` handler is not
+    * configured to decode.
+    *
+    * Default `Set.empty` preserves the legacy behavior of unconditionally framing
+    * everything as durable. Apps with a mixed-kind wire vocabulary
+    * (Event + Notice + Delta) populate this with the names of their durable
+    * Event subtypes so `client.push(notice)` is framed correctly without the
+    * consumer needing to know wire-format details. */
+  durableSubtypes: Set[String] = Set.empty
 )
 
 /** Generates Dart code for a DurableSocket client, event handler, event sender,
@@ -134,13 +148,42 @@ case class DurableSocketDartGenerator(config: DurableSocketDartConfig) {
          |      _eventController.stream.map((e) => (e.${"$"}1, $typeName.fromJson(e.${"$"}2)));""".stripMargin
     val paramName = s"${typeName.head.toLower}${typeName.tail}"
     val push =
-      s"""  /// Push a typed $typeName to the server. Returns the assigned sequence number.
-         |  int push($typeName $paramName) {
-         |    _outboundSeq++;
-         |    final seq = _outboundSeq;
-         |    _sendRaw({'type': 'event', 'seq': seq, 'data': $paramName.toJson()});
-         |    return seq;
-         |  }""".stripMargin
+      if (config.durableSubtypes.isEmpty) {
+        // Legacy behavior — every push is framed as a durable Event.
+        s"""  /// Push a typed $typeName to the server. Returns the assigned sequence number.
+           |  int push($typeName $paramName) {
+           |    _outboundSeq++;
+           |    final seq = _outboundSeq;
+           |    _sendRaw({'type': 'event', 'seq': seq, 'data': $paramName.toJson()});
+           |    return seq;
+           |  }""".stripMargin
+      } else {
+        // Subtype-aware framing. Wire-type subtypes whose discriminator is in
+        // `durableSubtypes` go through the durable channel (sequenced,
+        // replayable). Everything else (Notices, Deltas) goes ephemeral —
+        // server-side `protocol.onEvent` doesn't try to decode them as Events,
+        // and they don't burn a sequence number.
+        val durableLiteral = config.durableSubtypes.toList.sorted.map(s => s"'$s'").mkString(", ")
+        s"""  static const Set<String> _durableSubtypes = {$durableLiteral};
+           |
+           |  /// Push a typed $typeName to the server. Subtypes whose discriminator
+           |  /// is in `_durableSubtypes` are framed via the durable channel and
+           |  /// receive a sequence number; everything else is framed via the
+           |  /// ephemeral channel (returns `0`, no sequence assigned).
+           |  int push($typeName $paramName) {
+           |    final json = $paramName.toJson();
+           |    final discriminator = json['type'] as String?;
+           |    if (discriminator != null && _durableSubtypes.contains(discriminator)) {
+           |      _outboundSeq++;
+           |      final seq = _outboundSeq;
+           |      _sendRaw({'type': 'event', 'seq': seq, 'data': json});
+           |      return seq;
+           |    } else {
+           |      _sendRaw(json);
+           |      return 0;
+           |    }
+           |  }""".stripMargin
+      }
     val source = ClientTemplate
       .replace("%%SERVICE_NAME%%", sn)
       .replace("%%INFO_CLASS%%", generateInfoClass())
@@ -370,12 +413,22 @@ case class DurableSocketDartGenerator(config: DurableSocketDartConfig) {
 
     // Build child→parent map from poly types (exclude simple enums — their values are enum constants, not class subtypes)
     val childToParent = mutable.Map.empty[String, String]
+    // Build subtype Dart-class-name → polymorphic key map. The poly key is
+    // Fabric's wire discriminator (`Product.productPrefix` for case classes,
+    // the enum case name for Scala 3 enums). The parent's `fromJson`
+    // dispatcher already keys on this; the subtype's `toJson` MUST emit the
+    // same string or round-trips fail with "Unknown type discriminator". For
+    // parameterless / anonymous enum cases (className `X$$anon$N`) the only
+    // reliable source of the wire name is the poly key — `defn.className`
+    // is junk for those.
+    val subtypeWireKey = mutable.Map.empty[String, String]
     toEmit.foreach { case (name, defn) =>
       defn.defType match {
         case p: DefType.Poly if !isSimpleEnum(p) =>
           p.values.foreach { case (key, subDefn) =>
             val sn = dartSubtypeName(key, subDefn, Some(name))
             if (!childToParent.contains(sn)) childToParent(sn) = name
+            if (!subtypeWireKey.contains(sn)) subtypeWireKey(sn) = key
           }
         case _ =>
       }
@@ -448,10 +501,15 @@ case class DurableSocketDartGenerator(config: DurableSocketDartConfig) {
             val rewrittenImports = rawImports.map(t => s"import '${importPath(subDir, t)}';")
             val parentImport = parent.map(p => s"import '${importPath(subDir, p)}';").toList
             val allImports = (rewrittenImports ++ parentImport).distinct.sorted
-            // Wire discriminator: simple Scala leaf class name (Fabric's productPrefix).
-            // The Dart class name (`dn`) is class-chain-qualified to avoid collisions, but
-            // the wire still uses the leaf so the server side decodes the same string.
-            val wireName = defn.className.map(cn => parseClassName(cn)._1).getOrElse(name)
+            // Wire discriminator: prefer the polymorphic key (the parent's
+            // `p.values` key — guaranteed correct for `fromJson` dispatch).
+            // Fall back to the className-derived leaf for top-level classes
+            // that aren't poly subtypes. Anonymous Scala 3 enum cases
+            // (`MessageVisibility$$anon$N`) would otherwise resolve to junk
+            // ("MessageVisibility" or worse), breaking server-side decode.
+            val wireName = subtypeWireKey.getOrElse(name,
+              defn.className.map(cn => parseClassName(cn)._1).getOrElse(name)
+            )
             files += SourceFile("Dart", dn, fileName, filePath,
               wrapClass(dn, fileName, generateDartClassBody(dn, wireName, o, toEmit, parent), allImports, hasFields = o.map.nonEmpty))
             exportNames += (if (subDir.nonEmpty) s"$subDir/$fileName" else fileName)
@@ -506,7 +564,7 @@ case class DurableSocketDartGenerator(config: DurableSocketDartConfig) {
     }
     d.defType match {
       case DefType.Obj(m) => m.values.foreach(scanForWrappers)
-      case DefType.Poly(v) => v.values.foreach(scanForWrappers)
+      case DefType.Poly(v, _) => v.values.foreach(scanForWrappers)
       case DefType.Arr(inner) => scanForWrappers(inner)
       case DefType.Opt(inner) => scanForWrappers(inner)
       case _ =>
@@ -643,7 +701,21 @@ case class DurableSocketDartGenerator(config: DurableSocketDartConfig) {
   private def collectNestedType(defn: Definition, out: mutable.LinkedHashMap[String, Definition]): Unit = {
     val cn = defn.className
     defn.defType match {
-      case _: DefType.Obj if cn.isDefined => collectTypes(cn.get.split('.').last, defn, out)
+      // For nested case-class fields, register under the class-chain
+      // qualified name (`dartClassName`) so the standalone file we emit
+      // lands under the same key `defTypeToDartType` produces for the
+      // field-reference side. Using `cn.split('.').last` (the bare leaf)
+      // registers nested companion-object case classes like `Outer.Inner`
+      // under `"Inner"` while the parent references them as `"OuterInner"`
+      // — the mismatch produced files at the wrong path, an unresolvable
+      // import, and an `InvalidType` cascade in the generated `.g.dart`.
+      case _: DefType.Obj if cn.isDefined => collectTypes(DartNames.dartClassName(cn.get), defn, out)
+      // Polys are referenced via leaf-style names by historical convention
+      // (consumers' tests assert `abstract class Animal`, not the qualified
+      // chain) — keep `cn.split('.').last` for the Poly path. Subtype names
+      // inside the poly come from `dartSubtypeName` which already applies
+      // qualification, so cross-poly collisions are resolved at the subtype
+      // layer, not the parent layer.
       case _: DefType.Poly if cn.isDefined => collectTypes(cn.get.split('.').last, defn, out)
       case DefType.Arr(inner) => collectNestedType(inner, out)
       case DefType.Opt(inner) => collectNestedType(inner, out)
@@ -785,23 +857,22 @@ case class DurableSocketDartGenerator(config: DurableSocketDartConfig) {
       s"""    if (type == '$key') return $subName.fromJson(json);"""
     }.mkString("\n")
 
-    // Detect common fields across all subtypes
-    val subtypeFields: List[Map[String, (String, Boolean)]] = p.values.values.toList.flatMap { defn =>
-      extractObjFields(defn).map(_.map { case (fieldName, fieldDefn, optional) =>
-        fieldName -> (defTypeToDartType(fieldDefn), optional)
-      }.toMap)
-    }
-    val commonFields = if (subtypeFields.size >= 2) {
-      val allFieldNames = subtypeFields.map(_.keySet)
-      val commonNames = allFieldNames.reduce(_ intersect _) - "type"
-      commonNames.flatMap { fieldName =>
-        val types = subtypeFields.flatMap(_.get(fieldName)).map(_._1).distinct
-        if (types.size == 1) Some((fieldName, types.head)) else None
-      }.toList.sortBy(_._1)
-    } else Nil
-
-    val commonGetters = commonFields.map { case (fieldName, dartType) =>
-      s"  $dartType? get $fieldName;"
+    // Common-field abstract getters come straight from the polytype's
+    // `commonFields` map. Fabric's `PolyType.register` computes that as
+    // the type-compatible intersection of subtype fields, so the codegen
+    // doesn't re-derive it here. Single-subtype polys correctly emit
+    // every field as a getter (intersection of one set is itself);
+    // multi-subtype polys emit only the names every subtype actually
+    // carries with a matching type. The discriminator `type` field is
+    // never in commonFields by construction (it's a wire artifact, not
+    // a subtype field). Sort for deterministic output.
+    //
+    // Bug #48 — `defTypeToDartType` already encodes `DefType.Opt` as
+    // a trailing `?`, so the abstract getter's type comes from the
+    // unwrapped definition. Appending another `?` here produced
+    // `T??` (invalid Dart) for `Option[T]` commonFields.
+    val commonGetters = p.commonFields.toList.sortBy(_._1).map { case (fieldName, fieldDefn) =>
+      s"  ${defTypeToDartType(fieldDefn)} get ${dartFieldName(fieldName)};"
     }.mkString("\n")
     val getterBlock = if (commonGetters.nonEmpty) s"\n$commonGetters\n" else ""
 
@@ -839,24 +910,50 @@ case class DurableSocketDartGenerator(config: DurableSocketDartConfig) {
     case _ => None
   }
 
-  /** Detect which imports are needed for common fields in a poly type. */
-  /** Collect Dart class names appearing as common fields across all subtypes of a Poly,
-    * excluding primitives and collections. Caller resolves paths to produce import statements. */
+  /** Collect Dart class names appearing as common fields of a Poly, excluding
+    * primitives. Caller resolves paths to produce import statements. Reads
+    * `p.commonFields` directly — fabric pre-computed the type-compatible
+    * intersection at registration time.
+    *
+    * Bug #48 — strip a trailing `?` (from `DefType.Opt` wrappers on
+    * `Option[T]` fields) so the filter sees the underlying type.
+    *
+    * Bug #47 — recurse into `List<X>` and `Map<K, V>` to pull their
+    * inner type names. Filtering on the `List<` / `Map<` prefix
+    * dropped the whole entry, which lost the import for any typed
+    * inner — generated abstract Dart classes referenced types that
+    * were never imported. */
   private def detectCommonFieldImports(p: DefType.Poly): List[String] = {
-    val subtypeFields: List[Map[String, (String, Boolean)]] = p.values.values.toList.flatMap { defn =>
-      extractObjFields(defn).map(_.map { case (fieldName, fieldDefn, optional) =>
-        fieldName -> (defTypeToDartType(fieldDefn), optional)
-      }.toMap)
-    }
-    if (subtypeFields.size < 2) return Nil
-    val allFieldNames = subtypeFields.map(_.keySet)
-    val commonNames = allFieldNames.reduce(_ intersect _) - "type"
-    val commonTypes = commonNames.flatMap { fieldName =>
-      val types = subtypeFields.flatMap(_.get(fieldName)).map(_._1).distinct
-      if (types.size == 1) Some(types.head) else None
-    }.toSet
     val primitives = Set("String", "int", "double", "bool", "num", "dynamic", "Object", "void", "List", "Map")
-    commonTypes.filterNot(t => primitives.contains(t) || t.startsWith("List<") || t.startsWith("Map<")).toList
+
+    def extractTypes(dartType: String): Set[String] = {
+      val cleaned = dartType.stripSuffix("?")
+      if (cleaned.startsWith("List<") && cleaned.endsWith(">"))
+        extractTypes(cleaned.substring(5, cleaned.length - 1))
+      else if (cleaned.startsWith("Map<") && cleaned.endsWith(">")) {
+        val inner = cleaned.substring(4, cleaned.length - 1)
+        var depth = 0
+        var split = -1
+        var i     = 0
+        while (i < inner.length && split < 0) {
+          inner.charAt(i) match {
+            case '<' => depth += 1
+            case '>' => depth -= 1
+            case ',' if depth == 0 => split = i
+            case _   =>
+          }
+          i += 1
+        }
+        if (split < 0) extractTypes(inner)
+        else extractTypes(inner.substring(0, split).trim) ++ extractTypes(inner.substring(split + 1).trim)
+      } else if (primitives.contains(cleaned)) Set.empty
+      else Set(cleaned)
+    }
+
+    (p.commonFields - "type").values
+      .flatMap(d => extractTypes(defTypeToDartType(d)))
+      .toSet
+      .toList
   }
 
   /** Track typed wrappers discovered during generation. Key = base className (no type params), Value = (dartName, primitiveDartType). */
@@ -1038,6 +1135,20 @@ case class DurableSocketDartGenerator(config: DurableSocketDartConfig) {
             case None =>
               s"($access as List?)?.cast<$innerDart>() ?? []"
           }
+        // BUGS.md #18 — enum-shaped poly inside a collection must use the
+        // generated `fromString`/`.wireName` API, not `fromJson`/`toJson`.
+        // Mirrors the scalar-field branch above; without this the generator
+        // emits `Foo.fromJson(e as Map<String, dynamic>)` for every element
+        // and the resulting Dart fails to compile (Foo is an enum).
+        case p: DefType.Poly if isSimpleEnum(p) =>
+          inner.className match {
+            case Some(cn) =>
+              val sub = dartClassName(cn)
+              if (dartReserved.contains(sub)) s"($access as List?)?.cast<String>() ?? []"
+              else s"($access as List?)?.map((e) => $sub.fromString(e as String?)).whereType<$sub>().toList() ?? []"
+            case None =>
+              s"($access as List?)?.cast<$innerDart>() ?? []"
+          }
         case _: DefType.Poly =>
           inner.className match {
             case Some(cn) =>
@@ -1100,6 +1211,12 @@ case class DurableSocketDartGenerator(config: DurableSocketDartConfig) {
         } else inner.defType match {
           case DefType.Str | DefType.Int | DefType.Bool | DefType.Dec => access
           case _: DefType.Obj if inner.className.isDefined => s"$access.map((e) => e.toJson()).toList()"
+          // BUGS.md #18 — enum-shaped poly inside a collection serializes
+          // via `wireName`, not `toJson`. Same dispatch the scalar-field
+          // branch already uses.
+          case p: DefType.Poly if isSimpleEnum(p) && inner.className.isDefined =>
+            val sub = dartClassName(inner.className.get)
+            if (dartReserved.contains(sub)) access else s"$access.map((e) => e.wireName).toList()"
           case _: DefType.Poly if inner.className.isDefined => s"$access.map((e) => e.toJson()).toList()"
           case _ => access
         }

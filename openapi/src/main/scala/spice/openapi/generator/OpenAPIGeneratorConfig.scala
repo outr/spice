@@ -27,25 +27,38 @@ case class OpenAPIGeneratorConfig() {
   }
 
   /**
-   * Builds the child-to-parent Dart type map by auto-inferring relationships from the API spec:
-   * - OneOf schemas with $ref children: child Dart type -> parent Dart type
-   * - Enum component schemas: enum value -> enum Dart type name
+   * Two distinct maps were historically merged here, which silently corrupts
+   * class-hierarchy lookups when a case class happens to share its name with
+   * a value of an unrelated enum (e.g. dw's `Flaring` case class and
+   * `CaseType.Flaring` named enum value) — the merged map reports the enum
+   * as the class's parent and the generator emits `class Flaring extends CaseType`,
+   * which doesn't compile (Dart enums can't be extended).
+   *
+   * Keep them separate. Call sites that ask "what poly parent does this child
+   * have?" use [[buildOneOfParentMap]]; call sites that ask "this discriminator
+   * literal lives in which enum?" use [[buildEnumValueToTypeMap]].
+   *
+   * The legacy combined view is kept on this method for callers we haven't
+   * audited yet — but new code should pick the right map directly.
    */
-  def buildBaseForTypeMap(api: OpenAPI): Map[String, String] = {
-    val fromOneOf = buildBaseNames(api).flatMap { case (parent, children) =>
+  def buildBaseForTypeMap(api: OpenAPI): Map[String, String] =
+    buildEnumValueToTypeMap(api) ++ buildOneOfParentMap(api)
+
+  /** OneOf children → their abstract parent (Dart class names). True class hierarchy. */
+  def buildOneOfParentMap(api: OpenAPI): Map[String, String] =
+    buildBaseNames(api).flatMap { case (parent, children) =>
       children.toList.map(child => child -> parent)
     }.toMap
 
-    val fromEnums = api.components.toList.flatMap { components =>
+  /** Enum literal value → owning enum's Dart type name. Used for discriminator lookups only. */
+  def buildEnumValueToTypeMap(api: OpenAPI): Map[String, String] =
+    api.components.toList.flatMap { components =>
       components.schemas.flatMap {
         case (enumName, c: OpenAPISchema.Component) if c.`enum`.nonEmpty =>
           c.`enum`.collect { case Str(value, _) => value -> dartName(enumName) }
         case _ => Nil
       }
     }.toMap
-
-    fromEnums ++ fromOneOf
-  }
 
   /**
    * Builds the parent-to-children Dart-name map by auto-inferring from OneOf schemas in the API spec.

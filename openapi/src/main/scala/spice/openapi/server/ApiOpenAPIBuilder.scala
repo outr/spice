@@ -42,7 +42,7 @@ private class ApiOpenAPIBuilder(basePath: String) {
             required = true,
             content = OpenAPIContent(
               ContentType.`application/json` -> OpenAPIContentType(
-                schema = schemaFrom(rw.definition)
+                schema = Some(schemaFrom(rw.definition))
               )
             )
           ))
@@ -55,10 +55,10 @@ private class ApiOpenAPIBuilder(basePath: String) {
             required = true,
             content = OpenAPIContent(
               ContentType.`application/json` -> OpenAPIContentType(
-                schema = OpenAPISchema.Component(
+                schema = Some(OpenAPISchema.Component(
                   `type` = "object",
                   properties = properties
-                )
+                ))
               )
             )
           ))
@@ -77,7 +77,7 @@ private class ApiOpenAPIBuilder(basePath: String) {
         "200" -> OpenAPIResponse(
           description = "Success",
           content = Some(OpenAPIContent(
-            ContentType.`application/json` -> OpenAPIContentType(schema = responseSchema)
+            ContentType.`application/json` -> OpenAPIContentType(schema = Some(responseSchema))
           ))
         )
       )
@@ -119,7 +119,7 @@ private class ApiOpenAPIBuilder(basePath: String) {
         val cn = className.get
         val refName = register(cn)(componentSchema(d, map))
         OpenAPISchema.Ref(s"#/components/schemas/$refName", None, toOpenAPIGenericTypes(d))
-      case DefType.Poly(values) if isSimpleEnum(values) && className.isDefined =>
+      case DefType.Poly(values, _) if isSimpleEnum(values) && className.isDefined =>
         val cn = className.get
         val enumValues = values.keys.map(s => fabric.Str(s)).toList
         val refName = register(cn)(OpenAPISchema.Component(
@@ -129,7 +129,7 @@ private class ApiOpenAPIBuilder(basePath: String) {
           xFullClass = Some(cn)
         ))
         OpenAPISchema.Ref(s"#/components/schemas/$refName", None)
-      case DefType.Poly(values) if isSimpleEnum(values) =>
+      case DefType.Poly(values, _) if isSimpleEnum(values) =>
         val enumValues = values.keys.map(s => fabric.Str(s)).toList
         OpenAPISchema.Component(
           `type` = "string",
@@ -153,7 +153,7 @@ private class ApiOpenAPIBuilder(basePath: String) {
         applyDescription(inner, description)
       case DefType.Null => OpenAPISchema.Component(`type` = "null")
       case DefType.Json => OpenAPISchema.Component(`type` = "json")
-      case DefType.Poly(values) =>
+      case DefType.Poly(values, _) =>
         val schemas = values.map { case (name, innerDef) =>
           val innerSchema = schemaFrom(innerDef)
           name -> innerSchema

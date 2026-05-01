@@ -43,12 +43,12 @@ class OpenAPISpec extends AnyWordSpec with Matchers {
                     description = "A JSON array of user names",
                     content = Some(OpenAPIContent(
                       ContentType.`application/json` -> OpenAPIContentType(
-                        schema = OpenAPISchema.Component(
+                        schema = Some(OpenAPISchema.Component(
                           `type` = "array",
                           items = Some(OpenAPISchema.Component(
                             `type` = "string"
                           ))
-                        )
+                        ))
                       )
                     ))
                   )
@@ -78,7 +78,7 @@ class OpenAPISpec extends AnyWordSpec with Matchers {
                   required = true,
                   content = OpenAPIContent(
                     ContentType.`application/json` -> OpenAPIContentType(
-                      schema = OpenAPISchema.OneOf(
+                      schema = Some(OpenAPISchema.OneOf(
                         schemas = List(
                           OpenAPISchema.Component(
                             `type` = "string"
@@ -89,7 +89,7 @@ class OpenAPISpec extends AnyWordSpec with Matchers {
                         ),
                         discriminator = Some(OpenAPISchema.Discriminator(propertyName = "type")),
                         nullable = None
-                      )
+                      ))
                     )
                   )
                 )),
@@ -98,12 +98,12 @@ class OpenAPISpec extends AnyWordSpec with Matchers {
                     description = "A JSON array of user names",
                     content = Some(OpenAPIContent(
                       ContentType.`application/json` -> OpenAPIContentType(
-                        schema = OpenAPISchema.Component(
+                        schema = Some(OpenAPISchema.Component(
                           `type` = "array",
                           items = Some(OpenAPISchema.Component(
                             `type` = "string"
                           ))
-                        )
+                        ))
                       )
                     ))
                   )
@@ -141,7 +141,7 @@ class OpenAPISpec extends AnyWordSpec with Matchers {
                     description = "OK",
                     content = Some(OpenAPIContent(
                       ContentType.`application/json` -> OpenAPIContentType(
-                        schema = OpenAPISchema.Ref(ref = "#/components/schemas/status")
+                        schema = Some(OpenAPISchema.Ref(ref = "#/components/schemas/status"))
                       )
                     ))
                   )
@@ -165,7 +165,7 @@ class OpenAPISpec extends AnyWordSpec with Matchers {
                     description = "OK",
                     content = Some(OpenAPIContent(
                       ContentType.`application/json` -> OpenAPIContentType(
-                        schema = OpenAPISchema.Ref("#/components/schemas/mark")
+                        schema = Some(OpenAPISchema.Ref("#/components/schemas/mark"))
                       )
                     ))
                   ),
@@ -173,7 +173,7 @@ class OpenAPISpec extends AnyWordSpec with Matchers {
                     description = "The provided parameters are incorrect",
                     content = Some(OpenAPIContent(
                       ContentType.`text/html` -> OpenAPIContentType(
-                        schema = OpenAPISchema.Ref("#/components/schemas/errorMessage"),
+                        schema = Some(OpenAPISchema.Ref("#/components/schemas/errorMessage")),
                         example = Some("Illegal coordinates")
                       )
                     ))
@@ -189,7 +189,7 @@ class OpenAPISpec extends AnyWordSpec with Matchers {
                   required = true,
                   content = OpenAPIContent(
                     ContentType.`application/json` -> OpenAPIContentType(
-                      schema = OpenAPISchema.Ref("#/components/schemas/mark")
+                      schema = Some(OpenAPISchema.Ref("#/components/schemas/mark"))
                     )
                   )
                 )),
@@ -198,7 +198,7 @@ class OpenAPISpec extends AnyWordSpec with Matchers {
                     description = "OK",
                     content = Some(OpenAPIContent(
                       ContentType.`application/json` -> OpenAPIContentType(
-                        schema = OpenAPISchema.Ref("#/components/schemas/status")
+                        schema = Some(OpenAPISchema.Ref("#/components/schemas/status"))
                       )
                     ))
                   ),
@@ -206,7 +206,7 @@ class OpenAPISpec extends AnyWordSpec with Matchers {
                     description = "The provided parameters are incorrect",
                     content = Some(OpenAPIContent(
                       ContentType.`text/html` -> OpenAPIContentType(
-                        schema = OpenAPISchema.Ref("#/components/schemas/errorMessage"),
+                        schema = Some(OpenAPISchema.Ref("#/components/schemas/errorMessage")),
                         examples = Map(
                           "illegalCoordinates" -> OpenAPIValue("Illegal coordinates."),
                           "notEmpty" -> OpenAPIValue("Square is not empty."),

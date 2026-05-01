@@ -14,7 +14,12 @@ import spice.util.NumberToWords
 import scala.collection.mutable
 
 case class OpenAPIDartGenerator(api: OpenAPI, config: OpenAPIGeneratorConfig) extends OpenAPIGenerator {
-  private lazy val baseForTypeMap: Map[String, String] = config.buildBaseForTypeMap(api)
+  // Class-hierarchy lookups (poly subtype → its abstract parent). Used wherever
+  // the question is "what does this Dart class extend?".
+  private lazy val oneOfParentMap: Map[String, String] = config.buildOneOfParentMap(api)
+  // Enum-literal lookups (enum value → owning enum's Dart name). Used only when
+  // resolving a discriminator's `enum: [Foo]` schema to its enum type.
+  private lazy val enumValueToTypeMap: Map[String, String] = config.buildEnumValueToTypeMap(api)
   private lazy val resolvedBaseNames: List[(String, Set[String])] = config.buildBaseNames(api)
 
   private lazy val ModelTemplate: String = loadString("generator/dart/model.template")
@@ -74,12 +79,13 @@ case class OpenAPIDartGenerator(api: OpenAPI, config: OpenAPIGeneratorConfig) ex
   }
 
   extension (content: OpenAPIContent) {
-    private def ref: OpenAPISchema.Ref = content
-      .content
-      .head
-      ._2
-      .schema
-      .asInstanceOf[OpenAPISchema.Ref]
+    private def ref: OpenAPISchema.Ref = {
+      val ct = content.content.head._2
+      // Use `schema` for normal bodies; fall back to `itemSchema` for SSE responses.
+      ct.schema.orElse(ct.itemSchema)
+        .getOrElse(throw new UnsupportedOperationException("OpenAPIContentType missing both schema and itemSchema"))
+        .asInstanceOf[OpenAPISchema.Ref]
+    }
 
     private def refType: String = {
       val t = ref.ref.ref2Type
@@ -203,7 +209,7 @@ case class OpenAPIDartGenerator(api: OpenAPI, config: OpenAPIGeneratorConfig) ex
     if (schema.xFullClass.isDefined) return false
 
     // If it's a polymorphic subtype (has a parent in the type map), it needs a class
-    if (baseForTypeMap.contains(dartNameForFullClass(typeName))) return false
+    if (oneOfParentMap.contains(dartNameForFullClass(typeName))) return false
 
     // Otherwise, it's just a primitive type that doesn't need a separate file
     true
@@ -447,7 +453,7 @@ case class OpenAPIDartGenerator(api: OpenAPI, config: OpenAPIGeneratorConfig) ex
         case json => throw new UnsupportedOperationException(s"Enum only supports Str: $json")
       }
       parseEnum(typeName, `enum`, componentPath)
-    } else if (schema.properties.isEmpty && schema.`type`.nonEmpty && schema.xFullClass.isDefined && !baseForTypeMap.contains(typeName)) {
+    } else if (schema.properties.isEmpty && schema.`type`.nonEmpty && schema.xFullClass.isDefined && !oneOfParentMap.contains(typeName)) {
       // Simple type wrapper (e.g., Id wrapping String, Timestamp wrapping int) — not a poly subtype
       parseTypedWrapper(typeName, schema)
     } else {
@@ -461,7 +467,7 @@ case class OpenAPIDartGenerator(api: OpenAPI, config: OpenAPIGeneratorConfig) ex
         case "" => "// No fields defined"
         case s => s
       }
-      val parent = baseForTypeMap.get(typeName)
+      val parent = oneOfParentMap.get(typeName)
       val extending = parent match {
         case Some(parentName) =>
           imports += parentName
@@ -615,7 +621,7 @@ case class OpenAPIDartGenerator(api: OpenAPI, config: OpenAPIGeneratorConfig) ex
                          fromPath: String = "lib/model"): ParsedField = schema match {
     case c: OpenAPISchema.Component if c.`enum`.nonEmpty =>
       val parentName = typeNameForComponent(
-        rawTypeName = baseForTypeMap.getOrElse(c.`enum`.head.asString, throw new NullPointerException(s"Unable to find enum entry ${c.`enum`.head} for $fieldName")),
+        rawTypeName = enumValueToTypeMap.getOrElse(c.`enum`.head.asString, throw new NullPointerException(s"Unable to find enum entry ${c.`enum`.head} for $fieldName")),
         schema = c
       )
       val `enum` = c.`enum`.map {
@@ -638,7 +644,7 @@ case class OpenAPIDartGenerator(api: OpenAPI, config: OpenAPIGeneratorConfig) ex
           case json => throw new UnsupportedOperationException(s"Enum only supports Str: $json")
         }
         val parentName = typeNameForComponent(
-          rawTypeName = baseForTypeMap.getOrElse(c.`enum`.head.asString, throw new NullPointerException(s"Unable to find enum entry ${c.`enum`.head} for $fieldName")),
+          rawTypeName = enumValueToTypeMap.getOrElse(c.`enum`.head.asString, throw new NullPointerException(s"Unable to find enum entry ${c.`enum`.head} for $fieldName")),
           schema = c
         )
         safeAddImport(imports, parentName)
@@ -673,7 +679,7 @@ case class OpenAPIDartGenerator(api: OpenAPI, config: OpenAPIGeneratorConfig) ex
       ParsedField(dartType, fieldName, c.nullable.getOrElse(false))
     case c: OpenAPISchema.OneOf =>
       val refs = c.schemas.map(_.asInstanceOf[OpenAPISchema.Ref].ref.ref2Type)
-      val parents: List[String] = refs.map(r => baseForTypeMap.getOrElse(r, throw new RuntimeException(s"No mapping defined for $r"))).distinct
+      val parents: List[String] = refs.map(r => oneOfParentMap.getOrElse(r, throw new RuntimeException(s"No mapping defined for $r"))).distinct
       val parentName = parents match {
         case parent :: Nil => parent
         case _ => throw new RuntimeException(s"Multiple parents found for ${refs.mkString(", ")}: ${parents.mkString(", ")}")
@@ -736,7 +742,7 @@ case class OpenAPIDartGenerator(api: OpenAPI, config: OpenAPIGeneratorConfig) ex
                 case c: OpenAPISchema.Component if c.`type` == "array" =>
                   s"List<${recurseType(c.items.get)}>${if (c.nullable.contains(true)) "?" else ""}"
                 case c: OpenAPISchema.Component if c.`enum`.nonEmpty =>
-                  val parentName = baseForTypeMap(c.`enum`.head.asString)
+                  val parentName = enumValueToTypeMap(c.`enum`.head.asString)
                   val `enum` = c.`enum`.map {
                     case Str(s, _) => s
                     case json => throw new UnsupportedOperationException(s"Enum only supports Str: $json")
@@ -769,7 +775,7 @@ case class OpenAPIDartGenerator(api: OpenAPI, config: OpenAPIGeneratorConfig) ex
                       typeNameForComponent(c.`type`.dartType, c)
                     case s => throw new UnsupportedOperationException(s"Failure: $s")
                   }
-                  val parents: List[String] = refs.map(r => baseForTypeMap.getOrElse(r, throw new RuntimeException(s"No mapping defined for $r"))).distinct
+                  val parents: List[String] = refs.map(r => oneOfParentMap.getOrElse(r, throw new RuntimeException(s"No mapping defined for $r"))).distinct
                   val parentName = parents match {
                     case parent :: Nil => parent
                     case _ => throw new RuntimeException(s"Multiple parents found for ${refs.mkString(", ")}: ${parents.mkString(", ")}")
@@ -839,7 +845,10 @@ case class OpenAPIDartGenerator(api: OpenAPI, config: OpenAPIGeneratorConfig) ex
           val entry = path.methods(HttpMethod.Get)
           val successResponse = entry.responses("200").content.get
           val (_, apiPath) = successResponse.content.head
-          val (responseType, responseTypeWithGenerics, fromJsonExpr) = apiPath.schema match {
+          val effectiveResponseSchema = apiPath.schema.orElse(apiPath.itemSchema).getOrElse(
+            throw new UnsupportedOperationException(s"No schema/itemSchema for GET response: $pathString")
+          )
+          val (responseType, responseTypeWithGenerics, fromJsonExpr) = effectiveResponseSchema match {
             case c: OpenAPISchema.Ref =>
               val rt = c.ref.ref2Type
               safeAddImport(imports, rt)
@@ -867,7 +876,10 @@ case class OpenAPIDartGenerator(api: OpenAPI, config: OpenAPIGeneratorConfig) ex
           .responses("200")
           .content.get
         val (_, apiPath) = successResponse.content.head
-        Some(apiPath.schema match {
+        val effectivePostResponseSchema = apiPath.schema.orElse(apiPath.itemSchema).getOrElse(
+          throw new UnsupportedOperationException(s"No schema/itemSchema for POST response: $pathString")
+        )
+        Some(effectivePostResponseSchema match {
           case c: OpenAPISchema.Component if c.`type` == "null" =>
             // void return type — fire and forget
             val requestRef = requestContent.ref
@@ -914,14 +926,18 @@ case class OpenAPIDartGenerator(api: OpenAPI, config: OpenAPIGeneratorConfig) ex
             safeAddImport(imports, responseType)
             responseRef.genericTypeArgs.foreach(gt => safeAddImport(imports, gt.typeName))
             if (requestContentType == ContentType.`multipart/form-data`) {
-              apiContentType.schema match {
+              // Multipart bodies always use `schema` (not `itemSchema`) — extract or fail
+              val effectiveSchema = apiContentType.schema.orElse(apiContentType.itemSchema).getOrElse(
+                throw new UnsupportedOperationException(s"OpenAPIContentType has no schema or itemSchema for $name")
+              )
+              effectiveSchema match {
                 case c: OpenAPISchema.Component =>
                   val params = c.properties.toList.map {
                     case (key, schema) =>
                       val paramType = schema match {
                         case child: OpenAPISchema.Component if child.format.contains("binary") => "PlatformFile"
                         case child: OpenAPISchema.Component if child.`enum`.nonEmpty =>
-                          val parentName = baseForTypeMap.getOrElse(child.`enum`.head.asString, throw new NullPointerException(s"Unable to find enum entry ${child.`enum`.head} for $key"))
+                          val parentName = enumValueToTypeMap.getOrElse(child.`enum`.head.asString, throw new NullPointerException(s"Unable to find enum entry ${child.`enum`.head} for $key"))
                           safeAddImport(imports, parentName)
                           parentName
                         case child: OpenAPISchema.Component => s"${child.`type`.dartType}"
@@ -957,7 +973,7 @@ case class OpenAPIDartGenerator(api: OpenAPI, config: OpenAPIGeneratorConfig) ex
                      |      ${responseFromJsonExpr(responseRef, responseType, imports)}
                      |    );
                      |  }""".stripMargin
-                case _ => throw new UnsupportedOperationException(s"Unsupported schema: ${apiContentType.schema}")
+                case _ => throw new UnsupportedOperationException(s"Unsupported schema: $effectiveSchema")
               }
             } else if (binary) {
               val requestRef = requestContent.ref

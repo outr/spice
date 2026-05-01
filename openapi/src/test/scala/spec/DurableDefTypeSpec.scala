@@ -301,5 +301,188 @@ class DurableDefTypeSpec extends AnyWordSpec with Matchers {
       // Wire format unchanged — still just the simple case name
       all should include("'type': 'Text'")
     }
+
+    "import inner types of List/Map commonFields on the abstract parent (bug #47)" in {
+      // Bug #47 reproducer — a polytype subtype with `tags: List[Tag]`,
+      // `meta: Map[String, MetaValue]`, and `parent: Tag` (bare). With one
+      // subtype registered, every field becomes a common field via the
+      // intersection. Pre-fix, the import collector dropped `List<...>` /
+      // `Map<...>` entries on the prefix without recursing — so `Tag`
+      // arrived (from `parent`) but `MetaValue` (only reachable via the
+      // Map's value type) didn't.
+      val tagDef = Definition(DefType.Str, className = Some("test.tag.Tag"))
+      val metaValueDef = Definition(
+        DefType.Obj(scala.collection.immutable.VectorMap("name" -> Definition(DefType.Str))),
+        className = Some("test.meta.MetaValue")
+      )
+      val recordDef = Definition(
+        DefType.Obj(scala.collection.immutable.VectorMap(
+          "tags"   -> Definition(DefType.Arr(tagDef)),
+          "meta"   -> Definition(DefType.Obj(scala.collection.immutable.VectorMap("__map__" -> metaValueDef))),
+          "parent" -> tagDef
+        )),
+        className = Some("test.poly.RecordSubtype")
+      )
+
+      // Use `defTypeToDartType` indirectly — we need a Map<String, T>
+      // shape, which spice emits when the inner Obj has the special
+      // `__map__` key. If that's not the convention, switch to a
+      // straight Obj — the bug repro still hits via `tags` alone, the
+      // Map case just adds extra coverage.
+      val polyDef = Definition(
+        DefType.Poly(
+          values       = scala.collection.immutable.VectorMap("RecordSubtype" -> recordDef),
+          commonFields = recordDef.defType.asInstanceOf[DefType.Obj].map.toMap
+        ),
+        className = Some("test.poly.Record")
+      )
+      val rootDef = Definition(
+        DefType.Obj(scala.collection.immutable.VectorMap("payload" -> polyDef)),
+        className = Some("test.Root")
+      )
+      val files = DurableSocketDartGenerator(
+        DurableSocketDartConfig(serviceName = "Test", wireType = "Root" -> rootDef)
+      ).generate()
+
+      val recordFile = findSource(files, "record.dart")
+      // The abstract parent must import `Tag` so its `List<Tag>?`
+      // (and `parent: Tag`) getters resolve.
+      recordFile should include regex """import\s+'[^']*tag\.dart';"""
+      // Sanity: the abstract class itself uses the type.
+      recordFile should include("abstract class Record")
+      recordFile should include regex """List<Tag>\??\s+get\s+tags;"""
+    }
+
+    "import every typed class referenced by polytype commonFields, including from sibling packages (bug #49)" in {
+      // Bug #49 reproducer — a polytype `Participant` in `sigil.participant`
+      // whose subtype `DefaultAgentParticipant` references types living
+      // in sibling packages: `BuiltInTool` in `sigil.provider`, `Role`
+      // in `sigil.role`, plus a bare typed class field `instructions:
+      // Instructions` (also in `sigil.provider`) and a `List<X>` of
+      // each. The abstract parent emits getters for all of them and
+      // must import every type, regardless of which package it lives
+      // in or whether it's wrapped in `List<>` / `Option[]`.
+      val builtInToolDef = Definition(
+        DefType.Str,
+        className = Some("sigil.provider.BuiltInTool")
+      )
+      val roleDef = Definition(
+        DefType.Obj(scala.collection.immutable.VectorMap("name" -> Definition(DefType.Str))),
+        className = Some("sigil.role.Role")
+      )
+      val instructionsDef = Definition(
+        DefType.Obj(scala.collection.immutable.VectorMap("text" -> Definition(DefType.Str))),
+        className = Some("sigil.provider.Instructions")
+      )
+      val agentDef = Definition(
+        DefType.Obj(scala.collection.immutable.VectorMap(
+          "displayName"   -> Definition(DefType.Str),
+          "builtInTools"  -> Definition(DefType.Arr(builtInToolDef)),
+          "roles"         -> Definition(DefType.Arr(roleDef)),
+          "instructions"  -> Definition(DefType.Opt(instructionsDef))
+        )),
+        className = Some("sigil.participant.DefaultAgentParticipant")
+      )
+      val participantDef = Definition(
+        DefType.Poly(
+          values       = scala.collection.immutable.VectorMap("DefaultAgentParticipant" -> agentDef),
+          commonFields = agentDef.defType.asInstanceOf[DefType.Obj].map.toMap
+        ),
+        className = Some("sigil.participant.Participant")
+      )
+      val rootDef = Definition(
+        DefType.Obj(scala.collection.immutable.VectorMap("payload" -> participantDef)),
+        className = Some("test.Root")
+      )
+      val files = DurableSocketDartGenerator(
+        DurableSocketDartConfig(serviceName = "Test", wireType = "Root" -> rootDef)
+      ).generate()
+
+      val baseFile = findSource(files, "participant.dart")
+      // Every typed class referenced from a commonField (whether in
+      // List[T], Option[T], or bare) must produce an import. We don't
+      // pin specific paths — relative-path encoding can vary — but
+      // each target file must appear in some import statement.
+      baseFile should include regex """import\s+'[^']*built_in_tool\.dart';"""
+      baseFile should include regex """import\s+'[^']*role\.dart';"""
+      baseFile should include regex """import\s+'[^']*instructions\.dart';"""
+
+      // Sanity — abstract base uses each type.
+      baseFile should include("abstract class Participant")
+      baseFile should include regex """List<BuiltInTool>\??\s+get\s+builtInTools;"""
+      baseFile should include regex """List<Role>\??\s+get\s+roles;"""
+      baseFile should include regex """Instructions\??\s+get\s+instructions;"""
+    }
+
+    "not double-nullable polytype commonFields that wrap Option[T] (bug #48)" in {
+      // Reproducer for bug #48 — an open polytype whose ONLY subtype
+      // (or every subtype) declares `Option[T]` fields. Before the
+      // fix, fabric promoted the full `Definition(DefType.Opt(...))`
+      // into `commonFields`, and the Dart generator unconditionally
+      // appended `?` to `defTypeToDartType(...)` — which already
+      // rendered the Opt as `T?`. Result: `T??` (invalid Dart) and
+      // bogus `import '../../bool?.dart';` because the import path
+      // was built from the Dart type name with the trailing `?`.
+      val applicationStateDef = Definition(
+        DefType.Obj(scala.collection.immutable.VectorMap(
+          "sidebarCollapsed" -> Definition(DefType.Opt(Definition(DefType.Bool))),
+          "theme"            -> Definition(DefType.Opt(Definition(DefType.Str)))
+        )),
+        className = Some("test.viewer.ApplicationState")
+      )
+      val viewerStatePayloadDef = Definition(
+        DefType.Poly(scala.collection.immutable.VectorMap(
+          "ApplicationState" -> applicationStateDef
+        )),
+        className = Some("test.viewer.ViewerStatePayload")
+      )
+      val rootDef = Definition(
+        DefType.Obj(scala.collection.immutable.VectorMap("payload" -> viewerStatePayloadDef)),
+        className = Some("test.Root")
+      )
+      val config = DurableSocketDartConfig(
+        serviceName = "Test",
+        wireType = "Root" -> rootDef
+      )
+      // Compute commonFields the way fabric's PolyType.register would
+      // — single-subtype intersection is the whole subtype's field
+      // map. Tests construct `DefType.Poly` directly, so we set
+      // `commonFields` explicitly to mirror that.
+      val polyWithCommon = viewerStatePayloadDef.copy(
+        defType = DefType.Poly(
+          values = applicationStateDef.defType.asInstanceOf[DefType.Obj].map.toMap match {
+            case _ => scala.collection.immutable.VectorMap(
+              "ApplicationState" -> applicationStateDef
+            )
+          },
+          commonFields = applicationStateDef.defType.asInstanceOf[DefType.Obj].map.toMap
+        )
+      )
+      val rootWithCommon = Definition(
+        DefType.Obj(scala.collection.immutable.VectorMap("payload" -> polyWithCommon)),
+        className = Some("test.Root")
+      )
+      val files = DurableSocketDartGenerator(
+        DurableSocketDartConfig(serviceName = "Test", wireType = "Root" -> rootWithCommon)
+      ).generate()
+      val all = allSources(files)
+
+      // The abstract parent's getters must be single-nullable.
+      val abstractFile = findSource(files, "viewer_state_payload.dart")
+      abstractFile should include("abstract class ViewerStatePayload")
+      abstractFile should include("bool? get sidebarCollapsed;")
+      abstractFile should include("String? get theme;")
+
+      // The abstract parent's getter declarations must NOT use `??`.
+      // (`??` legitimately appears elsewhere in the generated client
+      // code as Dart's null-coalescing operator, so scope to the
+      // poly file.)
+      abstractFile should not include "??"
+
+      // No bogus `T?.dart` imports for primitive-typed Option fields.
+      abstractFile should not include "bool?.dart"
+      abstractFile should not include "string?.dart"
+      abstractFile should not include "?.dart"
+    }
   }
 }
