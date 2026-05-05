@@ -901,10 +901,19 @@ case class DurableSocketDartGenerator(config: DurableSocketDartConfig) {
     // Fabric wraps every defaulted field in `DefType.Opt(inner)` so the JSON
     // decoder tolerates a missing key (the default fills in). The codegen
     // distinguishes defaulted-Opt from true-Option by reading `defaultValue`
-    // off the outer Definition.
+    // off the outer Definition. `Option[T] = None` is also `Opt(inner)` with
+    // a default — but the default is JSON null, which in Dart can only land
+    // on a nullable field. Treat null defaults the same as no default
+    // (nullable Opt path), so `Option[T]` and `Option[T] = None` both render
+    // as `final T? field;` rather than the broken
+    // `final T field; ({this.field = null})`.
     val defaultedInner: Option[(Definition, String)] = fDefn.defType match {
       case DefType.Opt(inner) =>
-        fDefn.defaultValue.flatMap(json => dartLiteralOption(json, inner)).map(lit => (inner, lit))
+        fDefn.defaultValue match {
+          case Some(json) if json != fabric.Null =>
+            dartLiteralOption(json, inner).map(lit => (inner, lit))
+          case _ => None
+        }
       case _ => None
     }
 

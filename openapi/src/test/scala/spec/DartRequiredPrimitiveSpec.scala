@@ -30,6 +30,10 @@ class DartRequiredPrimitiveSpec extends AnyWordSpec with Matchers {
                           age: Option[Int],
                           enabled: Option[Boolean]) derives RW
 
+  case class WithNoneDefaults(name: Option[String] = None,
+                               sessionId: Option[String] = None,
+                               workspaceId: Option[String] = None) derives RW
+
   private def generate(name: String, defn: fabric.define.Definition) =
     DurableSocketDartGenerator(
       DurableSocketDartConfig(serviceName = "Test", wireType = name -> defn)
@@ -85,6 +89,27 @@ class DartRequiredPrimitiveSpec extends AnyWordSpec with Matchers {
       source should include("final String name;")
       source should include("final int? age;")
       source should include("final bool? enabled;")
+    }
+
+    "render `Option[T] = None` as nullable, not as `final T field; this.field = null` (sigil bug #12)" in {
+      // Fabric encodes `Option[T] = None` as `Opt(inner)` with defaultValue =
+      // JsonNull — identical from a Definition perspective to `T = default`
+      // except the default is `null`. Bug #11's fix unwrapped the Opt for
+      // any defaulted field, producing `final T field;` paired with
+      // `this.field = null` in the constructor — illegal Dart. Option-with-None
+      // must stay on the nullable path.
+      val files = generate("WithNoneDefaults", summon[RW[WithNoneDefaults]].definition)
+      val source = find(files, "with_none_defaults.dart")
+      source should include("final String? name;")
+      source should include("final String? sessionId;")
+      source should include("final String? workspaceId;")
+      source should not include "this.name = null"
+      source should not include "this.sessionId = null"
+      source should not include "this.workspaceId = null"
+      // Constructor must not carry any `= null` literal (toJson legitimately
+      // contains `!= null` and `: null`, neither of which uses `= null` as a
+      // default-assignment).
+      source should not include " = null"
     }
 
     "preserve required vs defaulted on subtypes reached through a polytype" in {
