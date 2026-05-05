@@ -810,25 +810,13 @@ case class DurableSocketDartGenerator(config: DurableSocketDartConfig) {
          |  Map<String, dynamic> toJson() => {'type': '$typeValue'};
          |}""".stripMargin
     } else {
-      val fields = o.map.map { case (fname, fDefn) =>
-        val docComment = fDefn.description.map(d => s"  /// $d\n").getOrElse("")
-        val deprecatedAnnotation = if (fDefn.deprecated) s"  @Deprecated('Deprecated field')\n" else ""
-        s"$docComment$deprecatedAnnotation  final ${defTypeToDartType(fDefn)} ${dartFieldName(fname)};"
-      }.mkString("\n")
-
-      val ctorParams = o.map.toList.map { case (fname, fDefn) =>
-        val dartField = dartFieldName(fname)
-        val dartType = defTypeToDartType(fDefn)
-        if (dartType.endsWith("?")) s"this.$dartField" else s"required this.$dartField"
-      }.mkString(", ")
-
-      val fromJsonInits = o.map.toList.map { case (fname, fDefn) =>
-        s"${dartFieldName(fname)} = ${defTypeFromJson(fname, fDefn)}"
-      }.mkString(",\n        ")
-
-      val toJsonEntries = o.map.toList.map { case (fname, fDefn) =>
-        s"'$fname': ${defTypeToJsonExpr(dartFieldName(fname), fDefn)}"
-      }.mkString(", ")
+      val rendered = o.map.toList.map { case (fname, fDefn) =>
+        fname -> renderClassField(fname, fDefn, dartFieldName(fname))
+      }
+      val fields = rendered.map { case (_, r) => r.declaration }.mkString("\n")
+      val ctorParams = rendered.map { case (_, r) => r.ctorParam }.mkString(", ")
+      val fromJsonInits = rendered.map { case (_, r) => r.fromJsonInit }.mkString(",\n        ")
+      val toJsonEntries = rendered.map { case (_, r) => r.toJsonEntry }.mkString(", ")
 
       s"""class $dartName$extendsClause {
          |$fields
@@ -892,6 +880,69 @@ case class DurableSocketDartGenerator(config: DurableSocketDartConfig) {
   // ---------------------------------------------------------------------------
   // DefType → Dart type name
   // ---------------------------------------------------------------------------
+
+  /** Per-field Dart-rendering bundle: declaration line, constructor param,
+    * fromJson init, and toJson entry. Computed once per field via
+    * [[renderClassField]] so the four sites stay consistent. */
+  private case class ClassFieldRender(declaration: String,
+                                       ctorParam: String,
+                                       fromJsonInit: String,
+                                       toJsonEntry: String)
+
+  /** Distinguish required vs defaulted vs true-Optional fields so a defaulted
+    * primitive (`field: Boolean = false`) renders as `final bool field;` with
+    * `this.field = false` in the ctor — the default value goes into the Dart
+    * class declaration instead of the field becoming nullable. Falls back to
+    * the nullable shape when the default isn't a primitive literal we can
+    * render (collections of objects, nested case classes, etc.). */
+  private def renderClassField(fname: String, fDefn: Definition, dartName: String): ClassFieldRender = {
+    val docComment = fDefn.description.map(d => s"  /// $d\n").getOrElse("")
+    val deprecatedAnnotation = if (fDefn.deprecated) s"  @Deprecated('Deprecated field')\n" else ""
+    // Fabric wraps every defaulted field in `DefType.Opt(inner)` so the JSON
+    // decoder tolerates a missing key (the default fills in). The codegen
+    // distinguishes defaulted-Opt from true-Option by reading `defaultValue`
+    // off the outer Definition.
+    val defaultedInner: Option[(Definition, String)] = fDefn.defType match {
+      case DefType.Opt(inner) =>
+        fDefn.defaultValue.flatMap(json => dartLiteralOption(json, inner)).map(lit => (inner, lit))
+      case _ => None
+    }
+
+    defaultedInner match {
+      case Some((inner, literal)) =>
+        val typeDart = defTypeToDartType(inner)
+        ClassFieldRender(
+          declaration  = s"$docComment$deprecatedAnnotation  final $typeDart $dartName;",
+          ctorParam    = s"this.$dartName = $literal",
+          fromJsonInit = s"$dartName = ${defTypeFromJsonExpr(s"json['$fname']", inner)}",
+          toJsonEntry  = s"'$fname': ${defTypeToJsonExpr(dartName, inner)}"
+        )
+      case None =>
+        val typeDart = defTypeToDartType(fDefn)
+        val ctor = if (typeDart.endsWith("?")) s"this.$dartName" else s"required this.$dartName"
+        ClassFieldRender(
+          declaration  = s"$docComment$deprecatedAnnotation  final $typeDart $dartName;",
+          ctorParam    = ctor,
+          fromJsonInit = s"$dartName = ${defTypeFromJson(fname, fDefn)}",
+          toJsonEntry  = s"'$fname': ${defTypeToJsonExpr(dartName, fDefn)}"
+        )
+    }
+  }
+
+  /** Render a fabric Json value as a Dart literal expression. Returns `None`
+    * for shapes that can't be safely round-tripped as a Dart literal — the
+    * caller falls back to the nullable representation in that case. The
+    * `_inner` parameter exists for future shape-aware widening (e.g. an
+    * empty-list default on a typed List field) but is currently unused. */
+  private def dartLiteralOption(json: fabric.Json, _inner: Definition): Option[String] = json match {
+    case fabric.Bool(v, _)    => Some(v.toString)
+    case fabric.NumInt(v, _)  => Some(v.toString)
+    case fabric.NumDec(v, _)  => Some(v.toString)
+    case fabric.Str(v, _)     => Some("'" + v.replace("\\", "\\\\").replace("'", "\\'").replace("\n", "\\n").replace("\r", "\\r") + "'")
+    case fabric.Null          => Some("null")
+    case fabric.Arr(v, _) if v.isEmpty => Some("const []")
+    case _ => None
+  }
 
   /** Extract field definitions from a Definition if it's an Obj. */
   private def extractObjFields(defn: Definition): Option[List[(String, Definition, Boolean)]] = defn.defType match {
