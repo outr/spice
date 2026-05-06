@@ -39,6 +39,9 @@ class DartRequiredPrimitiveSpec extends AnyWordSpec with Matchers {
 
   case class WithEnumDefault(state: SpecState = SpecState.Active) derives RW
 
+  case class WithCollectionDefaults(participants: List[String] = Nil,
+                                     keywords: List[String] = Nil) derives RW
+
   private def generate(name: String, defn: fabric.define.Definition) =
     DurableSocketDartGenerator(
       DurableSocketDartConfig(serviceName = "Test", wireType = name -> defn)
@@ -141,19 +144,37 @@ class DartRequiredPrimitiveSpec extends AnyWordSpec with Matchers {
       source should not include "this.id = const SpecId"
     }
 
-    "not inline enum-typed defaults as raw case-name strings (sigil bug #13)" in {
-      // Same regression as wrappers but for enum-typed defaults: the
-      // default JSON is the case discriminator (a string), but the Dart
-      // field type is the generated enum class. `this.state = 'Active'`
-      // doesn't compile against `final SpecState state`. Fall through
-      // to required so Dart callers must supply the case explicitly.
+    "inline enum-case defaults as `EnumName.caseName` (sigil bug #14 phase A)" in {
+      // Bug #13's first cut left enum-case defaults as `required`, on
+      // the principle that we couldn't safely synthesize the case ref
+      // from a String JSON value. Bug #14 reasserts: this needs to ride
+      // the inline-default path. The default JSON's String discriminator
+      // routes to the matching Dart enum case (lowercased per Dart
+      // enum-case naming rules), so the field stays non-nullable AND
+      // gains a sensible Dart-side fallback.
       val files = generate("WithEnumDefault", summon[RW[WithEnumDefault]].definition)
       val source = find(files, "with_enum_default.dart")
       source should include("final SpecState state;")
-      source should include("required this.state")
+      source should include("this.state = SpecState.active")
+      source should not include "required this.state"
       source should not include "this.state = 'Active'"
       source should not include "this.state = \"Active\""
-      source should not include "this.state = SpecState"
+    }
+
+    "inline empty-list defaults as `const []` (sigil bug #14 phase A)" in {
+      // `field: List[X] = Nil` is the most common defaulted-collection
+      // shape in domain models (`participants`, `keywords`, `topics`,
+      // …). The empty-list default is type-compatible with any
+      // `List<T>` so a plain `const []` works regardless of the
+      // element type — no per-type Dart literal synthesis needed.
+      val files = generate("WithCollectionDefaults", summon[RW[WithCollectionDefaults]].definition)
+      val source = find(files, "with_collection_defaults.dart")
+      source should include("final List<String> participants;")
+      source should include("final List<String> keywords;")
+      source should include("this.participants = const []")
+      source should include("this.keywords = const []")
+      source should not include "required this.participants"
+      source should not include "required this.keywords"
     }
 
     "preserve required vs defaulted on subtypes reached through a polytype" in {

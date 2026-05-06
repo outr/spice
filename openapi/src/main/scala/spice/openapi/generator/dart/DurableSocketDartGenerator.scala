@@ -915,19 +915,7 @@ case class DurableSocketDartGenerator(config: DurableSocketDartConfig) {
           case DefType.Opt(i) => i
           case _              => fDefn
         }
-        // Only inline defaults for *bare* primitives. Typed wrappers
-        // (`Id`, `Timestamp`, etc. — primitive-shaped but with `className`
-        // set) and enums (Poly with simple-enum shape) need different
-        // rendering we can't safely synthesize from a JSON literal: the
-        // wrapper's Dart constructor would have to be invoked, the enum
-        // case referenced by name, and effectful defaults (e.g.
-        // `Timestamp()`, `Id.unique()`) would freeze the codegen-moment
-        // value as a per-class constant — wrong on every count. Fall
-        // through to the nullable Opt path; Dart callers must pass the
-        // value explicitly or accept the field as null.
-        val safeToInline = inner.className.isEmpty && isPrimitive(inner.defType)
-        if (safeToInline) dartLiteralOption(json, inner).map(lit => (inner, lit))
-        else None
+        dartLiteralOption(json, inner).map(lit => (inner, lit))
       case _ => None
     }
 
@@ -952,19 +940,59 @@ case class DurableSocketDartGenerator(config: DurableSocketDartConfig) {
     }
   }
 
-  /** Render a fabric Json value as a Dart literal expression. Returns `None`
-    * for shapes that can't be safely round-tripped as a Dart literal — the
-    * caller falls back to the nullable representation in that case. The
-    * `_inner` parameter exists for future shape-aware widening (e.g. an
-    * empty-list default on a typed List field) but is currently unused. */
-  private def dartLiteralOption(json: fabric.Json, _inner: Definition): Option[String] = json match {
-    case fabric.Bool(v, _)    => Some(v.toString)
-    case fabric.NumInt(v, _)  => Some(v.toString)
-    case fabric.NumDec(v, _)  => Some(v.toString)
-    case fabric.Str(v, _)     => Some("'" + v.replace("\\", "\\\\").replace("'", "\\'").replace("\n", "\\n").replace("\r", "\\r") + "'")
-    case fabric.Null          => Some("null")
-    case fabric.Arr(v, _) if v.isEmpty => Some("const []")
-    case _ => None
+  /** Render a fabric Json value as a Dart literal expression for use as
+    * a constructor parameter default. Returns `None` for shapes that
+    * can't be safely round-tripped — caller falls back to the
+    * `required` constructor-parameter shape.
+    *
+    * Phase-A handling:
+    *   - **Bare primitive defaults** (no `className`): inline literal.
+    *     `field: Boolean = false` → `this.field = false`.
+    *   - **Empty list defaults**: inline `const []`. `field: List[X] = Nil`
+    *     → `this.field = const []`. Works regardless of element type
+    *     because Dart's `const []` is assignment-compatible with any
+    *     `List<T>` field annotation.
+    *   - **Enum-case defaults** (`Poly` with simple-enum shape +
+    *     `Str(caseName)` default): inline `EnumName.caseName`.
+    *     `field: EventState = EventState.Active` → `this.field = EventState.active`.
+    *
+    * Phase B (wrapper-around-literal) and Phase C (effectful defaults)
+    * intentionally fall through here. Wrappers and case-object
+    * singletons need extra codegen work (const constructors,
+    * fresh-helper static methods) before they can ride this path. */
+  private def dartLiteralOption(json: fabric.Json, inner: Definition): Option[String] = {
+    // Enum-case default: simple-enum poly with a Str discriminator. The
+    // Dart enum is generated via `renderDartEnum`, which lowercases the
+    // first char of each case (Dart enum cases must start lowercase), so
+    // we route the case name through `dartIdentifier` to match.
+    inner.defType match {
+      case p: DefType.Poly if isSimpleEnum(p) =>
+        json match {
+          case fabric.Str(caseName, _) =>
+            inner.className match {
+              case Some(cn) =>
+                val (baseName, _) = parseClassName(cn)
+                if (dartReserved.contains(baseName)) None
+                else Some(s"$baseName.${dartIdentifier(caseName)}")
+              case None => None
+            }
+          case _ => None
+        }
+      case _ =>
+        // Bare-primitive + empty-list path. Typed wrappers (className
+        // set on a primitive-shaped Definition) deliberately fall through
+        // here — wrapper-around-literal handling is Phase B.
+        if (inner.className.isDefined && isPrimitive(inner.defType)) None
+        else json match {
+          case fabric.Bool(v, _)    => Some(v.toString)
+          case fabric.NumInt(v, _)  => Some(v.toString)
+          case fabric.NumDec(v, _)  => Some(v.toString)
+          case fabric.Str(v, _)     => Some("'" + v.replace("\\", "\\\\").replace("'", "\\'").replace("\n", "\\n").replace("\r", "\\r") + "'")
+          case fabric.Null          => Some("null")
+          case fabric.Arr(v, _) if v.isEmpty => Some("const []")
+          case _ => None
+        }
+    }
   }
 
   /** Extract field definitions from a Definition if it's an Obj. */
