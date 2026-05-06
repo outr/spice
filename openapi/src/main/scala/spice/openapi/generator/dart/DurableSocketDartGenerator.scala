@@ -447,8 +447,11 @@ case class DurableSocketDartGenerator(config: DurableSocketDartConfig) {
     val exportNames = mutable.ListBuffer.empty[String]
 
     // Generate typed wrappers first (they're referenced by other types)
-    // Force wrapper discovery by doing a dry-run type scan
+    // Force wrapper discovery by doing a dry-run type scan, then a second
+    // scan that detects wrappers used as Phase-C effectful defaults so the
+    // wrapper class emit picks up the matching fresh-helper static.
     toEmit.foreach { case (_, defn) => scanForWrappers(defn) }
+    toEmit.foreach { case (_, defn) => scanForEffectfulDefaults(defn) }
     discoveredWrappers.foreach { case (_, (wrapperName, primitiveDart)) =>
       val fileName = s"${snakeCase(wrapperName)}.dart"
       val source = wrapTypedWrapper(wrapperName, primitiveDart)
@@ -550,6 +553,38 @@ case class DurableSocketDartGenerator(config: DurableSocketDartConfig) {
     files.toList
   }
 
+  /** Walk a Definition's field tree and pre-register any wrapper-around-
+    * primitive fields whose default is detected as effectful (different
+    * value across thunk invocations). The wrapper Dart class is emitted
+    * before per-class code generation runs, so this pre-pass guarantees
+    * the necessary fresh-helper static is in place by the time the
+    * field's class references `Wrapper.now()` / `.unique()` / `.fresh()`. */
+  private def scanForEffectfulDefaults(d: Definition): Unit = {
+    d.defType match {
+      case DefType.Obj(fields) =>
+        fields.foreach { case (_, fieldDefn) =>
+          fieldDefn.defaultValue match {
+            case Some(json) if json != fabric.Null =>
+              val inner = fieldDefn.defType match {
+                case DefType.Opt(i) => i
+                case _              => fieldDefn
+              }
+              if (inner.className.isDefined && isPrimitive(inner.defType) &&
+                  isEffectfulDefault(fieldDefn.defaultValueThunk)) {
+                val (wrapperName, _) = parseClassName(inner.className.get)
+                registerWrapperFreshHelper(wrapperName, inner.defType)
+              }
+            case _ =>
+          }
+          scanForEffectfulDefaults(fieldDefn)
+        }
+      case DefType.Poly(values, _) => values.values.foreach(scanForEffectfulDefaults)
+      case DefType.Arr(inner)      => scanForEffectfulDefaults(inner)
+      case DefType.Opt(inner)      => scanForEffectfulDefaults(inner)
+      case _                       =>
+    }
+  }
+
   /** Scan a Definition tree to discover typed wrappers (Id, Timestamp, etc.) without generating code. */
   private def scanForWrappers(d: Definition): Unit = {
     d.className.foreach { cn =>
@@ -611,11 +646,16 @@ case class DurableSocketDartGenerator(config: DurableSocketDartConfig) {
     names.toList.sorted
   }
 
-  /** Wrap a typed wrapper class in a standalone file. */
+  /** Wrap a typed wrapper class in a standalone file. String wrappers
+    * with a Phase-C fresh-helper need `dart:math` for `Random.secure()`;
+    * the import only goes in when actually needed so unused-import lints
+    * stay clean for wrappers that aren't referenced as effectful defaults. */
   private def wrapTypedWrapper(name: String, primitiveDart: String): String = {
+    val needsMath = primitiveDart == "String" &&
+      wrappersNeedingFresh.exists { case (n, _) => n == name }
+    val mathImport = if (needsMath) "import 'dart:math' as math;\n\n" else ""
     s"""$generatedComment
-       |
-       |${generateTypedWrapper(name, primitiveDart)}
+       |$mathImport${generateTypedWrapper(name, primitiveDart)}
        |""".stripMargin
   }
 
@@ -723,12 +763,21 @@ case class DurableSocketDartGenerator(config: DurableSocketDartConfig) {
     }
   }
 
-  /** Generate a typed wrapper class for a Classed primitive (e.g., Id wrapping String). */
+  /** Generate a typed wrapper class for a Classed primitive (e.g., Id wrapping String).
+    *
+    * When the wrapper is referenced from a Phase-C effectful default
+    * (`field: Wrapper = Wrapper()` etc.), the codegen records its name in
+    * `wrappersNeedingFresh` and the generator emits a matching static
+    * factory: `now()` for time-shaped Long/Double wrappers, `unique()`
+    * for opaque String ids, `fresh()` as a generic fallback. */
   private def generateTypedWrapper(name: String, primitiveDart: String): String = {
+    val freshHelper = wrappersNeedingFresh.find { case (n, _) => n == name }
+      .map { case (_, dt) => generateFreshHelper(name, primitiveDart, dt) }
+      .getOrElse("")
     s"""class $name {
        |  final $primitiveDart value;
        |  const $name(this.value);
-       |
+       |$freshHelper
        |  @override
        |  String toString() => value.toString();
        |
@@ -738,6 +787,50 @@ case class DurableSocketDartGenerator(config: DurableSocketDartConfig) {
        |  @override
        |  int get hashCode => value.hashCode;
        |}""".stripMargin
+  }
+
+  /** Render the fresh-helper static for a wrapper class. The Dart-side
+    * implementation is deliberately stdlib-only — no `uuid` package
+    * dependency — so consumers don't inherit a transitive dep just to
+    * construct a fresh wrapper. `unique()` produces a microsecond-
+    * timestamp + cryptographically-random suffix combo that's unique
+    * enough for collision-avoidance in typical client flows. */
+  private def generateFreshHelper(name: String, primitiveDart: String, dt: DefType): String = {
+    val helperName = freshHelperName(dt)
+    val body = primitiveDart match {
+      case "int" =>
+        "DateTime.now().millisecondsSinceEpoch"
+      case "double" =>
+        "DateTime.now().microsecondsSinceEpoch / 1000.0"
+      case "String" =>
+        // Stdlib-only unique-string generator: microsecond timestamp
+        // (radix-36) plus 64 bits of secure-random hex. Sufficient
+        // entropy for client-side id generation; not a UUID v4 by
+        // spec, but cryptographically unguessable.
+        "_freshUniqueString()"
+      case "bool" => "false"
+      case _      => "throw UnimplementedError('No fresh-helper defined for $primitiveDart')"
+    }
+    val staticImpl =
+      s"""
+         |  /// Fresh-value factory used by codegen-emitted effectful defaults
+         |  /// (`field: $name = $name()` style). Caller may construct
+         |  /// `$name(...)` directly for any explicit value.
+         |  static $name $helperName() => $name($body);
+         |""".stripMargin
+    if (primitiveDart == "String") staticImpl + s"""
+       |  static String _freshUniqueString() {
+       |    final ts = DateTime.now().microsecondsSinceEpoch.toRadixString(36);
+       |    final rnd = _secureRandom;
+       |    final hex = StringBuffer();
+       |    for (var i = 0; i < 8; i++) {
+       |      hex.write(rnd.nextInt(256).toRadixString(16).padLeft(2, '0'));
+       |    }
+       |    return '$$ts-$$hex';
+       |  }
+       |  static final _secureRandom = math.Random.secure();
+       |""".stripMargin
+    else staticImpl
   }
 
   /** Detect if a Poly represents a simple enum (all variants have DefType.Null). */
@@ -802,9 +895,13 @@ case class DurableSocketDartGenerator(config: DurableSocketDartConfig) {
     // every renamed class (Text/TextContent, Image/ImageContent, …).
     val typeValue = wireName
     if (o.map.isEmpty) {
-      // Empty class (e.g., case object with no fields)
+      // Empty class (e.g., case object with no fields). `const` lets
+      // callers use it as a Dart-side constant default for fields like
+      // `currentMode: Mode = ConversationMode` — the codegen emits
+      // `this.currentMode = const ConversationMode()` if it sees an
+      // empty case-object subtype as the default value.
       s"""class $dartName$extendsClause {
-         |  $dartName();
+         |  const $dartName();
          |  $dartName.fromJson(Map<String, dynamic> json);
          |
          |  Map<String, dynamic> toJson() => {'type': '$typeValue'};
@@ -815,13 +912,17 @@ case class DurableSocketDartGenerator(config: DurableSocketDartConfig) {
       }
       val fields = rendered.map { case (_, r) => r.declaration }.mkString("\n")
       val ctorParams = rendered.map { case (_, r) => r.ctorParam }.mkString(", ")
+      val initListEntries = rendered.flatMap { case (_, r) => r.initList }
+      val initListClause =
+        if (initListEntries.isEmpty) ""
+        else "\n      : " + initListEntries.mkString(",\n        ")
       val fromJsonInits = rendered.map { case (_, r) => r.fromJsonInit }.mkString(",\n        ")
       val toJsonEntries = rendered.map { case (_, r) => r.toJsonEntry }.mkString(", ")
 
       s"""class $dartName$extendsClause {
          |$fields
          |
-         |  $dartName({$ctorParams});
+         |  $dartName({$ctorParams})$initListClause;
          |
          |  $dartName.fromJson(Map<String, dynamic> json)
          |      : $fromJsonInits;
@@ -882,63 +983,140 @@ case class DurableSocketDartGenerator(config: DurableSocketDartConfig) {
   // ---------------------------------------------------------------------------
 
   /** Per-field Dart-rendering bundle: declaration line, constructor param,
-    * fromJson init, and toJson entry. Computed once per field via
-    * [[renderClassField]] so the four sites stay consistent. */
+    * optional initializer-list entry (Phase C effectful wrappers), fromJson
+    * init, and toJson entry. Computed once per field via
+    * [[renderClassField]] so all five sites stay consistent. */
   private case class ClassFieldRender(declaration: String,
                                        ctorParam: String,
+                                       initList: Option[String],
                                        fromJsonInit: String,
                                        toJsonEntry: String)
 
-  /** Distinguish required vs defaulted vs true-Optional fields so a defaulted
-    * primitive (`field: Boolean = false`) renders as `final bool field;` with
-    * `this.field = false` in the ctor — the default value goes into the Dart
-    * class declaration instead of the field becoming nullable. Falls back to
-    * the nullable shape when the default isn't a primitive literal we can
-    * render (collections of objects, nested case classes, etc.). */
+  /** Distinguish required vs defaulted vs true-Optional fields. Five shapes:
+    *
+    *   1. **Required** (`field: T`): `final T field;` + `required this.field`.
+    *   2. **Defaulted bare primitive** (`field: T = literal`):
+    *      `final T field; this.field = literal`. (Phase A — sigil bug #11.)
+    *   3. **Defaulted empty list / enum case / case-object singleton**:
+    *      `final T field; this.field = const [] / EnumName.case / const Sub()`.
+    *      (Phase A + B.)
+    *   4. **Defaulted wrapper around primitive (frozen)**:
+    *      `final Wrapper field; this.field = const Wrapper(literal)` when the
+    *      defaultValueThunk produces stable values. (Phase B.)
+    *   5. **Defaulted wrapper around primitive (effectful)**:
+    *      `final Wrapper field;` constructor takes `Wrapper? field`,
+    *      initializer-list does `field = field ?? Wrapper.now()` (or
+    *      `.unique()` for String wrappers). Caller can omit and get a
+    *      fresh value per construction. (Phase C — sigil bug #14.)
+    *   6. **Option[T] = None / Option[T]**: `final T? field;` + `this.field`.
+    *
+    * Effectful defaults are detected by invoking the thunk multiple times
+    * with brief delays — values that vary across calls indicate an
+    * effectful default like `Timestamp()` or `Id.unique()`. */
   private def renderClassField(fname: String, fDefn: Definition, dartName: String): ClassFieldRender = {
     val docComment = fDefn.description.map(d => s"  /// $d\n").getOrElse("")
     val deprecatedAnnotation = if (fDefn.deprecated) s"  @Deprecated('Deprecated field')\n" else ""
-    // Fabric ≤1.27 wrapped every defaulted field in `DefType.Opt(inner)` so the
-    // JSON decoder tolerates a missing key. Fabric 1.28+ stops wrapping defaulted
-    // non-Option fields in `Opt` — the field's `defType` is now the bare inner
-    // type (e.g. `DefType.Bool`) with `defaultValue` still set on the outer
-    // Definition. We must handle both shapes:
-    //   - 1.27 defaulted Boolean: `Opt(Bool)` + `defaultValue = Some(Bool(false))`
-    //   - 1.28 defaulted Boolean: `Bool`        + `defaultValue = Some(Bool(false))`
-    // Either way we unwrap to the inner type and inline the literal as a Dart
-    // default. `Option[T] = None` (still `Opt(inner)` + `defaultValue = JSON null`
-    // under 1.28) takes the nullable Opt path — the `json != fabric.Null` guard
-    // prevents the broken `final T field; this.field = null` rendering.
-    val defaultedInner: Option[(Definition, String)] = fDefn.defaultValue match {
+    // Fabric ≤1.27 wrapped every defaulted field in `DefType.Opt(inner)`. Fabric
+    // 1.28+ stops wrapping defaulted non-Option fields — the field's `defType`
+    // is now the bare inner type with `defaultValue` still set on the outer
+    // Definition. Either way we unwrap to the inner type before classification.
+    // `Option[T] = None` (still `Opt(inner)` + `defaultValue = JSON null` under
+    // 1.28) takes the nullable Opt path via the `json != fabric.Null` guard.
+    val innerOpt: Option[Definition] = fDefn.defaultValue match {
       case Some(json) if json != fabric.Null =>
-        val inner = fDefn.defType match {
+        Some(fDefn.defType match {
           case DefType.Opt(i) => i
           case _              => fDefn
-        }
-        dartLiteralOption(json, inner).map(lit => (inner, lit))
+        })
       case _ => None
     }
 
-    defaultedInner match {
-      case Some((inner, literal)) =>
-        val typeDart = defTypeToDartType(inner)
+    // Phase C: wrapper-around-primitive with an EFFECTFUL default. Caller-
+    // supplied `Wrapper? field` lets the Dart consumer omit and the
+    // initializer-list calls `Wrapper.now()` / `.unique()` per construction.
+    // Detected by re-invoking the thunk and checking for value drift.
+    val effectfulWrapper: Option[(String, String)] = innerOpt.flatMap { inner =>
+      if (inner.className.isDefined && isPrimitive(inner.defType) &&
+          isEffectfulDefault(fDefn.defaultValueThunk)) {
+        val (wrapperName, _) = parseClassName(inner.className.get)
+        registerWrapperFreshHelper(wrapperName, inner.defType)
+        Some((wrapperName, freshHelperName(inner.defType)))
+      } else None
+    }
+
+    effectfulWrapper match {
+      case Some((wrapperName, helperName)) =>
         ClassFieldRender(
-          declaration  = s"$docComment$deprecatedAnnotation  final $typeDart $dartName;",
-          ctorParam    = s"this.$dartName = $literal",
-          fromJsonInit = s"$dartName = ${defTypeFromJsonExpr(s"json['$fname']", inner)}",
-          toJsonEntry  = s"'$fname': ${defTypeToJsonExpr(dartName, inner)}"
+          declaration  = s"$docComment$deprecatedAnnotation  final $wrapperName $dartName;",
+          ctorParam    = s"$wrapperName? $dartName",
+          initList     = Some(s"$dartName = $dartName ?? $wrapperName.$helperName()"),
+          fromJsonInit = s"$dartName = ${defTypeFromJsonExpr(s"json['$fname']", innerOpt.get)}",
+          toJsonEntry  = s"'$fname': ${defTypeToJsonExpr(dartName, innerOpt.get)}"
         )
       case None =>
-        val typeDart = defTypeToDartType(fDefn)
-        val ctor = if (typeDart.endsWith("?")) s"this.$dartName" else s"required this.$dartName"
-        ClassFieldRender(
-          declaration  = s"$docComment$deprecatedAnnotation  final $typeDart $dartName;",
-          ctorParam    = ctor,
-          fromJsonInit = s"$dartName = ${defTypeFromJson(fname, fDefn)}",
-          toJsonEntry  = s"'$fname': ${defTypeToJsonExpr(dartName, fDefn)}"
-        )
+        val defaultedInner: Option[(Definition, String)] =
+          innerOpt.flatMap { inner =>
+            dartLiteralOption(fDefn.defaultValue.get, inner).map(lit => (inner, lit))
+          }
+
+        defaultedInner match {
+          case Some((inner, literal)) =>
+            val typeDart = defTypeToDartType(inner)
+            ClassFieldRender(
+              declaration  = s"$docComment$deprecatedAnnotation  final $typeDart $dartName;",
+              ctorParam    = s"this.$dartName = $literal",
+              initList     = None,
+              fromJsonInit = s"$dartName = ${defTypeFromJsonExpr(s"json['$fname']", inner)}",
+              toJsonEntry  = s"'$fname': ${defTypeToJsonExpr(dartName, inner)}"
+            )
+          case None =>
+            val typeDart = defTypeToDartType(fDefn)
+            val ctor = if (typeDart.endsWith("?")) s"this.$dartName" else s"required this.$dartName"
+            ClassFieldRender(
+              declaration  = s"$docComment$deprecatedAnnotation  final $typeDart $dartName;",
+              ctorParam    = ctor,
+              initList     = None,
+              fromJsonInit = s"$dartName = ${defTypeFromJson(fname, fDefn)}",
+              toJsonEntry  = s"'$fname': ${defTypeToJsonExpr(dartName, fDefn)}"
+            )
+        }
     }
   }
+
+  /** Probe a `defaultValueThunk` for effectful behavior — fresh-on-each-
+    * invocation defaults like `Timestamp()` / `Id.unique()` produce
+    * different values across calls; literal defaults produce stable
+    * values. Calls the thunk three times with brief delays so
+    * millisecond-precision timestamps reliably advance. */
+  private def isEffectfulDefault(thunk: () => Option[fabric.Json]): Boolean = {
+    if (thunk eq fabric.define.Definition.NoDefault) false
+    else {
+      val first = thunk()
+      Thread.sleep(2)
+      val second = thunk()
+      Thread.sleep(2)
+      val third = thunk()
+      !(first == second && second == third)
+    }
+  }
+
+  /** Per-wrapper-class fresh-helper name. `now()` for time-shaped
+    * wrappers around Long/Int (`Timestamp`); `unique()` for opaque
+    * string ids (`Id`); `fresh()` as the generic fallback. */
+  private def freshHelperName(dt: DefType): String = dt match {
+    case DefType.Int | DefType.Dec => "now"
+    case DefType.Str               => "unique"
+    case _                         => "fresh"
+  }
+
+  /** Wrapper class names that need a generated fresh-helper because the
+    * codegen referenced `Wrapper.now()` / `.unique()` / `.fresh()` from
+    * a Phase C effectful-default site. The wrapper class generator
+    * inspects this set at emit time and includes the matching static. */
+  private val wrappersNeedingFresh: mutable.Set[(String, DefType)] = mutable.Set.empty
+
+  private def registerWrapperFreshHelper(wrapperName: String, innerDefType: DefType): Unit =
+    wrappersNeedingFresh.add(wrapperName -> innerDefType)
 
   /** Render a fabric Json value as a Dart literal expression for use as
     * a constructor parameter default. Returns `None` for shapes that
@@ -961,11 +1139,10 @@ case class DurableSocketDartGenerator(config: DurableSocketDartConfig) {
     * singletons need extra codegen work (const constructors,
     * fresh-helper static methods) before they can ride this path. */
   private def dartLiteralOption(json: fabric.Json, inner: Definition): Option[String] = {
-    // Enum-case default: simple-enum poly with a Str discriminator. The
-    // Dart enum is generated via `renderDartEnum`, which lowercases the
-    // first char of each case (Dart enum cases must start lowercase), so
-    // we route the case name through `dartIdentifier` to match.
     inner.defType match {
+      // Enum-case default (Phase A): simple-enum poly with a Str
+      // discriminator. The Dart enum lowercases the first char of each
+      // case, so route the case name through `dartIdentifier` to match.
       case p: DefType.Poly if isSimpleEnum(p) =>
         json match {
           case fabric.Str(caseName, _) =>
@@ -978,12 +1155,44 @@ case class DurableSocketDartGenerator(config: DurableSocketDartConfig) {
             }
           case _ => None
         }
+
+      // Case-object polytype singleton (Phase B): non-enum poly whose default
+      // is a single-key Obj `{"type": "SubName"}` AND that subtype's defType
+      // is an empty Obj (case object with no fields). The empty case-object
+      // class has a `const` constructor, so we emit `const SubName()`.
+      case p: DefType.Poly =>
+        json match {
+          case fabric.Obj(m) =>
+            m.get("type").collect { case fabric.Str(typeName, _) => typeName }.flatMap { typeName =>
+              p.values.get(typeName).flatMap { subDefn =>
+                subDefn.defType match {
+                  case DefType.Obj(fields) if fields.isEmpty =>
+                    subDefn.className.map(dartClassName).map(name => s"const $name()")
+                  case _ => None
+                }
+              }
+            }
+          case _ => None
+        }
+
+      // Wrapper around primitive (Phase B frozen path): `className` set on
+      // a primitive-shaped Definition. Phase C (effectful) is handled
+      // earlier in `renderClassField`; this branch fires for stable values.
+      case _ if inner.className.isDefined && isPrimitive(inner.defType) =>
+        val (wrapperName, _) = parseClassName(inner.className.get)
+        json match {
+          case fabric.Bool(v, _)   => Some(s"const $wrapperName($v)")
+          case fabric.NumInt(v, _) => Some(s"const $wrapperName($v)")
+          case fabric.NumDec(v, _) => Some(s"const $wrapperName($v)")
+          case fabric.Str(v, _) =>
+            val esc = "'" + v.replace("\\", "\\\\").replace("'", "\\'").replace("\n", "\\n").replace("\r", "\\r") + "'"
+            Some(s"const $wrapperName($esc)")
+          case _ => None
+        }
+
+      // Bare primitive / empty list / null (Phase A).
       case _ =>
-        // Bare-primitive + empty-list path. Typed wrappers (className
-        // set on a primitive-shaped Definition) deliberately fall through
-        // here — wrapper-around-literal handling is Phase B.
-        if (inner.className.isDefined && isPrimitive(inner.defType)) None
-        else json match {
+        json match {
           case fabric.Bool(v, _)    => Some(v.toString)
           case fabric.NumInt(v, _)  => Some(v.toString)
           case fabric.NumDec(v, _)  => Some(v.toString)

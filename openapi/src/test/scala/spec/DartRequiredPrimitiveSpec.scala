@@ -42,6 +42,13 @@ class DartRequiredPrimitiveSpec extends AnyWordSpec with Matchers {
   case class WithCollectionDefaults(participants: List[String] = Nil,
                                      keywords: List[String] = Nil) derives RW
 
+  // Effectful wrapper defaults — values vary per construction.
+  case class WithEffectfulWrappers(created: SpecTimestamp = SpecTimestamp(System.currentTimeMillis()),
+                                    fresh: SpecId = SpecId(java.util.UUID.randomUUID().toString)) derives RW
+
+  // Polytype with an empty case-object subtype — singleton default.
+  case class WithSingletonDefault(currentMode: SpecMode = SpecConversationMode) derives RW
+
   private def generate(name: String, defn: fabric.define.Definition) =
     DurableSocketDartGenerator(
       DurableSocketDartConfig(serviceName = "Test", wireType = name -> defn)
@@ -120,28 +127,69 @@ class DartRequiredPrimitiveSpec extends AnyWordSpec with Matchers {
       source should not include " = null"
     }
 
-    "not inline wrapper-typed defaults as raw primitive literals (sigil bug #13)" in {
-      // Fabric encodes `Timestamp = Timestamp()` / `Id = Id.unique()` as a
-      // primitive `defType` *with a className* — typed wrappers around
-      // String/Long/etc. The default JSON is the wrapper's primitive
-      // payload. Naively unwrapping and emitting the literal produced
-      // `final Timestamp created; this.created = 1778027035896;` — a
-      // type error (int can't assign to Timestamp). Synthesizing
-      // `const Timestamp(123)` would also freeze the codegen-moment
-      // value across every Dart-constructed instance, breaking the
-      // fresh-on-construction semantic for `id` / `created` style
-      // fields. Solution: never inline wrapper-typed defaults. Field
-      // becomes `required` so Dart callers supply the value explicitly.
+    "inline wrapper-typed defaults as `const Wrapper(literal)` for stable values (sigil bug #14 phase B)" in {
+      // Wrappers around primitives with stable defaults
+      // (`Timestamp(1234L)`, `Id("static-id")`) get inlined as
+      // `const Wrapper(literal)` — type-correct in Dart since the
+      // wrapper class has a `const` constructor. Effectful defaults
+      // (different value per thunk invocation) take the Phase C path
+      // instead; this test covers stable-value defaults.
       val files = generate("WithWrapperDefaults", summon[RW[WithWrapperDefaults]].definition)
       val source = find(files, "with_wrapper_defaults.dart")
       source should include("final SpecTimestamp created;")
       source should include("final SpecId id;")
-      source should include("required this.created")
-      source should include("required this.id")
-      source should not include "this.created = 1234"
-      source should not include "this.created = const SpecTimestamp"
-      source should not include "this.id = 'static-id'"
-      source should not include "this.id = const SpecId"
+      source should include("this.created = const SpecTimestamp(1234)")
+      source should include("this.id = const SpecId('static-id')")
+      source should not include "required this.created"
+      source should not include "required this.id"
+      // Bare primitive literal (no wrapper) must NOT be emitted in place
+      // of the wrapper-constructor expression — the Dart class field type
+      // is `SpecTimestamp`, not `int`.
+      source should not include "this.created = 1234,"
+      source should not include "this.created = 1234;"
+    }
+
+    "render wrappers with effectful defaults as nullable + initialize-list with fresh-helper (sigil bug #14 phase C)" in {
+      // `Timestamp()` and `Id.unique()` produce different JSON values
+      // across thunk invocations. Inlining the codegen-moment value
+      // would freeze every Dart-constructed instance to a single id /
+      // timestamp — broken across instances. Phase C accepts the field
+      // as a nullable named param and fills with a wrapper-class fresh
+      // helper (`now()` for Long-shaped, `unique()` for String-shaped)
+      // in the constructor's initializer list.
+      val files = generate("WithEffectfulWrappers", summon[RW[WithEffectfulWrappers]].definition)
+      val source = find(files, "with_effectful_wrappers.dart")
+      source should include("final SpecTimestamp created;")
+      source should include("final SpecId fresh;")
+      source should include("SpecTimestamp? created")
+      source should include("SpecId? fresh")
+      source should include regex """created\s*=\s*created\s*\?\?\s*SpecTimestamp\.now\(\)"""
+      source should include regex """fresh\s*=\s*fresh\s*\?\?\s*SpecId\.unique\(\)"""
+      source should not include "required this.created"
+      source should not include "required this.fresh"
+    }
+
+    "emit `Wrapper.now()` / `unique()` static on wrapper Dart classes referenced as effectful defaults (sigil bug #14 phase C)" in {
+      // The fresh-helper static is generated alongside the wrapper class
+      // itself so consumers don't need to add a `uuid` package or write
+      // `Timestamp.now()` glue by hand.
+      val files = generate("WithEffectfulWrappers", summon[RW[WithEffectfulWrappers]].definition)
+      val timestampSource = find(files, "spec_timestamp.dart")
+      val idSource = find(files, "spec_id.dart")
+      timestampSource should include regex """static\s+SpecTimestamp\s+now\(\)"""
+      idSource should include regex """static\s+SpecId\s+unique\(\)"""
+      idSource should include("import 'dart:math'")
+    }
+
+    "inline case-object polytype defaults as `const SubName()` (sigil bug #14 phase B)" in {
+      // `currentMode: Mode = ConversationMode` where ConversationMode is
+      // an empty case-object subtype. The Dart subclass has a `const`
+      // constructor, so `const ConversationMode()` is a valid Dart
+      // constant default — type-compatible with the `Mode` field type.
+      val files = generate("WithSingletonDefault", summon[RW[WithSingletonDefault]].definition)
+      val source = find(files, "with_singleton_default.dart")
+      source should include("this.currentMode = const SpecConversationMode()")
+      source should not include "required this.currentMode"
     }
 
     "inline enum-case defaults as `EnumName.caseName` (sigil bug #14 phase A)" in {
@@ -220,3 +268,11 @@ object SpecId {
 
 // Enum-typed default — same shape as `EventState` / `MessageRole`.
 enum SpecState derives RW { case Active, Complete, Cancelled }
+
+// Polytype + empty case-object subtype — same shape as `Mode = ConversationMode`.
+// Adding a second subtype WITH fields keeps SpecMode out of the simple-enum
+// fast-path (which would render as a Dart enum, not as a polymorphic class
+// hierarchy with const-constructible empty subtypes).
+sealed trait SpecMode derives RW
+case object SpecConversationMode extends SpecMode
+case class SpecCustomMode(label: String) extends SpecMode
