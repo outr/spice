@@ -965,9 +965,23 @@ case class DurableSocketDartGenerator(config: DurableSocketDartConfig) {
     }.mkString("\n")
     val getterBlock = if (commonGetters.nonEmpty) s"\n$commonGetters\n" else ""
 
+    // Static singleton field per empty case-object subtype lets defaulted
+    // fields reference `Parent.subCase` instead of `const SubName()`.
+    // The consumer needs only the parent's import to compile.
+    val singletonFields = p.values.toList.flatMap { case (key, subDefn) =>
+      subDefn.defType match {
+        case DefType.Obj(fields) if fields.isEmpty =>
+          val subName = dartSubtypeName(key, subDefn, Some(name))
+          val fieldName = dartIdentifier(key)
+          Some(s"  static const $name $fieldName = $subName();")
+        case _ => None
+      }
+    }
+    val singletonBlock = if (singletonFields.nonEmpty) "\n" + singletonFields.mkString("\n") + "\n" else ""
+
     s"""abstract class $name$extendsClause {
        |  const $name();
-       |$getterBlock
+       |$singletonBlock$getterBlock
        |  Map<String, dynamic> toJson();
        |
        |  static $name fromJson(Map<String, dynamic> json) {
@@ -1181,9 +1195,9 @@ case class DurableSocketDartGenerator(config: DurableSocketDartConfig) {
               p.values.get(typeName).flatMap { subDefn =>
                 subDefn.defType match {
                   case DefType.Obj(fields) if fields.isEmpty =>
-                    val parentDart = inner.className.map(dartClassName)
-                    val subName = DartNames.dartSubtypeName(typeName, subDefn, parentDart)
-                    Some(s"const $subName()")
+                    inner.className.map(dartClassName).map { parentDart =>
+                      s"$parentDart.${dartIdentifier(typeName)}"
+                    }
                   case _ => None
                 }
               }

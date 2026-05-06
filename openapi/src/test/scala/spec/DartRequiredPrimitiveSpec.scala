@@ -190,15 +190,18 @@ class DartRequiredPrimitiveSpec extends AnyWordSpec with Matchers {
       idSource should include("import 'dart:math'")
     }
 
-    "inline case-object polytype defaults as `const SubName()` (sigil bug #14 phase B)" in {
-      // `currentMode: Mode = ConversationMode` where ConversationMode is
-      // an empty case-object subtype. The Dart subclass has a `const`
-      // constructor, so `const ConversationMode()` is a valid Dart
-      // constant default — type-compatible with the `Mode` field type.
+    "inline case-object polytype defaults as `Parent.subCase` (sigil bug #14 + #16)" in {
+      // The codegen emits a parent-side `static const Parent subCase = Sub()`
+      // singleton and references it from the default. Sidesteps the
+      // missing-import problem (bug #16) — the consumer only needs the
+      // parent's import, which it already has for the field's declared type.
       val files = generate("WithSingletonDefault", summon[RW[WithSingletonDefault]].definition)
       val source = find(files, "with_singleton_default.dart")
-      source should include("this.currentMode = const SpecConversationMode()")
+      val parentSource = find(files, "spec_mode.dart")
+      source should include("this.currentMode = SpecMode.specConversationMode")
       source should not include "required this.currentMode"
+      source should not include "const SpecConversationMode()"
+      parentSource should include regex """static\s+const\s+SpecMode\s+specConversationMode\s+=\s+SpecConversationMode\(\)"""
     }
 
     "inline enum-case defaults as `EnumName.caseName` (sigil bug #14 phase A)" in {
