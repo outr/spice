@@ -898,22 +898,24 @@ case class DurableSocketDartGenerator(config: DurableSocketDartConfig) {
   private def renderClassField(fname: String, fDefn: Definition, dartName: String): ClassFieldRender = {
     val docComment = fDefn.description.map(d => s"  /// $d\n").getOrElse("")
     val deprecatedAnnotation = if (fDefn.deprecated) s"  @Deprecated('Deprecated field')\n" else ""
-    // Fabric wraps every defaulted field in `DefType.Opt(inner)` so the JSON
-    // decoder tolerates a missing key (the default fills in). The codegen
-    // distinguishes defaulted-Opt from true-Option by reading `defaultValue`
-    // off the outer Definition. `Option[T] = None` is also `Opt(inner)` with
-    // a default — but the default is JSON null, which in Dart can only land
-    // on a nullable field. Treat null defaults the same as no default
-    // (nullable Opt path), so `Option[T]` and `Option[T] = None` both render
-    // as `final T? field;` rather than the broken
-    // `final T field; ({this.field = null})`.
-    val defaultedInner: Option[(Definition, String)] = fDefn.defType match {
-      case DefType.Opt(inner) =>
-        fDefn.defaultValue match {
-          case Some(json) if json != fabric.Null =>
-            dartLiteralOption(json, inner).map(lit => (inner, lit))
-          case _ => None
+    // Fabric ≤1.27 wrapped every defaulted field in `DefType.Opt(inner)` so the
+    // JSON decoder tolerates a missing key. Fabric 1.28+ stops wrapping defaulted
+    // non-Option fields in `Opt` — the field's `defType` is now the bare inner
+    // type (e.g. `DefType.Bool`) with `defaultValue` still set on the outer
+    // Definition. We must handle both shapes:
+    //   - 1.27 defaulted Boolean: `Opt(Bool)` + `defaultValue = Some(Bool(false))`
+    //   - 1.28 defaulted Boolean: `Bool`        + `defaultValue = Some(Bool(false))`
+    // Either way we unwrap to the inner type and inline the literal as a Dart
+    // default. `Option[T] = None` (still `Opt(inner)` + `defaultValue = JSON null`
+    // under 1.28) takes the nullable Opt path — the `json != fabric.Null` guard
+    // prevents the broken `final T field; this.field = null` rendering.
+    val defaultedInner: Option[(Definition, String)] = fDefn.defaultValue match {
+      case Some(json) if json != fabric.Null =>
+        val inner = fDefn.defType match {
+          case DefType.Opt(i) => i
+          case _              => fDefn
         }
+        dartLiteralOption(json, inner).map(lit => (inner, lit))
       case _ => None
     }
 
