@@ -1156,10 +1156,24 @@ case class DurableSocketDartGenerator(config: DurableSocketDartConfig) {
           case _ => None
         }
 
-      // Case-object polytype singleton (Phase B): non-enum poly whose default
-      // is a single-key Obj `{"type": "SubName"}` AND that subtype's defType
-      // is an empty Obj (case object with no fields). The empty case-object
-      // class has a `const` constructor, so we emit `const SubName()`.
+      // Case-object polytype singleton (Phase B): non-simple-enum poly
+      // whose default points at a subtype with no fields. Two encodings
+      // surface here depending on how fabric serialized the polytype:
+      //
+      //   - Mixed polytype (some subtypes have fields, some are case
+      //     objects): each case-object subtype's defType is `Obj(empty)`
+      //     and the default JSON is `Obj("type" -> "SubName")`.
+      //   - Pure case-object polytype (all subtypes are case objects):
+      //     subtype defType is `Null` and `isSimpleEnum` returns true,
+      //     so this branch never runs — the simple-enum arm above
+      //     handles it via `EnumName.caseName`.
+      //
+      // The case-object subtype's Dart class is generated with a `const`
+      // constructor (set by [[generateDartObj]]'s empty-class branch),
+      // so emitting `const SubName()` is type-safe. The subtype name
+      // routes through `DartNames.dartSubtypeName` so it agrees with
+      // the polytype's class generator (handles class-chain rules and
+      // anonymous-enum-case fallback).
       case p: DefType.Poly =>
         json match {
           case fabric.Obj(m) =>
@@ -1167,7 +1181,9 @@ case class DurableSocketDartGenerator(config: DurableSocketDartConfig) {
               p.values.get(typeName).flatMap { subDefn =>
                 subDefn.defType match {
                   case DefType.Obj(fields) if fields.isEmpty =>
-                    subDefn.className.map(dartClassName).map(name => s"const $name()")
+                    val parentDart = inner.className.map(dartClassName)
+                    val subName = DartNames.dartSubtypeName(typeName, subDefn, parentDart)
+                    Some(s"const $subName()")
                   case _ => None
                 }
               }

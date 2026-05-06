@@ -49,6 +49,15 @@ class DartRequiredPrimitiveSpec extends AnyWordSpec with Matchers {
   // Polytype with an empty case-object subtype — singleton default.
   case class WithSingletonDefault(currentMode: SpecMode = SpecConversationMode) derives RW
 
+  // Single-subtype polytype default — the most common sigil shape
+  // (`Mode = ConversationMode` ships one subtype out of the box).
+  case class WithSingleSubtypePoly(mode: SpecSingleMode = SpecSingleConvMode) derives RW
+
+  // Mode-shaped trait: concrete field defaults on the parent + case-
+  // object subtypes that override them. Mirrors Sigil's actual `Mode`
+  // / `ConversationMode` / `CodingMode` setup that bug #15 surfaces.
+  case class WithModeShape(kind: SpecModeShapeKind = SpecModeShapeConv) derives RW
+
   private def generate(name: String, defn: fabric.define.Definition) =
     DurableSocketDartGenerator(
       DurableSocketDartConfig(serviceName = "Test", wireType = name -> defn)
@@ -225,6 +234,71 @@ class DartRequiredPrimitiveSpec extends AnyWordSpec with Matchers {
       source should not include "required this.keywords"
     }
 
+    "render singleton-trait defaults against a polytype with a single empty subtype (sigil bug #15)" in {
+      // Sigil's `Mode = ConversationMode` shape — the parent trait has
+      // exactly one case-object subtype out of the box. Verify the
+      // codegen emits a default that compiles: either `const SubName()`
+      // referencing a generated subtype class, or the simple-enum path
+      // referencing a Dart enum case. Either is correct as long as
+      // the named symbol exists in the generated output.
+      val files = generate("WithSingleSubtypePoly", summon[RW[WithSingleSubtypePoly]].definition)
+      val source = find(files, "with_single_subtype_poly.dart")
+      val parentSource = scala.util.Try(find(files, "spec_single_mode.dart")).toOption
+      val subtypeSource = scala.util.Try(find(files, "spec_single_conv_mode.dart")).toOption
+
+      // Two valid renderings:
+      //   (a) simple-enum path: `final SpecSingleMode mode; this.mode = SpecSingleMode.specSingleConvMode`
+      //   (b) class-hierarchy path: `this.mode = const SpecSingleConvMode()` AND a `class SpecSingleConvMode` exists
+      val emittedAsEnum  = source.contains("SpecSingleMode.")
+      val emittedAsConst = source.contains("const SpecSingleConvMode()")
+      (emittedAsEnum || emittedAsConst) shouldBe true
+
+      if (emittedAsConst) {
+        // The class referenced by the const-call must actually exist in the
+        // generated tree — otherwise Dart can't resolve the symbol.
+        subtypeSource should not be empty
+        subtypeSource.get should include("class SpecSingleConvMode")
+      }
+    }
+
+    "render trait-with-fields polytype defaults so the referenced symbol resolves (sigil bug #15)" in {
+      // Sigil's actual `Mode` shape: a trait with concrete field
+      // defaults (`name`, `description`, `keywords`, etc.). Multiple
+      // case-object subtypes override the defaults. Fabric encodes the
+      // subtype's defType as `Obj(non-empty)` (the inherited fields),
+      // so the empty-Obj branch from Phase B doesn't fire.
+      //
+      // The codegen must still emit a compileable default — either by
+      // matching the field's actual subtype class (which is generated
+      // by the polytype path) or by some other valid singleton ref.
+      // Failing safely with `required this.field` is also acceptable
+      // (caller supplies value); what's NOT acceptable is emitting a
+      // const-call against a name that doesn't exist as a Dart class.
+      val files = generate("WithModeShape", summon[RW[WithModeShape]].definition)
+      val source = find(files, "with_mode_shape.dart")
+      println("=== with_mode_shape.dart ===")
+      println(source)
+      println("=== file list ===")
+      files.foreach(f => println(s"  ${f.fileName}"))
+      println("=== fabric Definition for SpecModeShapeKind ===")
+      println(summon[RW[SpecModeShapeKind]].definition)
+      // Pull every Dart class name the codegen actually emitted so we
+      // can verify any const-call references something real.
+      val allClasses: Set[String] = files.flatMap { f =>
+        "(?s)class\\s+(\\w+)".r.findAllMatchIn(f.source).map(_.group(1)).toList
+      }.toSet
+      val emittedEnumRef    = """\bSpecModeShapeKind\.\w+""".r.findFirstIn(source).isDefined
+      val emittedConstCall  = """const\s+(\w+)\s*\(\s*\)""".r.findFirstMatchIn(source)
+      val emittedRequired   = source.contains("required this.kind")
+      // At least one rendering choice must apply.
+      (emittedEnumRef || emittedConstCall.isDefined || emittedRequired) shouldBe true
+      // If the codegen chose const-call, the named class must exist.
+      emittedConstCall.foreach { m =>
+        val name = m.group(1)
+        allClasses should contain(name)
+      }
+    }
+
     "preserve required vs defaulted on subtypes reached through a polytype" in {
       // Mirrors the original sigil bug repro path: required + defaulted
       // primitives on a case class reached as a subtype of a sealed
@@ -276,3 +350,22 @@ enum SpecState derives RW { case Active, Complete, Cancelled }
 sealed trait SpecMode derives RW
 case object SpecConversationMode extends SpecMode
 case class SpecCustomMode(label: String) extends SpecMode
+
+// Single-empty-subtype polytype — the codegen has to pick *some*
+// rendering; either Dart enum or const-class call. The bug-#15 test
+// is permissive: it accepts whichever rendering the codegen chooses
+// AS LONG AS the referenced symbol exists.
+sealed trait SpecSingleMode derives RW
+case object SpecSingleConvMode extends SpecSingleMode
+
+// Sigil's `Mode` shape: a sealed trait with concrete field defaults
+// (`name`, `description`) + multiple case-object subtypes overriding
+// them. Fabric encodes each subtype's defType as `Obj(non-empty)`
+// (the inherited field set), so the empty-Obj Phase B path doesn't
+// apply — the codegen has to route this through the simple-enum
+// path or a different singleton rendering.
+sealed trait SpecModeShapeKind derives RW {
+  def name: String
+}
+case object SpecModeShapeConv extends SpecModeShapeKind { val name = "conv" }
+case object SpecModeShapeWork extends SpecModeShapeKind { val name = "work" }
