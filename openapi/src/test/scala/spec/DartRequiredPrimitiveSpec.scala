@@ -34,6 +34,11 @@ class DartRequiredPrimitiveSpec extends AnyWordSpec with Matchers {
                                sessionId: Option[String] = None,
                                workspaceId: Option[String] = None) derives RW
 
+  case class WithWrapperDefaults(created: SpecTimestamp = SpecTimestamp(1234L),
+                                  id: SpecId = SpecId("static-id")) derives RW
+
+  case class WithEnumDefault(state: SpecState = SpecState.Active) derives RW
+
   private def generate(name: String, defn: fabric.define.Definition) =
     DurableSocketDartGenerator(
       DurableSocketDartConfig(serviceName = "Test", wireType = name -> defn)
@@ -112,6 +117,45 @@ class DartRequiredPrimitiveSpec extends AnyWordSpec with Matchers {
       source should not include " = null"
     }
 
+    "not inline wrapper-typed defaults as raw primitive literals (sigil bug #13)" in {
+      // Fabric encodes `Timestamp = Timestamp()` / `Id = Id.unique()` as a
+      // primitive `defType` *with a className* — typed wrappers around
+      // String/Long/etc. The default JSON is the wrapper's primitive
+      // payload. Naively unwrapping and emitting the literal produced
+      // `final Timestamp created; this.created = 1778027035896;` — a
+      // type error (int can't assign to Timestamp). Synthesizing
+      // `const Timestamp(123)` would also freeze the codegen-moment
+      // value across every Dart-constructed instance, breaking the
+      // fresh-on-construction semantic for `id` / `created` style
+      // fields. Solution: never inline wrapper-typed defaults. Field
+      // becomes `required` so Dart callers supply the value explicitly.
+      val files = generate("WithWrapperDefaults", summon[RW[WithWrapperDefaults]].definition)
+      val source = find(files, "with_wrapper_defaults.dart")
+      source should include("final SpecTimestamp created;")
+      source should include("final SpecId id;")
+      source should include("required this.created")
+      source should include("required this.id")
+      source should not include "this.created = 1234"
+      source should not include "this.created = const SpecTimestamp"
+      source should not include "this.id = 'static-id'"
+      source should not include "this.id = const SpecId"
+    }
+
+    "not inline enum-typed defaults as raw case-name strings (sigil bug #13)" in {
+      // Same regression as wrappers but for enum-typed defaults: the
+      // default JSON is the case discriminator (a string), but the Dart
+      // field type is the generated enum class. `this.state = 'Active'`
+      // doesn't compile against `final SpecState state`. Fall through
+      // to required so Dart callers must supply the case explicitly.
+      val files = generate("WithEnumDefault", summon[RW[WithEnumDefault]].definition)
+      val source = find(files, "with_enum_default.dart")
+      source should include("final SpecState state;")
+      source should include("required this.state")
+      source should not include "this.state = 'Active'"
+      source should not include "this.state = \"Active\""
+      source should not include "this.state = SpecState"
+    }
+
     "preserve required vs defaulted on subtypes reached through a polytype" in {
       // Mirrors the original sigil bug repro path: required + defaulted
       // primitives on a case class reached as a subtype of a sealed
@@ -141,3 +185,17 @@ case class RespondOptionsToolInput(prompt: String,
                                     allowMultiple: Boolean) extends ToolInput derives RW
 case class SelectOptionToolInput(label: String,
                                   exclusive: Boolean = false) extends ToolInput derives RW
+
+// Typed wrappers — primitive-shaped but with a className, mirroring sigil's
+// `Timestamp` / `Id` / etc. for bug #13.
+case class SpecTimestamp(value: Long) extends AnyVal
+object SpecTimestamp {
+  given RW[SpecTimestamp] = RW.long(_.value, SpecTimestamp.apply, className = Some("spec.SpecTimestamp"))
+}
+case class SpecId(value: String) extends AnyVal
+object SpecId {
+  given RW[SpecId] = RW.string(_.value, SpecId.apply, className = Some("spec.SpecId"))
+}
+
+// Enum-typed default — same shape as `EventState` / `MessageRole`.
+enum SpecState derives RW { case Active, Complete, Cancelled }

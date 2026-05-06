@@ -915,7 +915,19 @@ case class DurableSocketDartGenerator(config: DurableSocketDartConfig) {
           case DefType.Opt(i) => i
           case _              => fDefn
         }
-        dartLiteralOption(json, inner).map(lit => (inner, lit))
+        // Only inline defaults for *bare* primitives. Typed wrappers
+        // (`Id`, `Timestamp`, etc. — primitive-shaped but with `className`
+        // set) and enums (Poly with simple-enum shape) need different
+        // rendering we can't safely synthesize from a JSON literal: the
+        // wrapper's Dart constructor would have to be invoked, the enum
+        // case referenced by name, and effectful defaults (e.g.
+        // `Timestamp()`, `Id.unique()`) would freeze the codegen-moment
+        // value as a per-class constant — wrong on every count. Fall
+        // through to the nullable Opt path; Dart callers must pass the
+        // value explicitly or accept the field as null.
+        val safeToInline = inner.className.isEmpty && isPrimitive(inner.defType)
+        if (safeToInline) dartLiteralOption(json, inner).map(lit => (inner, lit))
+        else None
       case _ => None
     }
 
