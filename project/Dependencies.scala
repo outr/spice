@@ -16,13 +16,13 @@ object Dependencies {
     
     val okHttp: String = "5.3.2"
 
-    val netty: String = "4.2.12.Final"
+    val netty: String = "4.2.13.Final"
 
     val httpMime: String = "4.5.14"
     
-    val undertow: String = "2.3.24.Final"
+    val undertow: String = "2.4.0.Final"
 
-    val acme4j: String = "3.5.1"
+    val acme4j: String = "5.1.0"
     
     val moduload: String = "1.1.7"
 
