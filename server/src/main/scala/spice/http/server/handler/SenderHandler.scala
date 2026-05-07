@@ -24,7 +24,10 @@ object SenderHandler {
     }
     val contentLength = length.getOrElse(content.length)
     exchange.modify { response =>
-      Task(response.withContent(content).withHeader(Headers.`Content-Length`(contentLength)))
+      // setHeader (replace) — `withContent` already wrote Content-Length; using `withHeader`
+      // here would APPEND a duplicate, producing `Content-Length: N, N` on the wire which
+      // clients (per RFC 7230 §3.3.2) treat as malformed and may strip entirely.
+      Task(response.withContent(content).setHeader(Headers.`Content-Length`(contentLength)))
     }.flatMap(caching.handle)
   }
 }

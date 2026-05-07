@@ -41,6 +41,12 @@ trait HttpServer extends LifecycleHandler with Initializable {
 
   def restart(): Task[Unit] = stop().flatMap(_ => start())
 
+  /** Hot-swap the running HTTPS listeners' certificates from disk without dropping
+    * connections. New TLS handshakes pick up the fresh cert; in-flight TLS sessions
+    * keep their handshake-derived keys. Falls back to `restart()` for server impls
+    * that haven't wired hot-reload (see [[HttpServerImplementation.reloadCertificates]]). */
+  def reloadCertificates(): Task[Unit] = implementation.reloadCertificates(this)
+
   override protected def preHandle(exchange: HttpExchange): Task[HttpExchange] = Task {
     val listener = config.listeners().find(l => l.matches(exchange.request.url))
     listener.map { l =>

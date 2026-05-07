@@ -20,6 +20,11 @@ import scala.jdk.CollectionConverters.ListHasAsScala
 
 class UndertowServerImplementation(server: HttpServer) extends HttpServerImplementation with UndertowHttpHandler {
   private val instance: Var[Option[Undertow]] = Var(None)
+  // Per-HTTPS-listener cert reloaders, keyed by (host, configured-port). Populated during
+  // start(); consulted by reloadCertificates() to swap key material without restarting
+  // the listener. Concurrent because reload can race with a graceful stop.
+  private val reloaders: java.util.concurrent.ConcurrentHashMap[(String, Int), spice.http.server.ReloadableSSLContext.Reloader] =
+    new java.util.concurrent.ConcurrentHashMap()
 
   override def start(server: HttpServer): Task[Unit] = Task {
     val contentEncodingRepository = new ContentEncodingRepository()
@@ -40,7 +45,11 @@ class UndertowServerImplementation(server: HttpServer) extends HttpServerImpleme
       }
       case HttpsServerListener(host, port, keyStore, enabled, _, _) => if (enabled) {
         try {
-          val sslContext = SSLUtil.createSSLContext(keyStore.location, keyStore.password)
+          // Always go through the reloadable path so reloadCertificates() can swap the
+          // cert without rebuilding the listener. The reloader is tracked by (host, port)
+          // so a later renewal can find the right one to update.
+          val (sslContext, reloader) = SSLUtil.createReloadableSSLContext(keyStore.location, keyStore.password)
+          reloaders.put((host, port.getOrElse(0)), reloader)
           builder.addHttpsListener(port.getOrElse(0), host, sslContext)
         } catch {
           case t: Throwable =>
@@ -96,7 +105,30 @@ class UndertowServerImplementation(server: HttpServer) extends HttpServerImpleme
       case Some(u) =>
         u.stop()
         instance @= None
+        reloaders.clear()
       case None => // Not running
+    }
+  }
+
+  /** Re-read each enabled HTTPS listener's keystore from disk and atomically swap the
+    * inner KeyManager — no listener teardown, no dropped connections. Listeners that
+    * weren't HTTPS (or that haven't been started yet) are skipped. */
+  override def reloadCertificates(server: HttpServer): Task[Unit] = Task {
+    server.config.listeners().foreach {
+      case https: HttpsServerListener if https.enabled =>
+        val key = (https.host, https.port.getOrElse(0))
+        Option(reloaders.get(key)) match {
+          case Some(reloader) =>
+            try reloader.reloadFrom(https.keyStore.location, https.keyStore.password)
+            catch {
+              case t: Throwable =>
+                scribe.error(s"Failed to reload certificate for $key from ${https.keyStore.path}", t)
+                throw t
+            }
+          case None =>
+            scribe.warn(s"reloadCertificates: no reloader registered for $key (server not started?)")
+        }
+      case _ => ()
     }
   }
 

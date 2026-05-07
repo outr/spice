@@ -22,16 +22,19 @@ class SecurityHeadersFilter(
           } else {
             s"max-age=$maxAge"
           }
-          r = r.withHeader(Headers.Response.`Strict-Transport-Security`(value))
+          r = r.setHeader(Headers.Response.`Strict-Transport-Security`(value))
         }
+        // setHeader (replace) — security headers are single-value; multiple values are
+        // either ignored or treated as the most-restrictive intersection by browsers,
+        // which masks the underlying duplication bug.
         frameOptions.foreach { fo =>
-          r = r.withHeader(Headers.Response.`X-Frame-Options`(fo))
+          r = r.setHeader(Headers.Response.`X-Frame-Options`(fo))
         }
         if (contentTypeOptions) {
-          r = r.withHeader(Headers.Response.`X-Content-Type-Options`("nosniff"))
+          r = r.setHeader(Headers.Response.`X-Content-Type-Options`("nosniff"))
         }
         contentSecurityPolicy.foreach { csp =>
-          r = r.withHeader(Headers.Response.`Content-Security-Policy`(csp))
+          r = r.setHeader(Headers.Response.`Content-Security-Policy`(csp))
         }
         r
       }

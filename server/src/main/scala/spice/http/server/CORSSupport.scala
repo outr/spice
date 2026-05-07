@@ -20,19 +20,22 @@ trait CORSSupport extends HttpServer {
 
       exchange.modify { response =>
         Task.pure {
+          // setHeader (replace) for every CORS header — these are single-value per RFC 6454
+          // and must not be duplicated. `withHeader` would APPEND if any were already set
+          // upstream, producing malformed responses (browsers reject duplicate ACAO etc.).
           var r = response
-            .withHeader(Headers.Response.`Access-Control-Allow-Origin`(allowOrigin))
-            .withHeader(Headers.Response.`Access-Control-Allow-Methods`(allowMethods.map(_.value).mkString(", ")))
-            .withHeader(Headers.Response.`Access-Control-Allow-Headers`(allowHeaders.mkString(", ")))
+            .setHeader(Headers.Response.`Access-Control-Allow-Origin`(allowOrigin))
+            .setHeader(Headers.Response.`Access-Control-Allow-Methods`(allowMethods.map(_.value).mkString(", ")))
+            .setHeader(Headers.Response.`Access-Control-Allow-Headers`(allowHeaders.mkString(", ")))
 
           if (allowCredentials) {
-            r = r.withHeader(Headers.Response.`Access-Control-Allow-Credentials`(true))
+            r = r.setHeader(Headers.Response.`Access-Control-Allow-Credentials`(true))
           }
           maxAge.foreach { age =>
-            r = r.withHeader(Headers.Response.`Access-Control-Max-Age`(age.toString))
+            r = r.setHeader(Headers.Response.`Access-Control-Max-Age`(age.toString))
           }
           if (exposeHeaders.nonEmpty) {
-            r = r.withHeader(Headers.Response.`Access-Control-Expose-Headers`(exposeHeaders.mkString(", ")))
+            r = r.setHeader(Headers.Response.`Access-Control-Expose-Headers`(exposeHeaders.mkString(", ")))
           }
 
           if (isPreflight) {

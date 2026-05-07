@@ -21,6 +21,8 @@ object Dependencies {
     val httpMime: String = "4.5.14"
     
     val undertow: String = "2.3.24.Final"
+
+    val acme4j: String = "3.5.1"
     
     val moduload: String = "1.1.7"
 
@@ -46,6 +48,7 @@ object Dependencies {
   val nettyResolver: ModuleID = "io.netty" % "netty-resolver" % version.netty
   val httpMime: ModuleID = "org.apache.httpcomponents" % "httpmime" % version.httpMime
 	val undertow: ModuleID = "io.undertow" % "undertow-core" % version.undertow
+	val acme4j: ModuleID = "org.shredzone.acme4j" % "acme4j-client" % version.acme4j
 	val moduload: ModuleID = "com.outr" %% "moduload" % version.moduload
 
 	val scalaTest: ModuleID = "org.scalatest" %% "scalatest" % version.scalaTest % Test

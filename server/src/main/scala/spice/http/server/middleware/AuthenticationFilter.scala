@@ -68,7 +68,7 @@ class AuthenticationFilter(authenticator: Authenticator,
           Task.pure(
             response
               .withStatus(HttpStatus.Unauthorized)
-              .withHeader(Headers.Response.`WWW-Authenticate`(s"""$scheme realm="$realm""""))
+              .setHeader(Headers.Response.`WWW-Authenticate`(s"""$scheme realm="$realm""""))
               .withContent(Content.none)
           )
         }.map(stop)

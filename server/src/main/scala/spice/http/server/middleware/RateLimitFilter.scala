@@ -33,7 +33,7 @@ class RateLimitFilter(
       val retryAfter = ((bucket.windowStart + windowMillis - now) / 1000) + 1
       stop(exchange.copy(response = exchange.response
         .withStatus(HttpStatus.TooManyRequests)
-        .withHeader(Headers.Response.`Retry-After`(retryAfter.toString))
+        .setHeader(Headers.Response.`Retry-After`(retryAfter.toString))
         .withContent(Content.string("Rate limit exceeded", spice.net.ContentType.`text/plain`))
       ))
     } else {

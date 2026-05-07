@@ -146,7 +146,7 @@ object UndertowResponseSender {
 
     // Add the Server header if not already set
     if (Headers.Response.`Server`.value(response.headers).isEmpty) {
-      response = response.withHeader(Headers.Response.`Server`(server.config.name()))
+      response = response.setHeader(Headers.Response.`Server`(server.config.name()))
     }
 
     response

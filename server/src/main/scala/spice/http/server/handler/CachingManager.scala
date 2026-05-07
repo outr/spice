@@ -12,7 +12,7 @@ object CachingManager {
   }
   case object NotCached extends CachingManager {
     override def handle(exchange: HttpExchange)(using mdc: MDC): Task[HttpExchange] = exchange.modify { response =>
-      Task(response.withHeader(Headers.`Cache-Control`(CacheControl.NoCache, CacheControl.NoStore)))
+      Task(response.setHeader(Headers.`Cache-Control`(CacheControl.NoCache, CacheControl.NoStore)))
     }
   }
   case class LastModified(publicCache: Boolean = true) extends CachingManager {
@@ -27,8 +27,8 @@ object CachingManager {
               response.copy(status = HttpStatus.NotModified, headers = Headers.empty, content = None)
             } else {
               response
-                .withHeader(Headers.`Cache-Control`(visibility))
-                .withHeader(Headers.Response.`Last-Modified`(content.lastModified))
+                .setHeader(Headers.`Cache-Control`(visibility))
+                .setHeader(Headers.Response.`Last-Modified`(content.lastModified))
             }
           }
           case None => Task.pure(response)
@@ -38,7 +38,7 @@ object CachingManager {
   }
   case class MaxAge(seconds: Long) extends CachingManager {
     override def handle(exchange: HttpExchange)(using mdc: MDC): Task[HttpExchange] = exchange.modify { response =>
-      Task(response.withHeader(Headers.`Cache-Control`(CacheControl.MaxAge(seconds))))
+      Task(response.setHeader(Headers.`Cache-Control`(CacheControl.MaxAge(seconds))))
     }
   }
 }

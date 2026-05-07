@@ -163,7 +163,7 @@ case class OAuthHandler(server: MCPServer, config: OAuthConfig, store: OAuthStor
                 val location = s"$redirectUri?code=${enc(code)}$stateParam"
                 exchange.copy(response = exchange.response
                   .withStatus(HttpStatus.Found)
-                  .withHeader("Location", location)
+                  .setHeader("Location", location)
                 ).finish()
               }
           }
@@ -236,7 +236,7 @@ case class OAuthHandler(server: MCPServer, config: OAuthConfig, store: OAuthStor
     val location = s"/oauth/authorize?$qs&error=${enc(error)}"
     Task.pure(exchange.copy(response = exchange.response
       .withStatus(HttpStatus.Found)
-      .withHeader("Location", location)
+      .setHeader("Location", location)
     ).finish())
   }
 
@@ -268,7 +268,7 @@ case class OAuthHandler(server: MCPServer, config: OAuthConfig, store: OAuthStor
       Task.pure(response
         .withStatus(status)
         .withContent(Content.json(json))
-        .withHeader("Cache-Control", "no-store"))
+        .setHeader("Cache-Control", "no-store"))
     }.map(_.finish())
   }
 

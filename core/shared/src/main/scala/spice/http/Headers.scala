@@ -20,6 +20,7 @@ case class Headers private(map: TreeMap[String, List[String]] = TreeMap.empty(us
     copy(map - header.key)
   }
   def withHeader(key: String, value: String): Headers = withHeader(Header(new StringHeaderKey(key), value))
+  def setHeader(key: String, value: String): Headers = setHeader(Header(new StringHeaderKey(key), value))
   def withHeaders(key: String, values: List[String]): Headers = copy(map + (key -> values))
   def withHeaders(headers: Header*): Headers = copy(map ++ headers.iterator.map(h => h.key.key -> List(h.value)))
 

@@ -16,6 +16,6 @@ object FormDataEntry {
   case class StringEntry(value: String, headers: Headers) extends FormDataEntry
   def JsonEntry(value: Json, headers: Headers): FormDataEntry = StringEntry(
     value = JsonFormatter.Default(value),
-    headers = headers.withHeader(Headers.`Content-Type`(ContentType.`application/json`))
+    headers = headers.setHeader(Headers.`Content-Type`(ContentType.`application/json`))
   )
 }

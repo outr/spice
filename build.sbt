@@ -139,12 +139,13 @@ lazy val delta = project
 	)
 
 lazy val server = project
-	.dependsOn(coreJVM, delta, clientImplementationJVM % "test->test")
+	.dependsOn(coreJVM, delta, clientJVM, clientImplementationJVM % "test->test")
 	.in(file("server"))
 	.settings(
 		name := "spice-server",
 		Test / testGrouping := groupTests((Test / definedTests).value),
 		libraryDependencies ++= Seq(
+			dep.acme4j,
 			dep.scalaTest
 		)
 	)

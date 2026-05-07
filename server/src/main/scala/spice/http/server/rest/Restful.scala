@@ -79,7 +79,7 @@ abstract class Restful[Request, Response](using val requestRW: RW[Request],
         Task {
           response
             .withStatus(HttpStatus.OK)
-            .withHeader("Allow", acceptedMethods.mkString(", "))
+            .setHeader("Allow", acceptedMethods.mkString(", "))
             .withContent(Content.none)
         }
       }

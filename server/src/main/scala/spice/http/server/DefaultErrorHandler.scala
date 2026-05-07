@@ -43,7 +43,7 @@ object DefaultErrorHandler extends ErrorHandler {
       val content = if (acceptsJson(exchange)) json(status, t) else html(status)
       response
         .withContent(content)
-        .withHeader(CacheControl(CacheControl.NoCache))
+        .setHeader(CacheControl(CacheControl.NoCache))
     }}
   }
 }

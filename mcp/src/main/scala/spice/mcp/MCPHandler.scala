@@ -108,7 +108,7 @@ case class MCPHandler(server: MCPServer) extends HttpHandler {
         )
 
         respondSuccess(exchange, id, result).map { e =>
-          e.copy(response = e.response.withHeader("Mcp-Session-Id", sessionId))
+          e.copy(response = e.response.setHeader("Mcp-Session-Id", sessionId))
         }
     }
   }

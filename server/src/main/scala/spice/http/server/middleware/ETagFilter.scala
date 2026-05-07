@@ -26,12 +26,12 @@ class ETagFilter extends ConnectionFilter {
                 response
                   .withStatus(HttpStatus.NotModified)
                   .withContent(Content.none)
-                  .withHeader(Headers.Response.`ETag`(etag))
+                  .setHeader(Headers.Response.`ETag`(etag))
               )
             }
           } else {
             result.modify { response =>
-              Task.pure(response.withHeader(Headers.Response.`ETag`(etag)))
+              Task.pure(response.setHeader(Headers.Response.`ETag`(etag)))
             }
           }
         case None => Task.pure(result)
