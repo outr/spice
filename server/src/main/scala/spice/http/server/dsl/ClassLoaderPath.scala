@@ -9,8 +9,11 @@ import spice.http.server.handler.SenderHandler
 case class ClassLoaderPath(classPathRoot: String = "",
                            pathTransform: String => String = (s: String) => s,
                            replaceExistingContent: Boolean = false) extends ConnectionFilter {
+  // Strip a trailing slash so callers can pass either `"static"` or `"static/"`.
+  // The previous form `substring(classPathRoot.length - 1)` returned only the LAST
+  // character, which silently turned `"test/"` into `"/"` and broke every lookup.
   private val dir = if (classPathRoot.endsWith("/")) {
-    classPathRoot.substring(classPathRoot.length - 1)
+    classPathRoot.substring(0, classPathRoot.length - 1)
   } else {
     classPathRoot
   }
