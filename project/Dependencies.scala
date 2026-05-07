@@ -22,7 +22,7 @@ object Dependencies {
     
     val undertow: String = "2.3.24.Final"
 
-    val acme4j: String = "3.5.1"
+    val acme4j: String = "5.1.0"
     
     val moduload: String = "1.1.7"
 
