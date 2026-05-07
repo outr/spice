@@ -71,7 +71,7 @@ object AcmeClient {
             )
           }
           val challenge = opt.get()
-          val recordName = Dns01Challenge.toRRName(auth.getIdentifier)
+          val recordName = challenge.getRRName(auth.getIdentifier)
           val value      = challenge.getDigest
           dns.provider.publish(recordName, value).sync()
           published += (recordName -> value)
