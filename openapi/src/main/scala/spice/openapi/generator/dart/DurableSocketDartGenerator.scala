@@ -752,11 +752,23 @@ case class DurableSocketDartGenerator(config: DurableSocketDartConfig) {
       case _: DefType.Obj if cn.isDefined => collectTypes(DartNames.dartClassName(cn.get), defn, out)
       // Polys are referenced via leaf-style names by historical convention
       // (consumers' tests assert `abstract class Animal`, not the qualified
-      // chain) — keep `cn.split('.').last` for the Poly path. Subtype names
+      // chain) — keep `cn.split('.').last` for sum-type polys. Subtype names
       // inside the poly come from `dartSubtypeName` which already applies
       // qualification, so cross-poly collisions are resolved at the subtype
       // layer, not the parent layer.
-      case _: DefType.Poly if cn.isDefined => collectTypes(cn.get.split('.').last, defn, out)
+      //
+      // Simple enums (`enum Foo { case A, B }`) are an exception: they
+      // render as a Dart enum class with NO subtype-level qualification
+      // path, so the only collision protection is the parent name itself.
+      // When the enum is nested in a companion (`object Outer { enum Inner }`)
+      // the leaf name `Inner` is ambiguous across companions. Use
+      // `dartClassName` for simple enums so the registered key matches
+      // both the import name (which already uses `dartClassName`) and the
+      // emitted file name. Sigil bug #178.
+      case _: DefType.Poly if cn.isDefined =>
+        val p = defn.defType.asInstanceOf[DefType.Poly]
+        val name = if (isSimpleEnum(p)) DartNames.dartClassName(cn.get) else cn.get.split('.').last
+        collectTypes(name, defn, out)
       case DefType.Arr(inner) => collectNestedType(inner, out)
       case DefType.Opt(inner) => collectNestedType(inner, out)
       case _ => ()
@@ -1358,7 +1370,14 @@ case class DurableSocketDartGenerator(config: DurableSocketDartConfig) {
               case None => baseName
             }
           case p: DefType.Poly if isSimpleEnum(p) =>
-            val (baseName, _) = parseClassName(cn)
+            // Sigil bug #178 — use the qualified class-chain name
+            // (`ComplexityChangeReason`) so nested-companion enums match
+            // their emitted file name + their import. The previous
+            // leaf-only name (`Reason`) collided with both the import
+            // (qualified) and the toEmit key (now qualified too), so the
+            // field type referenced an undeclared identifier and Dart
+            // fell back to InvalidType.
+            val baseName = dartClassName(cn)
             if (dartReserved.contains(baseName)) "String" else baseName
           case _: DefType.Obj =>
             // Use class-chain concatenation so nested types like

@@ -43,6 +43,21 @@ class DurableDefTypeSpec extends AnyWordSpec with Matchers {
 
   case class TypedRecord(id: UserId, name: String, created: CreatedAt, parentId: Option[UserId]) derives RW
 
+  // Sigil bug #178 — nested companion enum. Pre-fix:
+  //   - `toEmit` registered the enum under leaf name `Reason`.
+  //   - Field-type rendering emitted `Reason` (leaf).
+  //   - Import collection emitted `OwnerChange` qualified to `OwnerChangeReason`.
+  //   The three names disagreed → Dart import target didn't exist + field
+  //   type was unqualified, producing `InvalidType` cascades.
+  case class OwnerChange(previousTier: Option[OwnerChange.Reason], newTier: OwnerChange.Reason) derives RW
+  object OwnerChange {
+    enum Reason derives RW {
+      case Pinned
+      case Repinned
+      case Unpinned
+    }
+  }
+
   private def generateFiles(name: String, defn: Definition) = {
     val config = DurableSocketDartConfig(
       serviceName = "Test",
@@ -483,6 +498,29 @@ class DurableDefTypeSpec extends AnyWordSpec with Matchers {
       abstractFile should not include "bool?.dart"
       abstractFile should not include "string?.dart"
       abstractFile should not include "?.dart"
+    }
+
+    "Sigil bug #178 — emit qualified Dart enum for a nested companion enum" in {
+      val files = generateFiles("OwnerChange", summon[RW[OwnerChange]].definition)
+      val all = allSources(files)
+
+      // The enum file is emitted under the qualified name (snake_case),
+      // matching what the import and field-type now reference.
+      val enumFile = files.find(_.fileName.endsWith("owner_change_reason.dart"))
+      enumFile shouldBe defined
+      enumFile.get.source should include("enum DurableDefTypeSpecOwnerChangeReason")
+
+      // The parent class file references the qualified name, NOT the bare
+      // leaf `Reason`. Pre-fix this used the leaf and Dart fell back to
+      // `InvalidType`.
+      val ownerFile = findSource(files, "owner_change.dart")
+      ownerFile should include("DurableDefTypeSpecOwnerChangeReason newTier")
+      ownerFile should not include "final Reason newTier"
+      ownerFile should not include "InvalidType"
+
+      // The import path resolves to the actually-emitted file name —
+      // no `complexity_change_reason.dart` style orphan import.
+      all should not include "InvalidType"
     }
   }
 }
