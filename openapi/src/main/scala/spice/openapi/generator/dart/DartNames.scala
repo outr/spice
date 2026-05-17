@@ -46,7 +46,12 @@ object DartNames {
   def splitClassName(cn: String): (List[String], List[String]) = {
     val cleaned = stripTypeArgs(cn).replace("$", ".")
     val parts = cleaned.split('.').toList.filter(p => p.nonEmpty && p != "anon" && !p.forall(_.isDigit))
-    parts.span(p => p.charAt(0).isLower && !p.contains("-") && !p.contains("_"))
+    // A single segment never represents a package — it's always a leaf type
+    // name. Routing a single-segment lowercase name into the package portion
+    // would produce a `lib/model/<name>/<name>.dart` layout the polymorphic
+    // base's `const` field references can't resolve to the actual class.
+    if (parts.lengthIs <= 1) (List.empty, parts)
+    else parts.span(p => p.charAt(0).isLower && !p.contains("-") && !p.contains("_"))
   }
 
   /** Coerce a raw discriminator string into a syntactically-valid Dart class name.

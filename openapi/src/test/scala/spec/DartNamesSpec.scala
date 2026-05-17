@@ -174,6 +174,17 @@ class DartNamesSpec extends AnyWordSpec with Matchers {
       DartNames.modelPathFor("workflow-builder") shouldBe "lib/model"
     }
 
+    // A single-segment input never represents a package — it's always a leaf type
+    // name. Treating a bare `"coding"` as a package would route the generated Dart
+    // file into `lib/model/coding/coding.dart`, which the polymorphic base class's
+    // `const` references can't pick up (and which then fails to compile in Dart's
+    // const context). Single-segment inputs always go to the class chain.
+    "treat a single-segment lowercase token as a class-chain element" in {
+      DartNames.splitClassName("coding") shouldBe (List.empty, List("coding"))
+      DartNames.packagePath("coding") shouldBe ""
+      DartNames.modelPathFor("coding") shouldBe "lib/model"
+    }
+
     "leave conventional lowercase package segments alone (no false positive on alphanumeric-only tokens)" in {
       DartNames.splitClassName("com.example.foo.Bar") shouldBe (List("com", "example", "foo"), List("Bar"))
       DartNames.dartClassName("com.example.foo.Bar") shouldBe "Bar"
