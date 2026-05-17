@@ -27,6 +27,14 @@ trait MCPServer { self: MutableHttpServer =>
   /** OAuth storage for clients, codes, and tokens. Override for persistent storage. */
   lazy val oauthStore: OAuthStore = new InMemoryOAuthStore
 
+  /** MCP session storage. Tracks active `Mcp-Session-Id`s issued via the
+   *  `initialize` handshake; the handler validates incoming session ids
+   *  against this store. Default is in-memory — fine for single-process
+   *  development setups but means sessions are lost on restart. Override
+   *  with a persistent (e.g. DB-backed) implementation so MCP clients
+   *  survive server restarts without manual re-initialize. */
+  lazy val sessionStore: SessionStore = new InMemorySessionStore
+
   /**
    * Validate user credentials (email/password) for OAuth login.
    * Override to integrate with your user authentication system.

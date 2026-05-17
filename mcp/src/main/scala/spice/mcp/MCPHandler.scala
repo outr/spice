@@ -10,11 +10,12 @@ import spice.http.content.{Content, JsonContent, StringContent}
 import spice.http.server.handler.HttpHandler
 
 import java.util.UUID
-import java.util.concurrent.ConcurrentHashMap
 
 case class MCPHandler(server: MCPServer) extends HttpHandler {
 
-  private val sessions = new ConcurrentHashMap[String, MCPSession]()
+  // Session storage is pluggable via `server.sessionStore`. Default is
+  // in-memory (`InMemorySessionStore`); override on the MCPServer instance
+  // to persist sessions across restarts.
 
   private val mcpPath: String = server.mcpPath
 
@@ -57,9 +58,8 @@ case class MCPHandler(server: MCPServer) extends HttpHandler {
 
   private def handleWithSession(exchange: HttpExchange, id: Json)(f: MCPContext => Task[HttpExchange])(using MDC): Task[HttpExchange] = {
     val sessionId = exchange.request.headers.first(new StringHeaderKey("Mcp-Session-Id")).getOrElse("")
-    val session = Option(sessions.get(sessionId))
-    session match {
-      case Some(s) =>
+    server.sessionStore.get(sessionId).flatMap {
+      case Some(_) =>
         authenticateRequest(exchange).flatMap {
           case Some(ctx) => f(ctx.copy(sessionId = sessionId))
           case None => respondUnauthorized(exchange)
@@ -91,24 +91,25 @@ case class MCPHandler(server: MCPServer) extends HttpHandler {
       case None => respondUnauthorized(exchange)
       case Some(_) =>
         val sessionId = UUID.randomUUID().toString
-        sessions.put(sessionId, MCPSession(sessionId))
+        server.sessionStore.put(MCPSession(sessionId)).flatMap { _ =>
 
-        val capabilities = obj(
-          "tools" -> (if (server.tools.nonEmpty) obj("listChanged" -> false.json) else obj()),
-          "resources" -> (if (server.resources.nonEmpty) obj("listChanged" -> false.json) else obj())
-        )
-
-        val result = obj(
-          "protocolVersion" -> str("2025-03-26"),
-          "capabilities" -> capabilities,
-          "serverInfo" -> obj(
-            "name" -> str(server.mcpName),
-            "version" -> str(server.mcpVersion)
+          val capabilities = obj(
+            "tools" -> (if (server.tools.nonEmpty) obj("listChanged" -> false.json) else obj()),
+            "resources" -> (if (server.resources.nonEmpty) obj("listChanged" -> false.json) else obj())
           )
-        )
 
-        respondSuccess(exchange, id, result).map { e =>
-          e.copy(response = e.response.setHeader("Mcp-Session-Id", sessionId))
+          val result = obj(
+            "protocolVersion" -> str("2025-03-26"),
+            "capabilities" -> capabilities,
+            "serverInfo" -> obj(
+              "name" -> str(server.mcpName),
+              "version" -> str(server.mcpVersion)
+            )
+          )
+
+          respondSuccess(exchange, id, result).map { e =>
+            e.copy(response = e.response.setHeader("Mcp-Session-Id", sessionId))
+          }
         }
     }
   }
@@ -183,10 +184,11 @@ case class MCPHandler(server: MCPServer) extends HttpHandler {
 
   private def handleDelete(exchange: HttpExchange)(using MDC): Task[HttpExchange] = {
     val sessionId = exchange.request.headers.first(new StringHeaderKey("Mcp-Session-Id")).getOrElse("")
-    sessions.remove(sessionId)
-    exchange.modify { response =>
-      Task.pure(response.withStatus(HttpStatus.NoContent))
-    }.map(_.finish())
+    server.sessionStore.remove(sessionId).flatMap { _ =>
+      exchange.modify { response =>
+        Task.pure(response.withStatus(HttpStatus.NoContent))
+      }.map(_.finish())
+    }
   }
 
   private def parseRequestBody(exchange: HttpExchange): Task[Option[JsonRPCRequest]] = {
