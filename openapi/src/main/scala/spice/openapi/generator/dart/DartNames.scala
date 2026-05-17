@@ -37,29 +37,46 @@ object DartNames {
     *   "sigil.tool.model.ResponseContent.Text" → (List(sigil, tool, model), List(ResponseContent, Text))
     *
     * `$` is normalized to `.` first, and noise segments (empty, "anon", digit-only) are
-    * dropped so Scala 3 anonymous-case-object names don't leak into Dart identifiers. */
+    * dropped so Scala 3 anonymous-case-object names don't leak into Dart identifiers.
+    *
+    * Hyphenated / underscored tokens — e.g. `"workflow-builder"` written by a polymorphic
+    * RW whose discriminator value is a kebab-case identifier rather than a Scala class name
+    * — count as class-chain elements, not package segments. Treating them as packages would
+    * leak the hyphen into the file system path and produce invalid Dart class names. */
   def splitClassName(cn: String): (List[String], List[String]) = {
     val cleaned = stripTypeArgs(cn).replace("$", ".")
     val parts = cleaned.split('.').toList.filter(p => p.nonEmpty && p != "anon" && !p.forall(_.isDigit))
-    parts.span(p => p.charAt(0).isLower)
+    parts.span(p => p.charAt(0).isLower && !p.contains("-") && !p.contains("_"))
   }
+
+  /** Coerce a raw discriminator string into a syntactically-valid Dart class name.
+    * Hyphens and underscores are treated as word separators; each separated word is
+    * upper-cased on its first letter and concatenated. Alphanumeric inputs pass through
+    * unchanged. */
+  private def sanitizeDartIdentifier(s: String): String =
+    if (s.isEmpty || !(s.contains('-') || s.contains('_'))) s
+    else s.split("[-_]+").filter(_.nonEmpty).map(p => p.head.toUpper +: p.tail).mkString
 
   /** Concatenate the className's class chain into a single Dart class name.
     *
     *   "sigil.tool.model.ResponseContent.Text"   → "ResponseContentText"
     *   "sigil.conversation.ContextFrame.Text"    → "ContextFrameText"
     *   "lightdb.id.Id"                           → "Id"
+    *   "workflow-builder"                        → "WorkflowBuilder"
     *
     * Falls back to the leaf segment (or the whole input with separators stripped) when no
-    * class chain can be identified. */
+    * class chain can be identified. Hyphenated / underscored inputs are PascalCase'd so
+    * the result is a syntactically-valid Dart identifier. */
   def dartClassName(cn: String): String = {
     val (_, classChain) = splitClassName(cn)
-    if (classChain.nonEmpty) classChain.mkString
-    else {
-      val cleaned = stripTypeArgs(cn).replace("$", ".")
-      val parts = cleaned.split('.').toList.filter(_.nonEmpty)
-      parts.lastOption.getOrElse(cn.replace(" ", "").replace(".", ""))
-    }
+    val raw =
+      if (classChain.nonEmpty) classChain.mkString
+      else {
+        val cleaned = stripTypeArgs(cn).replace("$", ".")
+        val parts = cleaned.split('.').toList.filter(_.nonEmpty)
+        parts.lastOption.getOrElse(cn.replace(" ", "").replace(".", ""))
+      }
+    sanitizeDartIdentifier(raw)
   }
 
   /** Dart class name for a polymorphic subtype.
@@ -73,7 +90,7 @@ object DartNames {
       case _ => ""
     }
     if (derived.nonEmpty && !derived.forall(_.isDigit)) derived
-    else parentDartName.map(p => s"$p$key").getOrElse(key)
+    else parentDartName.map(p => s"$p${sanitizeDartIdentifier(key)}").getOrElse(sanitizeDartIdentifier(key))
   }
 
   /** Wire discriminator value for a className — matches Fabric's `Product.productPrefix`

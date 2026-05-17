@@ -70,7 +70,17 @@ case class DurableSocketDartConfig(
     * (Event + Notice + Delta) populate this with the names of their durable
     * Event subtypes so `client.push(notice)` is framed correctly without the
     * consumer needing to know wire-format details. */
-  durableSubtypes: Set[String] = Set.empty
+  durableSubtypes: Set[String] = Set.empty,
+  /** Per-poly discriminator JSON key override. Map keyed by the polymorphic parent's
+    * `Definition.className` (the Scala class FQN), value is the JSON key to read
+    * the discriminator from / write the discriminator to.
+    *
+    * Default: every poly uses `"type"`, matching Fabric's default polymorphic
+    * RW. Consumers whose polymorphic RW uses a different key (e.g. Sigil's `Mode`
+    * uses `"name"` so the wire stays aligned with `Mode.name`) override here. The
+    * parent's `fromJson` dispatcher reads from this key and every subtype's
+    * `toJson()` writes to it. */
+  polyDiscriminatorKeys: Map[String, String] = Map.empty
 )
 
 /** Generates Dart code for a DurableSocket client, event handler, event sender,
@@ -94,6 +104,14 @@ case class DurableSocketDartGenerator(config: DurableSocketDartConfig) {
   private def dartClassName(cn: String): String = DartNames.dartClassName(cn)
   private def dartSubtypeName(key: String, defn: Definition, parentDartName: Option[String] = None): String =
     DartNames.dartSubtypeName(key, defn, parentDartName)
+
+  /** Resolve the per-poly discriminator JSON key from the config map. Defaults to
+    * `"type"` (matching Fabric's default polymorphic RW). The parent poly's
+    * `Definition.className` is the lookup key; consumers whose RW uses a different
+    * JSON discriminator field name (e.g. Sigil's `Mode` uses `"name"`) opt in via
+    * `DurableSocketDartConfig.polyDiscriminatorKeys`. */
+  private def discriminatorKeyFor(polyClassName: Option[String]): String =
+    polyClassName.flatMap(config.polyDiscriminatorKeys.get).getOrElse("type")
 
   /** Rename fields that would be private in Dart (underscore prefix). */
   private def dartFieldName(name: String): String = if (name.startsWith("_")) name.drop(1) else name
@@ -513,8 +531,14 @@ case class DurableSocketDartGenerator(config: DurableSocketDartConfig) {
             val wireName = subtypeWireKey.getOrElse(name,
               defn.className.map(cn => parseClassName(cn)._1).getOrElse(name)
             )
+            // Concrete subtype: discriminator key is set by the PARENT poly's
+            // override (if any). Look up the parent's Definition in toEmit to
+            // get its className, then resolve.
+            val subtypeDiscriminatorKey = discriminatorKeyFor(
+              parent.flatMap(p => toEmit.get(p)).flatMap(_.className)
+            )
             files += SourceFile("Dart", dn, fileName, filePath,
-              wrapClass(dn, fileName, generateDartClassBody(dn, wireName, o, toEmit, parent), allImports, hasFields = o.map.nonEmpty))
+              wrapClass(dn, fileName, generateDartClassBody(dn, wireName, o, toEmit, parent, subtypeDiscriminatorKey), allImports, hasFields = o.map.nonEmpty))
             exportNames += (if (subDir.nonEmpty) s"$subDir/$fileName" else fileName)
           case p: DefType.Poly =>
             val subImports = p.values.map { case (key, subDefn) =>
@@ -524,8 +548,12 @@ case class DurableSocketDartGenerator(config: DurableSocketDartConfig) {
             val parentImport = parent.map(p => s"import '${importPath(subDir, p)}';").toList
             val commonFieldImports = detectCommonFieldImports(p).map(t => s"import '${importPath(subDir, t)}';")
             val allImports = (subImports ++ parentImport ++ commonFieldImports).distinct.sorted
+            // This poly's own discriminator key — controls how its parent's
+            // fromJson reads the field AND aligns the JSON shape with whatever
+            // the consumer's Fabric RW emits on the wire.
+            val polyDiscriminatorKey = discriminatorKeyFor(defn.className)
             files += SourceFile("Dart", dn, fileName, filePath,
-              wrapPoly(dn, generateDartPoly(dn, p, toEmit, parent), allImports))
+              wrapPoly(dn, generateDartPoly(dn, p, toEmit, parent, polyDiscriminatorKey), allImports))
             exportNames += (if (subDir.nonEmpty) s"$subDir/$fileName" else fileName)
           case _ =>
         }
@@ -712,8 +740,9 @@ case class DurableSocketDartGenerator(config: DurableSocketDartConfig) {
     wireName: String,
     o: DefType.Obj,
     knownTypes: mutable.LinkedHashMap[String, Definition],
-    parentName: Option[String] = None
-  ): String = generateDartClass(dartName, wireName, o, knownTypes, parentName)
+    parentName: Option[String] = None,
+    discriminatorKey: String = "type"
+  ): String = generateDartClass(dartName, wireName, o, knownTypes, parentName, discriminatorKey)
 
   /** Recursively collect named types from a Definition tree into `out` (in dependency order). */
   private def collectTypes(name: String, defn: Definition, out: mutable.LinkedHashMap[String, Definition]): Unit = {
@@ -898,7 +927,8 @@ case class DurableSocketDartGenerator(config: DurableSocketDartConfig) {
     wireName: String,
     o: DefType.Obj,
     knownTypes: mutable.LinkedHashMap[String, Definition],
-    parentName: Option[String] = None
+    parentName: Option[String] = None,
+    discriminatorKey: String = "type"
   ): String = {
     val extendsClause = parentName.map(p => s" extends $p").getOrElse("")
     // Discriminator on the wire is Fabric's poly key (original Scala class
@@ -916,7 +946,7 @@ case class DurableSocketDartGenerator(config: DurableSocketDartConfig) {
          |  const $dartName();
          |  $dartName.fromJson(Map<String, dynamic> json);
          |
-         |  Map<String, dynamic> toJson() => {'type': '$typeValue'};
+         |  Map<String, dynamic> toJson() => {'$discriminatorKey': '$typeValue'};
          |}""".stripMargin
     } else {
       val rendered = o.map.toList.map { case (fname, fDefn) =>
@@ -939,7 +969,7 @@ case class DurableSocketDartGenerator(config: DurableSocketDartConfig) {
          |  $dartName.fromJson(Map<String, dynamic> json)
          |      : $fromJsonInits;
          |
-         |  Map<String, dynamic> toJson() => {'type': '$typeValue', $toJsonEntries};
+         |  Map<String, dynamic> toJson() => {'$discriminatorKey': '$typeValue', $toJsonEntries};
          |}""".stripMargin
     }
   }
@@ -948,7 +978,8 @@ case class DurableSocketDartGenerator(config: DurableSocketDartConfig) {
     name: String,
     p: DefType.Poly,
     knownTypes: mutable.LinkedHashMap[String, Definition],
-    parentName: Option[String] = None
+    parentName: Option[String] = None,
+    discriminatorKey: String = "type"
   ): String = {
     val extendsClause = parentName.map(p => s" extends $p").getOrElse("")
     val cases = p.values.map { case (key, defn) =>
@@ -997,7 +1028,7 @@ case class DurableSocketDartGenerator(config: DurableSocketDartConfig) {
        |  Map<String, dynamic> toJson();
        |
        |  static $name fromJson(Map<String, dynamic> json) {
-       |    final type = json['type'] as String?;
+       |    final type = json['$discriminatorKey'] as String?;
        |$cases
        |    throw ArgumentError('Unknown $name type: $$type (keys: $${json.keys.join(", ")})');
        |  }

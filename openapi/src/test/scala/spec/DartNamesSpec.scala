@@ -131,6 +131,41 @@ class DartNamesSpec extends AnyWordSpec with Matchers {
     }
   }
 
+  "DartNames hyphen + underscore handling for non-Scala discriminator values" should {
+    // Sigil's Mode polymorphic RW writes Mode.name (a kebab-case identifier
+    // like "workflow-builder") as the wire discriminator value AND parks the
+    // same string in Definition.className. spice's Dart generator must:
+    //   - keep the wire discriminator value unchanged (preserves round-trip)
+    //   - produce a syntactically-valid Dart class name (PascalCase)
+    //   - produce a hyphen-free package path (so file system / import paths
+    //     stay clean)
+    "PascalCase a hyphenated discriminator into a valid Dart class name" in {
+      DartNames.dartClassName("workflow-builder") shouldBe "WorkflowBuilder"
+      DartNames.dartClassName("web-browser") shouldBe "WebBrowser"
+      DartNames.dartClassName("script-authoring") shouldBe "ScriptAuthoring"
+    }
+
+    "PascalCase an underscored discriminator into a valid Dart class name" in {
+      DartNames.dartClassName("snake_case_name") shouldBe "SnakeCaseName"
+    }
+
+    "preserve the kebab-case discriminator value on the wire" in {
+      DartNames.wireDiscriminator("workflow-builder") shouldBe "workflow-builder"
+      DartNames.wireDiscriminator("web-browser") shouldBe "web-browser"
+    }
+
+    "treat a hyphenated lowercase-starting token as a class-chain element, not a package segment" in {
+      DartNames.splitClassName("workflow-builder") shouldBe (List.empty, List("workflow-builder"))
+      DartNames.packagePath("workflow-builder") shouldBe ""
+      DartNames.modelPathFor("workflow-builder") shouldBe "lib/model"
+    }
+
+    "leave conventional lowercase package segments alone (no false positive on alphanumeric-only tokens)" in {
+      DartNames.splitClassName("com.example.foo.Bar") shouldBe (List("com", "example", "foo"), List("Bar"))
+      DartNames.dartClassName("com.example.foo.Bar") shouldBe "Bar"
+    }
+  }
+
   "DartNames.snakeCaseFile" should {
     "lowercase the first character and break before each subsequent uppercase letter" in {
       DartNames.snakeCaseFile("SimpleMessage") shouldBe "simple_message"
