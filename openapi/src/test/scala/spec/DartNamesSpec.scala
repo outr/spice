@@ -149,6 +149,20 @@ class DartNamesSpec extends AnyWordSpec with Matchers {
       DartNames.dartClassName("snake_case_name") shouldBe "SnakeCaseName"
     }
 
+    // Single-word lowercase discriminators (e.g. Sigil mode names like
+    // `coding`, `conversation`) need the first letter capitalised too —
+    // otherwise the emitted base class's `static const Mode coding = coding();`
+    // becomes a method-invocation parse error in Dart's const context.
+    "PascalCase a single-word lowercase discriminator (no separators)" in {
+      DartNames.dartClassName("coding") shouldBe "Coding"
+      DartNames.dartClassName("conversation") shouldBe "Conversation"
+    }
+
+    "leave already-PascalCase identifiers alone (idempotent)" in {
+      DartNames.dartClassName("Coding") shouldBe "Coding"
+      DartNames.dartClassName("WorkflowBuilder") shouldBe "WorkflowBuilder"
+    }
+
     "preserve the kebab-case discriminator value on the wire" in {
       DartNames.wireDiscriminator("workflow-builder") shouldBe "workflow-builder"
       DartNames.wireDiscriminator("web-browser") shouldBe "web-browser"

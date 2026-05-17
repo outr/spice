@@ -51,10 +51,13 @@ object DartNames {
 
   /** Coerce a raw discriminator string into a syntactically-valid Dart class name.
     * Hyphens and underscores are treated as word separators; each separated word is
-    * upper-cased on its first letter and concatenated. Alphanumeric inputs pass through
-    * unchanged. */
+    * upper-cased on its first letter and concatenated. Single-word inputs (no
+    * separator) are still capitalised — a bare `"coding"` becomes `"Coding"` so the
+    * generated polymorphic base's `static const Mode coding = Coding();` field
+    * parses cleanly in Dart's const context. Already-capitalised inputs (`"Coding"`,
+    * `"WorkflowBuilder"`) pass through unchanged. */
   private def sanitizeDartIdentifier(s: String): String =
-    if (s.isEmpty || !(s.contains('-') || s.contains('_'))) s
+    if (s.isEmpty) s
     else s.split("[-_]+").filter(_.nonEmpty).map(p => p.head.toUpper +: p.tail).mkString
 
   /** Concatenate the className's class chain into a single Dart class name.
