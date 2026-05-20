@@ -260,10 +260,7 @@ case class HttpClient(request: HttpRequest,
     }
   }
 
-  /** Send the request and return the response body as a stream of lines.
-    * Used for Server-Sent Events (SSE), NDJSON, and other line-based streaming protocols.
-    * The stream emits each line as it arrives — no buffering of the full response. */
-  def streamLines(): Task[rapid.Stream[String]] = {
+  private def streamRequest: HttpRequest = {
     val updatedHeaders = sessionManager match {
       case Some(sm) =>
         val cookieHeaders = sm.session.cookies.map { cookie =>
@@ -272,8 +269,22 @@ case class HttpClient(request: HttpRequest,
         request.headers.withHeaders(Headers.Request.`Cookie`.key, cookieHeaders)
       case None => request.headers
     }
-    instance.sendStream(request.copy(headers = updatedHeaders))
+    request.copy(headers = updatedHeaders)
   }
+
+  /** Send the request and return the response body as a stream of lines.
+    * Used for Server-Sent Events (SSE), NDJSON, and other line-based streaming protocols.
+    * The stream emits each line as it arrives — no buffering of the full response. */
+  def streamLines(): Task[rapid.Stream[String]] = instance.sendStream(streamRequest)
+
+  /** Send the request and return a [[StreamHandle]] — the response body as a stream of lines paired
+    * with a handle to abort the in-flight call.
+    *
+    * Use this instead of `streamLines()` when a caller needs to cancel a streaming request before
+    * it completes naturally (e.g. stopping an in-flight LLM response). Running `StreamHandle.cancel`
+    * aborts the underlying HTTP call; the stream consumer then terminates. For backends without
+    * native abort support the cancel handle is a no-op and the stream behaves as `streamLines()`. */
+  def streamLinesHandle(): Task[StreamHandle[String]] = instance.sendStreamHandle(streamRequest)
 
   def webSocket(): WebSocket = instance.webSocket(request.url)
 

@@ -93,6 +93,7 @@ lazy val clientImplementationOkHttp = project
 	.in(file("client/implementation/okhttp"))
 	.settings(
 		name := "spice-client-okhttp",
+		fork := true,
 		libraryDependencies ++= Seq(
 			dep.okHttp,
 			dep.scalaTest
@@ -104,6 +105,7 @@ lazy val clientImplementationJVM = project
 	.in(file("client/implementation/jvm"))
 	.settings(
 		name := "spice-client-jvm",
+		fork := true,
 		libraryDependencies ++= Seq(
 			dep.httpMime,
 			dep.scalaTest
@@ -115,6 +117,7 @@ lazy val clientImplementationNetty = project
 	.in(file("client/implementation/netty"))
 	.settings(
 		name := "spice-client-netty",
+		fork := true,
 		libraryDependencies ++= Seq(
 			dep.nettyCodecHttp,
 			dep.nettyHandler,

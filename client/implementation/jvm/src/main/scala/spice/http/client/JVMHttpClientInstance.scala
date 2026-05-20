@@ -41,7 +41,12 @@ class JVMHttpClientInstance(client: HttpClient) extends HttpClientInstance {
     response <- response2Spice(jvmResponse)
   } yield Success(response)
 
-  override def sendStream(request: HttpRequest): Task[rapid.Stream[String]] = for {
+  override def sendStream(request: HttpRequest): Task[rapid.Stream[String]] =
+    sendStreamHandle(request).map(_.stream)
+
+  /** Stream the response body line-by-line via java.net.http, paired with a [[StreamHandle]] whose
+    * `cancel` task closes the response `InputStream` — aborting the in-flight streaming call. */
+  override def sendStreamHandle(request: HttpRequest): Task[StreamHandle[String]] = for {
     jvmRequest <- request2JVM(request)
     jvmResponse <- Task(jvmClient.send(jvmRequest, BodyHandlers.ofInputStream()))
       .handleError { t =>
@@ -52,21 +57,33 @@ class JVMHttpClientInstance(client: HttpClient) extends HttpClientInstance {
       val errorBody = new String(jvmResponse.body().readAllBytes(), java.nio.charset.StandardCharsets.UTF_8)
       throw new RuntimeException(s"HTTP ${jvmResponse.statusCode()}: ${errorBody.take(500)}")
     }
+    val body = jvmResponse.body()
     val reader = new java.io.BufferedReader(
-      new java.io.InputStreamReader(jvmResponse.body(), java.nio.charset.StandardCharsets.UTF_8))
+      new java.io.InputStreamReader(body, java.nio.charset.StandardCharsets.UTF_8))
     var done = false
+    val closeResources = Task {
+      done = true
+      Try(reader.close())
+      Try(body.close())
+    }.unit
     val pull = rapid.Pull.fromFunction[String](
       pullF = () => {
-        if (done) rapid.Step.Stop
-        else {
-          val line = reader.readLine()
+        if (done) {
+          rapid.Step.Stop
+        } else {
+          val line =
+            try reader.readLine()
+            catch {
+              // A concurrent close of the response stream surfaces as an IOException on the read.
+              case _: java.io.IOException if done => null
+            }
           if (line == null) { done = true; rapid.Step.Stop }
           else rapid.Step.Emit(line)
         }
       },
-      close = Task(reader.close())
+      close = closeResources
     )
-    new rapid.Stream(Task.pure(pull))
+    StreamHandle(new rapid.Stream(Task.pure(pull)), closeResources)
   }
 
   override def webSocket(url: URL): WebSocket = new JVMHttpClientWebSocket(url, this)

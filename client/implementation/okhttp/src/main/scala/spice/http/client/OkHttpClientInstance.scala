@@ -113,6 +113,74 @@ class OkHttpClientInstance(client: HttpClient) extends HttpClientInstance {
     OkHttpClientImplementation.process(completable.attempt)
   }
 
+  override def sendStream(request: HttpRequest): Task[rapid.Stream[String]] =
+    sendStreamHandle(request).map(_.stream)
+
+  /** Stream the response body line-by-line via OkHttp. Lines are delivered incrementally as bytes
+    * arrive — the full response is never buffered. The returned [[StreamHandle]] carries a `cancel`
+    * task wired to OkHttp's `Call.cancel()`, so an in-flight streaming call can be aborted. */
+  override def sendStreamHandle(request: HttpRequest): Task[StreamHandle[String]] = {
+    val streamReady = Task.completable[StreamHandle[String]]
+    val req = requestToOk(request)
+    val call = instance.newCall(req)
+    call.enqueue(new okhttp3.Callback {
+      override def onResponse(c: okhttp3.Call, res: okhttp3.Response): Unit = {
+        val body = res.body()
+        if (res.code() >= 400) {
+          val errorBody = Try(Option(body).map(_.string()).getOrElse("")).getOrElse("")
+          Try(res.close())
+          streamReady.failure(new RuntimeException(s"HTTP ${res.code()}: ${errorBody.take(500)}"))
+        } else if (body == null) {
+          Try(res.close())
+          streamReady.success(StreamHandle(rapid.Stream.emits(Seq.empty[String]), Task.unit))
+        } else {
+          val reader = new java.io.BufferedReader(
+            new java.io.InputStreamReader(body.byteStream(), java.nio.charset.StandardCharsets.UTF_8))
+          var done = false
+          val closeResources = Task {
+            done = true
+            Try(reader.close())
+            Try(res.close())
+          }.unit
+          val pull = rapid.Pull.fromFunction[String](
+            pullF = () => {
+              if (done) {
+                rapid.Step.Stop
+              } else {
+                val line =
+                  try reader.readLine()
+                  catch {
+                    // A concurrent Call.cancel() surfaces as an IOException on the blocked read.
+                    case _: IOException if call.isCanceled() => null
+                  }
+                if (line == null) {
+                  done = true
+                  rapid.Step.Stop
+                } else {
+                  rapid.Step.Emit(line)
+                }
+              }
+            },
+            close = closeResources
+          )
+          val cancel = Task {
+            call.cancel()
+          }.effect(closeResources)
+          streamReady.success(StreamHandle(new rapid.Stream(Task.pure(pull)), cancel))
+        }
+      }
+
+      override def onFailure(c: okhttp3.Call, exc: IOException): Unit = {
+        if (call.isCanceled()) {
+          streamReady.success(StreamHandle(rapid.Stream.emits(Seq.empty[String]), Task.unit))
+        } else {
+          streamReady.failure(exc)
+        }
+      }
+    })
+    streamReady
+  }
+
   private def requestToOk(request: HttpRequest): okhttp3.Request = {
     val r = new okhttp3.Request.Builder().url(request.url.toString)
 

@@ -582,8 +582,13 @@ class NettyHttpClientInstance(val client: HttpClient) extends HttpClientInstance
 
   /** Stream response body line-by-line via Netty. Lines are delivered incrementally
     * as HTTP chunks arrive — not buffered. Used for SSE and streaming APIs. */
-  override def sendStream(request: HttpRequest): Task[rapid.Stream[String]] = {
-    val streamReady = Task.completable[rapid.Stream[String]]
+  override def sendStream(request: HttpRequest): Task[rapid.Stream[String]] =
+    sendStreamHandle(request).map(_.stream)
+
+  /** Stream the response body line-by-line via Netty, paired with a [[StreamHandle]] whose `cancel`
+    * task closes the underlying channel — aborting the in-flight streaming call. */
+  override def sendStreamHandle(request: HttpRequest): Task[StreamHandle[String]] = {
+    val streamReady = Task.completable[StreamHandle[String]]
     val uri = request.url
     val host = uri.host
     val port = uri.port
@@ -673,17 +678,32 @@ class NettyHttpClientInstance(val client: HttpClient) extends HttpClientInstance
             pipeline.addLast(handlerName, handler)
           }
 
+          val cancelled = new AtomicBoolean(false)
+          val cancelChannel = Task {
+            if (cancelled.compareAndSet(false, true)) {
+              // A queued sentinel terminates the consumer if a poll is in flight when cancel runs.
+              lineQueue.offer(Right(None))
+              clearActiveRequestTask(channel)
+              if (channel.isOpen) {
+                channel.close()
+              }
+            }
+          }.unit
           val pull = rapid.Pull.fromFunction[String](
             pullF = () => {
-              lineQueue.poll(client.timeout.toMillis, java.util.concurrent.TimeUnit.MILLISECONDS) match {
-                case null => rapid.Step.Stop
-                case Left(err) => throw err
-                case Right(None) => rapid.Step.Stop
-                case Right(Some(line)) => rapid.Step.Emit(line)
+              if (cancelled.get()) {
+                rapid.Step.Stop
+              } else {
+                lineQueue.poll(client.timeout.toMillis, java.util.concurrent.TimeUnit.MILLISECONDS) match {
+                  case null => rapid.Step.Stop
+                  case Left(err) => throw err
+                  case Right(None) => rapid.Step.Stop
+                  case Right(Some(line)) => rapid.Step.Emit(line)
+                }
               }
             }
           )
-          streamReady.success(rapid.Stream(Task.pure(pull)))
+          streamReady.success(StreamHandle(rapid.Stream(Task.pure(pull)), cancelChannel))
 
           val nettyRequest = createNettyRequest(request, uri)
           channel.writeAndFlush(nettyRequest).addListener((wf: ChannelFuture) => {

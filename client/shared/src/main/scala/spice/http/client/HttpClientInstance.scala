@@ -25,6 +25,13 @@ trait HttpClientInstance {
       case scala.util.Failure(e) => Task.error(e)
     }
 
+  /** Send a request and return a stream of lines paired with a handle to abort the in-flight call.
+    * The default implementation delegates to `sendStream` with a no-op cancel — backends that can
+    * abort the underlying call (OkHttp `Call.cancel()`, Netty channel close, java.net.http stream
+    * close) override this to wire the cancellation through. */
+  def sendStreamHandle(request: HttpRequest): Task[StreamHandle[String]] =
+    sendStream(request).map(stream => StreamHandle(stream, Task.unit))
+
   def webSocket(url: URL): WebSocket
 
   def dispose(): Task[Unit]
