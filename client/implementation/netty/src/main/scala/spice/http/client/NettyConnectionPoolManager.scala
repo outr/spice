@@ -11,7 +11,7 @@ import io.netty.handler.codec.http.*
 import io.netty.handler.proxy.{HttpProxyHandler, Socks5ProxyHandler}
 import io.netty.handler.ssl.SslContextBuilder
 import io.netty.handler.ssl.util.InsecureTrustManagerFactory
-import io.netty.handler.timeout.{IdleStateHandler, ReadTimeoutException, ReadTimeoutHandler, WriteTimeoutHandler}
+import io.netty.handler.timeout.{IdleStateEvent, IdleStateHandler, ReadTimeoutException, ReadTimeoutHandler, WriteTimeoutHandler}
 import io.netty.util.AttributeKey
 import io.netty.util.concurrent.Future
 import rapid.task.Completable
@@ -102,6 +102,23 @@ class NettyConnectionPoolManager(
             keepAlive.toSeconds.toInt,
             keepAlive.toSeconds.toInt
           ))
+          // Consume the IdleStateEvent the IdleStateHandler fires: when
+          // a pooled channel has sat idle for `keepAlive`, close it
+          // client-side so it never gets handed back out of the pool.
+          // `ChannelHealthChecker.ACTIVE` only checks Netty-level
+          // `isActive`, which still returns true for a TCP socket the
+          // peer has silently closed — without this closer the pool
+          // happily hands out half-dead channels, and the next write
+          // gets `Connection reset`. Proactive close on idle eliminates
+          // that race.
+          p.addLast("idleCloser", new ChannelDuplexHandler {
+            override def userEventTriggered(ctx: ChannelHandlerContext, evt: AnyRef): Unit = evt match {
+              case _: IdleStateEvent =>
+                if (ctx.channel().isOpen) ctx.close()
+              case _ =>
+                ctx.fireUserEventTriggered(evt)
+            }
+          })
 
           // HTTP codec
           p.addLast("httpCodec", new HttpClientCodec())
