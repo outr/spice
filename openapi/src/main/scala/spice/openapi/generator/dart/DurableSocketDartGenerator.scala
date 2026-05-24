@@ -913,11 +913,18 @@ case class DurableSocketDartGenerator(config: DurableSocketDartConfig) {
        |
        |  static $name? fromString(String? value) {
        |    if (value == null) return null;
-       |    final lower = value.toLowerCase();
-       |    return $name.values.cast<$name?>().firstWhere(
-       |      (v) => v?.name.toLowerCase() == lower,
-       |      orElse: () => null,
-       |    );
+       |    // Strip parent prefix — fabric 1.29+ writes "Parent.Case";
+       |    // older persisted events carry the bare leaf. Either is read here.
+       |    final dot = value.lastIndexOf('.');
+       |    final bare = dot >= 0 ? value.substring(dot + 1) : value;
+       |    if (bare.isEmpty) return null;
+       |    // Inverse of the generator's identifier rule: only the first char is
+       |    // lowercased to bridge Scala's `Active` to Dart's lint-required `active`.
+       |    final dartName = bare[0].toLowerCase() + bare.substring(1);
+       |    for (final v in $name.values) {
+       |      if (v.name == dartName) return v;
+       |    }
+       |    return null;
        |  }
        |}""".stripMargin
   }

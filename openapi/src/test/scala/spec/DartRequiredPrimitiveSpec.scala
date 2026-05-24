@@ -231,6 +231,29 @@ class DartRequiredPrimitiveSpec extends AnyWordSpec with Matchers {
         """state\s*=\s*json\[['"]state['"]\]\s*!=\s*null\s*\?[^:]+:\s*SpecState\.active"""
     }
 
+    "emit a fromString reader symmetric with the parent-prefixed wireName (sigil bug #270)" in {
+      // Fabric 1.29 emits "SpecState.Active" on the wire via `wireName`. The
+      // matching `fromString` reader strips the parent prefix and applies the
+      // inverse of the generator's identifier rule (lowercase the first char
+      // only, to bridge Scala's "Active" to Dart's lint-required "active").
+      // Pre-fix it called `.toLowerCase()` on the whole string and matched
+      // case-insensitively, which was both broader than needed and asymmetric
+      // with the writer once fabric 1.29 started parent-qualifying.
+      val files = generate("WithEnumDefault", summon[RW[WithEnumDefault]].definition)
+      val source = find(files, "spec_state.dart")
+      withClue(s"spec_state.dart source:\n$source\n") {
+        // Reader strips the parent prefix.
+        source should include("value.lastIndexOf('.')")
+        // Reader transforms ONLY the leading character — not the whole string.
+        source should include("bare[0].toLowerCase()")
+        source should not include "bare.toLowerCase()"
+        source should not include "value.toLowerCase()"
+        // Writer side stays parent-prefixed so the contract is symmetric.
+        source should include("'SpecState.Active'")
+        source should include("'SpecState.Complete'")
+      }
+    }
+
     "inline enum-case defaults as `EnumName.caseName` (sigil bug #14 phase A)" in {
       // Bug #13's first cut left enum-case defaults as `required`, on
       // the principle that we couldn't safely synthesize the case ref
