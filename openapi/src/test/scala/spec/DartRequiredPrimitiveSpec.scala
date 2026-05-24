@@ -204,6 +204,33 @@ class DartRequiredPrimitiveSpec extends AnyWordSpec with Matchers {
       parentSource should include regex """static\s+const\s+SpecMode\s+specConversationMode\s+=\s+SpecConversationMode\(\)"""
     }
 
+    "tolerate missing JSON keys for defaulted fields on replay (sigil bug #269)" in {
+      // When a Scala case class adds a new field with a default, persisted
+      // events written before the field existed have no entry under that key.
+      // The Scala-side decoder fills in via the case-class default; the Dart
+      // codegen needs the same property or replay crashes with a TypeError
+      // ("Null is not a subtype of `Map<String, dynamic>`") on every
+      // historical event. The fix guards `fromJson` with the same literal
+      // the constructor default already uses.
+      val files = generate("WithSingletonDefault", summon[RW[WithSingletonDefault]].definition)
+      val source = find(files, "with_singleton_default.dart")
+      // Guarded read: only call the subtype dispatcher when the key is
+      // present, otherwise fall back to the static-const default.
+      source should include regex
+        """currentMode\s*=\s*json\[['"]currentMode['"]\]\s*!=\s*null\s*\?[^:]+:\s*SpecMode\.specConversationMode"""
+      // The pre-fix shape (unconditional cast) must be absent.
+      source should not include "currentMode = SpecMode.fromJson(json['currentMode'] as Map<String, dynamic>)"
+    }
+
+    "guard JSON reads for enum-case defaulted fields too (sigil bug #269)" in {
+      val files = generate("WithEnumDefault", summon[RW[WithEnumDefault]].definition)
+      val source = find(files, "with_enum_default.dart")
+      // Enum case default reuses the same `EnumName.caseName` literal in
+      // the fromJson fallback as it does in the ctor default.
+      source should include regex
+        """state\s*=\s*json\[['"]state['"]\]\s*!=\s*null\s*\?[^:]+:\s*SpecState\.active"""
+    }
+
     "inline enum-case defaults as `EnumName.caseName` (sigil bug #14 phase A)" in {
       // Bug #13's first cut left enum-case defaults as `required`, on
       // the principle that we couldn't safely synthesize the case ref

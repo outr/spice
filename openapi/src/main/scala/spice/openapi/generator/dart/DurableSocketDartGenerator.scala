@@ -1119,11 +1119,20 @@ case class DurableSocketDartGenerator(config: DurableSocketDartConfig) {
         defaultedInner match {
           case Some((inner, literal)) =>
             val typeDart = defTypeToDartType(inner)
+            // Bug #269 — guard the JSON read against a missing key. Persisted
+            // events written before the field existed have no `$fname` entry;
+            // an unconditional `json['$fname'] as Map<String, dynamic>` cast
+            // crashes on replay. The Scala side handles this gracefully via
+            // the field's case-class default; the Dart codegen needs the same
+            // property so a Sigil minor bump that adds a defaulted field
+            // doesn't break replay of pre-bump history. Reuse the literal
+            // the constructor default already uses — no new rendering work.
+            val readExpr = defTypeFromJsonExpr(s"json['$fname']", inner)
             ClassFieldRender(
               declaration  = s"$docComment$deprecatedAnnotation  final $typeDart $dartName;",
               ctorParam    = s"this.$dartName = $literal",
               initList     = None,
-              fromJsonInit = s"$dartName = ${defTypeFromJsonExpr(s"json['$fname']", inner)}",
+              fromJsonInit = s"$dartName = json['$fname'] != null ? $readExpr : $literal",
               toJsonEntry  = s"'$fname': ${defTypeToJsonExpr(dartName, inner)}"
             )
           case None =>
