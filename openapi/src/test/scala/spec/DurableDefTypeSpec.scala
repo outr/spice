@@ -23,7 +23,12 @@ class DurableDefTypeSpec extends AnyWordSpec with Matchers {
   // --- Test types ---
 
   enum Color { case Red, Green, Blue }
-  object Color { given RW[Color] = RW.enumeration(Color.values.toList) }
+  object Color {
+    // Scala 3 parameterless enum cases share a single anonymous JVM class (`$$anon$1`), so the
+    // default `asString` collapses every case onto one discriminator key. Use `productPrefix` to
+    // give each case its declared name (`"Red"` / `"Green"` / `"Blue"`).
+    given RW[Color] = RW.enumeration(Color.values.toList, asString = _.productPrefix)
+  }
 
   case class SimpleMessage(text: String, count: Int) derives RW
 
@@ -103,11 +108,10 @@ class DurableDefTypeSpec extends AnyWordSpec with Matchers {
       val all = allSources(files)
       all should include("abstract class Animal")
       all should include("static Animal fromJson")
-      // Test types are nested in `DurableDefTypeSpec`, so the FQN class chain includes
-      // the test class — Dog → DurableDefTypeSpecDog. Wire discriminator stays the simple
-      // case name (Fabric's productPrefix).
-      all should include("if (type == 'Dog') return DurableDefTypeSpecDog.fromJson(json);")
-      all should include("if (type == 'Cat') return DurableDefTypeSpecCat.fromJson(json);")
+      // Test types are nested in `DurableDefTypeSpec`, so the FQN class chain — both the Dart
+      // class name and the wire `"type"` discriminator — carries the enclosing chain.
+      all should include("if (type == 'DurableDefTypeSpec.Dog') return DurableDefTypeSpecDog.fromJson(json);")
+      all should include("if (type == 'DurableDefTypeSpec.Cat') return DurableDefTypeSpecCat.fromJson(json);")
       all should include("class DurableDefTypeSpecDog extends Animal")
       all should include("class DurableDefTypeSpecCat extends Animal")
     }
@@ -116,12 +120,13 @@ class DurableDefTypeSpec extends AnyWordSpec with Matchers {
       val files = generateFiles("Status", summon[RW[Status]].definition)
       val all = allSources(files)
       all should not include "class 1"
-      // Anonymous case objects (Active/Inactive) fall back to parent + key qualification
-      // since their className is `Status$$anon$N`. Pending has a real className.
-      all should include("class StatusActive")
-      all should include("class StatusInactive")
+      // Parameterless enum cases (Active/Inactive) get a stable `Definition.className` from
+      // fabric's `derives RW` macro (`<EnumFQN>.<Case>`), so they share the same enclosing class
+      // chain as the parameterized Pending case.
+      all should include("class DurableDefTypeSpecStatusActive")
+      all should include("class DurableDefTypeSpecStatusInactive")
       all should include("class DurableDefTypeSpecStatusPending")
-      all should include("if (type == 'Active') return StatusActive.fromJson(json);")
+      all should include("if (type == 'DurableDefTypeSpec.Status.Active') return DurableDefTypeSpecStatusActive.fromJson(json);")
     }
 
     "recursively discover nested types" in {

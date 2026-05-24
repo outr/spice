@@ -28,8 +28,8 @@ class OpenAPIDartGeneratorSpec extends AnyWordSpec with Matchers {
       listRequestSource.source should include("import 'open_a_p_i_dart_generator_spec_sort_direction.dart';")
       listRequestSource.source should include("final OpenAPIDartGeneratorSpecSortDirection direction;")
       val sortDirectionSource = sourceFiles.find(_.fileName == "open_a_p_i_dart_generator_spec_sort_direction.dart").get
-      sortDirectionSource.source should include("@JsonValue('Ascending')")
-      sortDirectionSource.source should include("@JsonValue('Descending')")
+      sortDirectionSource.source should include("@JsonValue('OpenAPIDartGeneratorSpec.SortDirection.Ascending')")
+      sortDirectionSource.source should include("@JsonValue('OpenAPIDartGeneratorSpec.SortDirection.Descending')")
     }
   }
 

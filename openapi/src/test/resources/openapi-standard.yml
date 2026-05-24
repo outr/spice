@@ -39,6 +39,6 @@ components:
       type: 'string'
       description: 'spec.OpenAPIServerSpec.UserType'
       enum:
-        - 'Admin'
-        - 'Basic'
+        - 'OpenAPIServerSpec.UserType.Admin'
+        - 'OpenAPIServerSpec.UserType.Basic'
       x-full-class: 'spec.OpenAPIServerSpec.UserType'

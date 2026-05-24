@@ -1679,9 +1679,15 @@ case class DurableSocketDartGenerator(config: DurableSocketDartConfig) {
 
   private def snakeCase(name: String): String = DartNames.snakeCaseFile(name)
 
-  /** Convert a raw string to a valid Dart identifier (lowercase first char, no spaces/dashes). */
+  /** Convert a raw string to a valid Dart identifier (lowercase first char, no spaces/dashes/dots).
+    *
+    * When the input is a polymorphic discriminator (`"Parent.Case"`), only the leaf case name is the
+    * actual identifier — the parent prefix is a discriminator namespace, not part of any single
+    * accessor's name. Take the segment after the last `.` so callers can pass either a bare leaf or
+    * a fully-qualified discriminator without producing invalid Dart syntax. */
   private def dartIdentifier(raw: String): String = {
-    val sanitized = raw.replace("-", "_").replace(" ", "_")
+    val leaf = raw.split('.').lastOption.getOrElse(raw)
+    val sanitized = leaf.replace("-", "_").replace(" ", "_")
     if (sanitized.nonEmpty && sanitized.charAt(0).isUpper)
       sanitized.charAt(0).toLower.toString + sanitized.substring(1)
     else sanitized

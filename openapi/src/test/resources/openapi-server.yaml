@@ -122,9 +122,9 @@ components:
       type: 'string'
       description: 'spec.OpenAPIHttpServerSpec.NumEnum'
       enum:
-        - 'One'
-        - 'Two'
-        - 'Three'
+        - 'OpenAPIHttpServerSpec.NumEnum.One'
+        - 'OpenAPIHttpServerSpec.NumEnum.Two'
+        - 'OpenAPIHttpServerSpec.NumEnum.Three'
       x-full-class: 'spec.OpenAPIHttpServerSpec.NumEnum'
     spec.OpenAPIHttpServerSpec.ReverseRequest:
       type: 'object'
