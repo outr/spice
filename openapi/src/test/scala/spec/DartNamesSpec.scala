@@ -79,12 +79,20 @@ class DartNamesSpec extends AnyWordSpec with Matchers {
   }
 
   "DartNames.wireDiscriminator" should {
-    "match Fabric's Product.productPrefix (simple leaf class name)" in {
-      DartNames.wireDiscriminator("sigil.tool.model.ResponseContent.Text") shouldBe "Text"
-      DartNames.wireDiscriminator("sigil.conversation.ContextFrame.Text") shouldBe "Text"
+    "match Fabric's Definition.simpleClassName" in {
+      DartNames.wireDiscriminator("sigil.tool.model.ResponseContent.Text") shouldBe "ResponseContent.Text"
+      DartNames.wireDiscriminator("sigil.conversation.ContextFrame.Text") shouldBe "ContextFrame.Text"
     }
-    "return the same wire value for cross-poly siblings (the fact that broke 1.8.0)" in {
-      DartNames.wireDiscriminator("sigil.tool.model.ResponseContent.Text") shouldBe DartNames.wireDiscriminator("sigil.conversation.ContextFrame.Text")
+    "distinguish cross-poly siblings via the parent qualifier" in {
+      // Fabric writes "ResponseContent.Text" vs "ContextFrame.Text" — the qualifier
+      // disambiguates same-leafed cases across different sum types, which is the
+      // whole point of the parent-qualified discriminator.
+      DartNames.wireDiscriminator("sigil.tool.model.ResponseContent.Text") should not be
+        DartNames.wireDiscriminator("sigil.conversation.ContextFrame.Text")
+    }
+    "return the single segment when there is no parent qualifier" in {
+      DartNames.wireDiscriminator("Bar") shouldBe "Bar"
+      DartNames.wireDiscriminator("com.example.Foo") shouldBe "Foo"
     }
     "strip type arguments" in {
       DartNames.wireDiscriminator("lightdb.id.Id[User]") shouldBe "Id"

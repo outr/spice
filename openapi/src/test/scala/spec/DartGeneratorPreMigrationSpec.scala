@@ -1010,8 +1010,8 @@ class DartGeneratorPreMigrationSpec extends AnyWordSpec with Matchers {
       val parentFile = result.find(_.name == "SourceType")
       parentFile should not be empty
       parentFile.get.source should include("abstract class SourceType")
-      parentFile.get.source should include("if (t == 'Private')")
-      parentFile.get.source should include("if (t == 'Public')")
+      parentFile.get.source should include("if (t == 'SourceType.Private')")
+      parentFile.get.source should include("if (t == 'SourceType.Public')")
 
       // Child classes use concatenated Dart names
       result.find(_.name == "SourceTypePrivate") should not be empty

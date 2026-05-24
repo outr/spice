@@ -15,8 +15,11 @@ import fabric.define.Definition
   *   - The Dart class name is the class chain concatenated. This naturally qualifies
   *     nested cases (`ResponseContent.Text` → `ResponseContentText`) so distinct polymorphic
   *     parents declaring same-named cases land on distinct Dart classes.
-  *   - The wire discriminator stays the leaf simple class name to match Fabric's
-  *     `Product.productPrefix` write side.
+  *   - The wire discriminator is the dot-joined class chain to match Fabric's
+  *     `Definition.simpleClassName` write side — e.g. `"WorkflowActivity.Completed"`
+  *     for `strider.WorkflowActivity.Completed`. Fabric emits the parent-qualified
+  *     form so distinct sum types declaring same-named cases stay distinct on the
+  *     wire; the generator's discriminator must mirror that exactly.
   *   - The Dart file path mirrors the package structure under `lib/model`.
   *
   * Type-parameter syntax (`Id[User]`) is stripped before any name is computed.
@@ -101,14 +104,16 @@ object DartNames {
     else parentDartName.map(p => s"$p${sanitizeDartIdentifier(key)}").getOrElse(sanitizeDartIdentifier(key))
   }
 
-  /** Wire discriminator value for a className — matches Fabric's `Product.productPrefix`
-    * (the simple leaf class name).
+  /** Wire discriminator value for a className — matches Fabric's
+    * `Definition.simpleClassName`, the dot-joined class chain.
     *
-    *   "sigil.tool.model.ResponseContent.Text" → "Text"
-    *   "spec.OpenAPIHttpServerSpec.Auth"        → "Auth" */
+    *   "sigil.tool.model.ResponseContent.Text" → "ResponseContent.Text"
+    *   "spec.OpenAPIHttpServerSpec.Auth"        → "OpenAPIHttpServerSpec.Auth"
+    *   "Bar" (no package)                       → "Bar" */
   def wireDiscriminator(cn: String): String = {
     val (_, classChain) = splitClassName(cn)
-    classChain.lastOption.getOrElse(cn.replace(" ", ""))
+    if (classChain.nonEmpty) classChain.mkString(".")
+    else cn.replace(" ", "")
   }
 
   /** Package-derived path segment (no leading slash).
