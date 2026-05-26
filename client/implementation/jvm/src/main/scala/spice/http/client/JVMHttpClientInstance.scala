@@ -53,13 +53,14 @@ class JVMHttpClientInstance(client: HttpClient) extends HttpClientInstance {
         throw new RuntimeException(s"Error streaming from ${request.url}", t)
       }
   } yield {
-    if (jvmResponse.statusCode() >= 400) {
+    val responseStatus = jvmResponse.statusCode()
+    val responseHeaders = Headers(
+      jvmResponse.headers().map().asScala.map { case (k, v) => k -> v.asScala.toList }.toMap
+    )
+    if (responseStatus >= 400) {
       val errorBody = new String(jvmResponse.body().readAllBytes(), java.nio.charset.StandardCharsets.UTF_8)
-      val responseHeaders = Headers(
-        jvmResponse.headers().map().asScala.map { case (k, v) => k -> v.asScala.toList }.toMap
-      )
       throw new StreamingHttpFailedException(
-        status  = jvmResponse.statusCode(),
+        status  = responseStatus,
         headers = responseHeaders,
         body    = errorBody.take(500)
       )
@@ -90,7 +91,11 @@ class JVMHttpClientInstance(client: HttpClient) extends HttpClientInstance {
       },
       close = closeResources
     )
-    StreamHandle(new rapid.Stream(Task.pure(pull)), closeResources)
+    StreamHandle(
+      stream          = new rapid.Stream(Task.pure(pull)),
+      cancel          = closeResources,
+      responseHeaders = Task.pure(responseHeaders)
+    )
   }
 
   override def webSocket(url: URL): WebSocket = new JVMHttpClientWebSocket(url, this)

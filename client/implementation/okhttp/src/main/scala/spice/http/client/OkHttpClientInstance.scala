@@ -126,20 +126,25 @@ class OkHttpClientInstance(client: HttpClient) extends HttpClientInstance {
     call.enqueue(new okhttp3.Callback {
       override def onResponse(c: okhttp3.Call, res: okhttp3.Response): Unit = {
         val body = res.body()
-        if (res.code() >= 400) {
+        val responseHeaders = Headers(
+          res.headers().names().asScala.toList.map(k => k -> res.headers(k).asScala.toList).toMap
+        )
+        val responseStatus = res.code()
+        if (responseStatus >= 400) {
           val errorBody = Try(Option(body).map(_.string()).getOrElse("")).getOrElse("")
-          val responseHeaders = Headers(
-            res.headers().names().asScala.toList.map(k => k -> res.headers(k).asScala.toList).toMap
-          )
           Try(res.close())
           streamReady.failure(new StreamingHttpFailedException(
-            status  = res.code(),
+            status  = responseStatus,
             headers = responseHeaders,
             body    = errorBody.take(500)
           ))
         } else if (body == null) {
           Try(res.close())
-          streamReady.success(StreamHandle(rapid.Stream.emits(Seq.empty[String]), Task.unit))
+          streamReady.success(StreamHandle(
+            stream          = rapid.Stream.emits(Seq.empty[String]),
+            cancel          = Task.unit,
+            responseHeaders = Task.pure(responseHeaders)
+          ))
         } else {
           val reader = new java.io.BufferedReader(
             new java.io.InputStreamReader(body.byteStream(), java.nio.charset.StandardCharsets.UTF_8))
@@ -173,7 +178,11 @@ class OkHttpClientInstance(client: HttpClient) extends HttpClientInstance {
           val cancel = Task {
             call.cancel()
           }.effect(closeResources)
-          streamReady.success(StreamHandle(new rapid.Stream(Task.pure(pull)), cancel))
+          streamReady.success(StreamHandle(
+            stream          = new rapid.Stream(Task.pure(pull)),
+            cancel          = cancel,
+            responseHeaders = Task.pure(responseHeaders)
+          ))
         }
       }
 

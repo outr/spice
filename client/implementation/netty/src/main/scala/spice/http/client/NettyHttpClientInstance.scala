@@ -605,6 +605,12 @@ class NettyHttpClientInstance(val client: HttpClient) extends HttpClientInstance
           val lineQueue = new java.util.concurrent.LinkedBlockingQueue[Either[Throwable, Option[String]]]()
           val lineBuffer = new StringBuilder
 
+          // Completable surfacing the response headers to the returned
+          // StreamHandle. Fires once when the upstream response arrives
+          // (success OR error path); callers that need rate-limit /
+          // cache-control / retry-after metadata await it.
+          val responseHeadersFut = Task.completable[spice.http.Headers]
+
           val handler = new SimpleChannelInboundHandler[HttpObject] {
             private var headersSeen = false
             private var errorCode: Int = 0
@@ -615,15 +621,18 @@ class NettyHttpClientInstance(val client: HttpClient) extends HttpClientInstance
               case response: NettyHttpResponse =>
                 headersSeen = true
                 val code = response.status().code()
+                // Surface response headers for every path (2xx + 4xx +
+                // 5xx) so the StreamHandle's responseHeaders Task always
+                // completes once the upstream replies.
+                val nettyHeaders = response.headers()
+                val headersMap: Map[String, List[String]] = nettyHeaders.names().asScala.toList.map { name =>
+                  name -> nettyHeaders.getAll(name).asScala.toList
+                }.toMap
+                val parsedHeaders = spice.http.Headers(headersMap)
+                responseHeadersFut.success(parsedHeaders)
                 if (code >= 400) {
                   errorCode = code // defer error until body is read
-                  // Capture response headers so the resulting failure can
-                  // carry retry-after / rate-limit metadata to callers.
-                  val nettyHeaders = response.headers()
-                  val headersMap: Map[String, List[String]] = nettyHeaders.names().asScala.toList.map { name =>
-                    name -> nettyHeaders.getAll(name).asScala.toList
-                  }.toMap
-                  errorHeaders = spice.http.Headers(headersMap)
+                  errorHeaders = parsedHeaders
                 }
 
               case chunk: HttpContent if headersSeen =>
@@ -715,7 +724,11 @@ class NettyHttpClientInstance(val client: HttpClient) extends HttpClientInstance
               }
             }
           )
-          streamReady.success(StreamHandle(rapid.Stream(Task.pure(pull)), cancelChannel))
+          streamReady.success(StreamHandle(
+            stream          = rapid.Stream(Task.pure(pull)),
+            cancel          = cancelChannel,
+            responseHeaders = responseHeadersFut
+          ))
 
           val nettyRequest = createNettyRequest(request, uri)
           channel.writeAndFlush(nettyRequest).addListener((wf: ChannelFuture) => {
