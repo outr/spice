@@ -609,6 +609,7 @@ class NettyHttpClientInstance(val client: HttpClient) extends HttpClientInstance
             private var headersSeen = false
             private var errorCode: Int = 0
             private val errorBody = new StringBuilder
+            private var errorHeaders: spice.http.Headers = spice.http.Headers.empty
 
             override def channelRead0(ctx: ChannelHandlerContext, msg: HttpObject): Unit = msg match {
               case response: NettyHttpResponse =>
@@ -616,6 +617,13 @@ class NettyHttpClientInstance(val client: HttpClient) extends HttpClientInstance
                 val code = response.status().code()
                 if (code >= 400) {
                   errorCode = code // defer error until body is read
+                  // Capture response headers so the resulting failure can
+                  // carry retry-after / rate-limit metadata to callers.
+                  val nettyHeaders = response.headers()
+                  val headersMap: Map[String, List[String]] = nettyHeaders.names().asScala.toList.map { name =>
+                    name -> nettyHeaders.getAll(name).asScala.toList
+                  }.toMap
+                  errorHeaders = spice.http.Headers(headersMap)
                 }
 
               case chunk: HttpContent if headersSeen =>
@@ -641,9 +649,13 @@ class NettyHttpClientInstance(val client: HttpClient) extends HttpClientInstance
                 }
                 if (chunk.isInstanceOf[LastHttpContent]) {
                   if (errorCode > 0) {
-                    // Emit error with full response body
+                    // Emit error with full response body and captured headers.
                     val body = errorBody.toString.take(2000)
-                    lineQueue.offer(Left(new RuntimeException(s"HTTP $errorCode: $body")))
+                    lineQueue.offer(Left(new StreamingHttpFailedException(
+                      status  = errorCode,
+                      headers = errorHeaders,
+                      body    = body
+                    )))
                     lineQueue.offer(Right(None))
                   } else {
                     if (lineBuffer.nonEmpty) {

@@ -55,7 +55,14 @@ class JVMHttpClientInstance(client: HttpClient) extends HttpClientInstance {
   } yield {
     if (jvmResponse.statusCode() >= 400) {
       val errorBody = new String(jvmResponse.body().readAllBytes(), java.nio.charset.StandardCharsets.UTF_8)
-      throw new RuntimeException(s"HTTP ${jvmResponse.statusCode()}: ${errorBody.take(500)}")
+      val responseHeaders = Headers(
+        jvmResponse.headers().map().asScala.map { case (k, v) => k -> v.asScala.toList }.toMap
+      )
+      throw new StreamingHttpFailedException(
+        status  = jvmResponse.statusCode(),
+        headers = responseHeaders,
+        body    = errorBody.take(500)
+      )
     }
     val body = jvmResponse.body()
     val reader = new java.io.BufferedReader(

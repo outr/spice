@@ -128,8 +128,15 @@ class OkHttpClientInstance(client: HttpClient) extends HttpClientInstance {
         val body = res.body()
         if (res.code() >= 400) {
           val errorBody = Try(Option(body).map(_.string()).getOrElse("")).getOrElse("")
+          val responseHeaders = Headers(
+            res.headers().names().asScala.toList.map(k => k -> res.headers(k).asScala.toList).toMap
+          )
           Try(res.close())
-          streamReady.failure(new RuntimeException(s"HTTP ${res.code()}: ${errorBody.take(500)}"))
+          streamReady.failure(new StreamingHttpFailedException(
+            status  = res.code(),
+            headers = responseHeaders,
+            body    = errorBody.take(500)
+          ))
         } else if (body == null) {
           Try(res.close())
           streamReady.success(StreamHandle(rapid.Stream.emits(Seq.empty[String]), Task.unit))
