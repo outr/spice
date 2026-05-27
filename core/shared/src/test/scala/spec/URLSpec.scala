@@ -49,6 +49,32 @@ class URLSpec extends AnyWordSpec with Matchers {
       "fail to parse ':smile'" in {
         URL.get(":smile") should be(Left(URLParseFailure(":smile is not a valid URL", URLParseFailure.QuickFail)))
       }
+      "fail fast on opaque URI schemes (sigil #296)" in {
+        // `data:` was the original repro — base64-encoded image bytes
+        // for vision-model calls. Pre-fix the parser rewrote it as
+        // `https://data:image/png;base64%2C…` (path-encoded the
+        // comma, lost the scheme). The new failure carries
+        // `OpaqueScheme` so callers know to model the bytes
+        // differently rather than try to re-parse.
+        val dataResult = URL.get("data:image/png;base64,iVBORw0KGgo")
+        dataResult.isLeft should be(true)
+        dataResult.left.toOption.get.failureCode should be(URLParseFailure.OpaqueScheme)
+      }
+      "fail fast on mailto: / blob: / javascript: too" in {
+        URL.get("mailto:user@example.com").left.toOption.get.failureCode should be(URLParseFailure.OpaqueScheme)
+        URL.get("blob:https://example.com/abc-123").left.toOption.get.failureCode should be(URLParseFailure.OpaqueScheme)
+        URL.get("javascript:alert(1)").left.toOption.get.failureCode should be(URLParseFailure.OpaqueScheme)
+      }
+      "leave host:port-style inputs alone (no opaque rejection on `localhost:8080` etc.)" in {
+        // `localhost` is NOT a registered opaque scheme; the existing
+        // hierarchical path handles `localhost:8080` as host:port via
+        // the defaultProtocol. Guard against any future
+        // over-aggressive rejection.
+        val ok = URL.get("localhost:8080", tldValidation = TLDValidation.Off)
+        ok.isRight should be(true)
+        ok.toOption.get.host should be("localhost")
+        ok.toOption.get.port should be(8080)
+      }
       "test" in {
         URL.get("https://app.courio.com/?stream=%2BKNrsnsMRtkw0nkZUuS3PR2hAEccwnDTA&public=true") should be(Right(URL.parse("https://app.courio.com/?stream=%2BKNrsnsMRtkw0nkZUuS3PR2hAEccwnDTA&public=true")))
       }
