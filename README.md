@@ -9,18 +9,18 @@ Add the dependencies you need to your `build.sbt`:
 
 ```scala
 // Core HTTP types and utilities
-libraryDependencies += "com.outr" %% "spice-core" % "1.8.11"
+libraryDependencies += "com.outr" %% "spice-core" % "1.8.12"
 
 // HTTP client (pick one implementation)
-libraryDependencies += "com.outr" %% "spice-client-jvm" % "1.8.11"    // java.net.http
-libraryDependencies += "com.outr" %% "spice-client-okhttp" % "1.8.11" // OkHttp3
-libraryDependencies += "com.outr" %% "spice-client-netty" % "1.8.11"  // Netty
+libraryDependencies += "com.outr" %% "spice-client-jvm" % "1.8.12"    // java.net.http
+libraryDependencies += "com.outr" %% "spice-client-okhttp" % "1.8.12" // OkHttp3
+libraryDependencies += "com.outr" %% "spice-client-netty" % "1.8.12"  // Netty
 
 // HTTP server (Undertow backend)
-libraryDependencies += "com.outr" %% "spice-server-undertow" % "1.8.11"
+libraryDependencies += "com.outr" %% "spice-server-undertow" % "1.8.12"
 
 // OpenAPI spec generation
-libraryDependencies += "com.outr" %% "spice-openapi" % "1.8.11"
+libraryDependencies += "com.outr" %% "spice-openapi" % "1.8.12"
 ```
 
 Spice uses the `rapid` library for async operations via `Task`, and `fabric` for JSON serialization.
@@ -683,7 +683,7 @@ val textContent = Content.string("Hello!", ContentType.`text/plain`)
 // textContent: Content = StringContent(
 //   value = "Hello!",
 //   contentType = ContentType(type = "text", subType = "plain", extras = Map()),
-//   lastModified = 1779370113377L
+//   lastModified = 1779908312887L
 // )
 
 // JSON content
@@ -697,7 +697,7 @@ val jsonContent = Content.json(obj("message" -> str("Hello"), "count" -> num(42)
 //     subType = "json",
 //     extras = Map()
 //   ),
-//   lastModified = 1779370113381L
+//   lastModified = 1779908312906L
 // )
 ```
 
@@ -716,8 +716,8 @@ The `spice-core` and `spice-client` modules cross-compile to Scala.js. The JS cl
 
 ```scala
 // In Scala.js code
-libraryDependencies += "com.outr" %%% "spice-core" % "1.8.11"
-libraryDependencies += "com.outr" %%% "spice-client" % "1.8.11"
+libraryDependencies += "com.outr" %%% "spice-core" % "1.8.12"
+libraryDependencies += "com.outr" %%% "spice-client" % "1.8.12"
 ```
 
 URL parsing, content types, headers, and all core HTTP types work identically on both platforms.
