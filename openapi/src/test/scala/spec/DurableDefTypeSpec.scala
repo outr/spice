@@ -505,6 +505,40 @@ class DurableDefTypeSpec extends AnyWordSpec with Matchers {
       abstractFile should not include "?.dart"
     }
 
+    "render fabric Json field as dynamic, not Map<String, dynamic> (text-only payloads break the cast)" in {
+      // Bare `fabric.Json` field and `List[fabric.Json]` field. Each
+      // can carry a String / number / bool / null / object / array, so
+      // a Dart type of `Map<String, dynamic>` plus a `.cast<Map<String,
+      // dynamic>>()` on read throws at runtime whenever the wire
+      // payload happens to be a primitive — the failure mode for any
+      // paginated-result envelope shipping file-contents-as-string
+      // items.
+      val recordDef = Definition(
+        DefType.Obj(scala.collection.immutable.VectorMap(
+          "items" -> Definition(DefType.Arr(Definition(DefType.Json))),
+          "extra" -> Definition(DefType.Json)
+        )),
+        className = Some("test.JsonRecord")
+      )
+      val files = generateFiles("JsonRecord", recordDef)
+      val source = findSource(files, "json_record.dart")
+
+      // Field declarations: dynamic, not Map<String, dynamic>.
+      source should include("final List<dynamic> items;")
+      source should include("final dynamic extra;")
+      source should not include "List<Map<String, dynamic>> items"
+      source should not include "Map<String, dynamic> extra"
+
+      // fromJson: no `.cast<Map<String, dynamic>>()` on the list,
+      // no `as Map<String, dynamic>` on the bare field.
+      source should not include "cast<Map<String, dynamic>>()"
+      // The list pass-through still produces a `List<dynamic>` —
+      // either a plain `as List?` fall-through or an explicit
+      // `.cast<dynamic>()` is fine; what matters is the inner type
+      // matches the field declaration.
+      source should not include ".cast<Map<String, dynamic>>"
+    }
+
     "Sigil bug #178 — emit qualified Dart enum for a nested companion enum" in {
       val files = generateFiles("OwnerChange", summon[RW[OwnerChange]].definition)
       val all = allSources(files)

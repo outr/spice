@@ -1394,7 +1394,11 @@ case class DurableSocketDartGenerator(config: DurableSocketDartConfig) {
     case DefType.Int => "int"
     case DefType.Dec => "double"
     case DefType.Bool => "bool"
-    case DefType.Json => "Map<String, dynamic>"
+    // fabric Json is a sum type — String / num / bool / null / object /
+    // array. A Dart type of `Map<String, dynamic>` plus `.cast<Map<String,
+    // dynamic>>()` on read throws whenever the wire value is anything
+    // other than an object. `dynamic` matches the sum-type nature.
+    case DefType.Json => "dynamic"
     case DefType.Null => "Null"
     case _ => "dynamic"
   }
@@ -1445,7 +1449,7 @@ case class DurableSocketDartGenerator(config: DurableSocketDartConfig) {
     case DefType.Int => "int"
     case DefType.Dec => "double"
     case DefType.Bool => "bool"
-    case DefType.Json => "Map<String, dynamic>"
+    case DefType.Json => "dynamic"
     case DefType.Null => "Null"
     case DefType.Arr(inner) => s"List<${defTypeToDartType(inner)}>"
     case DefType.Opt(inner) => s"${defTypeToDartType(inner)}?"
@@ -1484,7 +1488,9 @@ case class DurableSocketDartGenerator(config: DurableSocketDartConfig) {
     case DefType.Int => s"($access as int?) ?? 0"
     case DefType.Dec => s"($access as num?)?.toDouble() ?? 0.0"
     case DefType.Bool => s"($access as bool?) ?? false"
-    case DefType.Json => s"$access is Map<String, dynamic> ? $access as Map<String, dynamic> : <String, dynamic>{}"
+    // Pass the raw value through; the field type is `dynamic`, so
+    // consumers pattern-match at the use site.
+    case DefType.Json => access
     case DefType.Null => "null"
     case DefType.Opt(inner) if inner.className.isDefined && isPrimitive(inner.defType) =>
       val (baseName, _) = parseClassName(inner.className.get)
