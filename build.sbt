@@ -1,14 +1,12 @@
 name := "spice"
 ThisBuild / organization := "com.outr"
-ThisBuild / version := "1.8.14"
+ThisBuild / version := "1.8.15-SNAPSHOT"
 
 val scala3: String = "3.8.3"
 
 ThisBuild / scalaVersion := scala3
 ThisBuild / scalacOptions ++= Seq("-deprecation", "-Xmax-inlines", "64", "-language:implicitConversions")
 ThisBuild / javacOptions ++= Seq("-source", "11", "-target", "11")
-
-publishMavenStyle := true
 
 ThisBuild / sonatypeCredentialHost := xerial.sbt.Sonatype.sonatypeCentralHost
 ThisBuild / publishTo := sonatypePublishToBundle.value

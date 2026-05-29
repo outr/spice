@@ -9,13 +9,10 @@ object URLParseFailure {
   val InvalidTopLevelDomain: Int = 4
   val Exception: Int = 5
 
-  /** Sigil #296 — the input carries a known opaque URI scheme
-    * (`data:`, `blob:`, `mailto:`, etc.). `spice.net.URL` models
-    * hierarchical URIs (`scheme://host[:port]/path`); opaque URIs
-    * have no host/port/path to populate and the prior best-effort
-    * parse rewrote them into garbage (`data:image/png;base64,…`
-    * → `https://data:image/png;base64%2C…`). Fail fast with this
-    * code so callers know to handle the bytes through a different
-    * abstraction (Sigil's `ResponseContent.ImageBytes`, etc.). */
+  /** Reserved code for an opaque URI (`data:`, `blob:`, `mailto:`, …)
+    * the parser couldn't model. Opaque URIs now parse into a [[URL]]
+    * carrying their scheme-specific part in `URL.opaque`, so the
+    * parser no longer emits this for the recognised opaque schemes;
+    * the code remains for callers that classify by `failureCode`. */
   val OpaqueScheme: Int = 6
 }

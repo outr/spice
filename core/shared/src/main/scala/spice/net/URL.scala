@@ -11,7 +11,8 @@ case class URL(protocol: Protocol = Protocol.Http,
                port: Int = 80,
                path: URLPath = URLPath.empty,
                parameters: Parameters = Parameters.empty,
-               fragment: Option[String] = None) {
+               fragment: Option[String] = None,
+               opaque: Option[String] = None) {
   lazy val hostParts: Vector[String] = host.split('.').toVector
   lazy val ip: Option[IP] = IP.fromString(host)
   lazy val tld: Option[String] = if (hostParts.length > 1 && ip.isEmpty) {
@@ -96,15 +97,21 @@ case class URL(protocol: Protocol = Protocol.Http,
   def param(key: String): Option[String] = paramList(key).headOption
   def clearParams(): URL = copy(parameters = Parameters.empty)
 
-  lazy val base: String = {
-    val b = new mutable.StringBuilder
-    b.append(protocol.scheme)
-    b.append("://")
-    b.append(host)
-    if (!protocol.defaultPort.contains(port) && port != -1) {
-      b.append(s":$port")       // Not using the default port for the protocol
-    }
-    b.toString
+  lazy val base: String = opaque match {
+    case Some(part) =>
+      // Opaque URI: `scheme:` directly followed by the scheme-specific
+      // part, no `//host`. Renders verbatim so the original string
+      // round-trips.
+      s"${protocol.scheme}:$part"
+    case None =>
+      val b = new mutable.StringBuilder
+      b.append(protocol.scheme)
+      b.append("://")
+      b.append(host)
+      if (!protocol.defaultPort.contains(port) && port != -1) {
+        b.append(s":$port")       // Not using the default port for the protocol
+      }
+      b.toString
   }
 
   lazy val encoded: URLParts = new URLParts(encoded = true)
@@ -147,7 +154,7 @@ case class URL(protocol: Protocol = Protocol.Http,
       }
       b.toString
     }
-    lazy val asString: String = s"$base$pathAndArgs"
+    lazy val asString: String = if (URL.this.opaque.nonEmpty) base else s"$base$pathAndArgs"
 
     override def toString: String = asString
   }

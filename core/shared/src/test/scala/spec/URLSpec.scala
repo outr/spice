@@ -49,23 +49,27 @@ class URLSpec extends AnyWordSpec with Matchers {
       "fail to parse ':smile'" in {
         URL.get(":smile") should be(Left(URLParseFailure(":smile is not a valid URL", URLParseFailure.QuickFail)))
       }
-      "fail fast on opaque URI schemes (sigil #296)" in {
-        // `data:` was the original repro — base64-encoded image bytes
-        // for vision-model calls. Pre-fix the parser rewrote it as
-        // `https://data:image/png;base64%2C…` (path-encoded the
-        // comma, lost the scheme). The new failure carries
-        // `OpaqueScheme` so callers know to model the bytes
-        // differently rather than try to re-parse.
-        val dataResult = URL.get("data:image/png;base64,iVBORw0KGgo")
-        dataResult.isLeft should be(true)
-        dataResult.left.toOption.get.failureCode should be(URLParseFailure.OpaqueScheme)
+      "parse a data: URI into an opaque URL that round-trips byte-for-byte" in {
+        // `data:` carries base64-encoded image bytes for vision-model
+        // calls. The scheme-specific part lands in `opaque` and the
+        // whole thing round-trips through `toString` intact — the
+        // comma, the `/`, `+` and `=` of the base64 are all preserved.
+        val raw = "data:image/png;base64,iVBORw0KGgo+/AB=="
+        val url = URL.parse(raw)
+        url.opaque should be(Some("image/png;base64,iVBORw0KGgo+/AB=="))
+        url.protocol.scheme should be("data")
+        url.toString should be(raw)
+        // The URL's RW is defined as toString → parse, so a clean
+        // toString round-trip is also a clean serialization round-trip.
+        URL.parse(url.toString) should be(url)
       }
-      "fail fast on mailto: / blob: / javascript: too" in {
-        URL.get("mailto:user@example.com").left.toOption.get.failureCode should be(URLParseFailure.OpaqueScheme)
-        URL.get("blob:https://example.com/abc-123").left.toOption.get.failureCode should be(URLParseFailure.OpaqueScheme)
-        URL.get("javascript:alert(1)").left.toOption.get.failureCode should be(URLParseFailure.OpaqueScheme)
+      "parse mailto: / blob: / javascript: as opaque URLs too" in {
+        URL.parse("mailto:user@example.com").toString should be("mailto:user@example.com")
+        URL.parse("blob:https://example.com/abc-123").toString should be("blob:https://example.com/abc-123")
+        URL.parse("javascript:alert(1)").toString should be("javascript:alert(1)")
+        URL.parse("mailto:user@example.com").opaque should be(Some("user@example.com"))
       }
-      "leave host:port-style inputs alone (no opaque rejection on `localhost:8080` etc.)" in {
+      "leave host:port-style inputs alone (no opaque path on `localhost:8080` etc.)" in {
         // `localhost` is NOT a registered opaque scheme; the existing
         // hierarchical path handles `localhost:8080` as host:port via
         // the defaultProtocol. Guard against any future

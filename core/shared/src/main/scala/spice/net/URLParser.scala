@@ -4,16 +4,16 @@ import scala.util.Try
 
 object URLParser {
 
-  /** Sigil #296 — known opaque URI schemes. `spice.net.URL` models
-    * hierarchical URIs (`scheme://host[:port]/path`); opaque URIs
-    * have no host/port/path so the parser fails fast on these
-    * schemes rather than silently mangling them
-    * (`data:image/png;base64,…` → `https://data:image/png;base64%2C…`
-    * was the pre-fix behavior).
+  /** Known opaque URI schemes — URIs whose content after `scheme:` is
+    * NOT hierarchical (no `//host[:port]/path`): `data:`, `mailto:`,
+    * `blob:`, etc. Parsed into a [[URL]] carrying the scheme-specific
+    * part in [[URL.opaque]], which round-trips verbatim through
+    * `toString` (so `data:image/png;base64,…` survives intact for
+    * vision-model calls).
     *
-    * Allowlist rather than predicate to avoid breaking the
-    * `localhost:8080`-style "scheme-less host:port" input the
-    * parser has always accepted. */
+    * An allowlist rather than a predicate so the parser keeps treating
+    * the `localhost:8080`-style "scheme-less host:port" input as
+    * host:port — only these schemes switch on the opaque path. */
   val OpaqueSchemes: Set[String] = Set(
     "data", "blob", "javascript", "mailto", "tel", "sms",
     "urn", "magnet", "about"
@@ -22,8 +22,8 @@ object URLParser {
   def apply(s: String,
             tldValidation: TLDValidation = TLDValidation.Warn,
             defaultProtocol: Protocol = Protocol.Https): Either[URLParseFailure, URL] = {
-    val opaqueRejection = detectOpaqueScheme(s)
-    if (opaqueRejection.isDefined) return Left(opaqueRejection.get)
+    val opaque = parseOpaque(s)
+    if (opaque.isDefined) return Right(opaque.get)
     if ((s.contains('.') || s.contains(":")) && !s.startsWith(":") && !s.endsWith(".")) {
       val (protocolOption, stage1) = extractProtocol(s)
       val (hostSection, pathSection) = separateHostAndPath(stage1)
@@ -126,20 +126,23 @@ object URLParser {
     (s, Parameters.empty)
   }
 
-  /** Sigil #296 — detect a known opaque URI scheme on the input
-    * (`data:`, `blob:`, `mailto:`, etc.). Returns `Some(failure)` when
-    * the input starts with one of [[OpaqueSchemes]] followed by a
-    * colon AND NOT followed by `//`. `None` for hierarchical URLs and
-    * `host:port`-style inputs the parser has always accepted. */
-  private def detectOpaqueScheme(s: String): Option[URLParseFailure] = {
+  /** Parse a known opaque URI (`data:`, `blob:`, `mailto:`, etc.) into
+    * a [[URL]] carrying the scheme-specific part in [[URL.opaque]].
+    * Returns `Some(url)` when the input starts with one of
+    * [[OpaqueSchemes]] followed by a colon AND NOT `//`; `None` for
+    * hierarchical URLs and `host:port`-style inputs the hierarchical
+    * path handles. */
+  private def parseOpaque(s: String): Option[URL] = {
     val colonIdx = s.indexOf(':')
     if (colonIdx <= 0) return None
     if (s.length > colonIdx + 2 && s.charAt(colonIdx + 1) == '/' && s.charAt(colonIdx + 2) == '/') return None
     val scheme = s.substring(0, colonIdx).toLowerCase
     if (!OpaqueSchemes.contains(scheme)) return None
-    Some(URLParseFailure(
-      s"$s carries an opaque URI scheme (`$scheme:`); spice.net.URL models hierarchical URIs only.",
-      URLParseFailure.OpaqueScheme
+    Some(URL(
+      protocol = Protocol(scheme),
+      host     = "",
+      port     = -1,
+      opaque   = Some(s.substring(colonIdx + 1))
     ))
   }
 }
