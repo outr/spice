@@ -9,18 +9,18 @@ Add the dependencies you need to your `build.sbt`:
 
 ```scala
 // Core HTTP types and utilities
-libraryDependencies += "com.outr" %% "spice-core" % "1.8.14"
+libraryDependencies += "com.outr" %% "spice-core" % "1.8.15"
 
 // HTTP client (pick one implementation)
-libraryDependencies += "com.outr" %% "spice-client-jvm" % "1.8.14"    // java.net.http
-libraryDependencies += "com.outr" %% "spice-client-okhttp" % "1.8.14" // OkHttp3
-libraryDependencies += "com.outr" %% "spice-client-netty" % "1.8.14"  // Netty
+libraryDependencies += "com.outr" %% "spice-client-jvm" % "1.8.15"    // java.net.http
+libraryDependencies += "com.outr" %% "spice-client-okhttp" % "1.8.15" // OkHttp3
+libraryDependencies += "com.outr" %% "spice-client-netty" % "1.8.15"  // Netty
 
 // HTTP server (Undertow backend)
-libraryDependencies += "com.outr" %% "spice-server-undertow" % "1.8.14"
+libraryDependencies += "com.outr" %% "spice-server-undertow" % "1.8.15"
 
 // OpenAPI spec generation
-libraryDependencies += "com.outr" %% "spice-openapi" % "1.8.14"
+libraryDependencies += "com.outr" %% "spice-openapi" % "1.8.15"
 ```
 
 Spice uses the `rapid` library for async operations via `Task`, and `fabric` for JSON serialization.
@@ -45,7 +45,8 @@ val google = url"https://www.google.com"
 //   port = 443,
 //   path = URLPath(List()),
 //   parameters = Parameters(List()),
-//   fragment = None
+//   fragment = None,
+//   opaque = None
 // )
 
 // Runtime URL parsing
@@ -63,7 +64,8 @@ val parsed = URL.parse("https://api.example.com/v1/users?page=1&limit=10")
 //   parameters = Parameters(
 //     List(("page", Param(List("1"))), ("limit", Param(List("10"))))
 //   ),
-//   fragment = None
+//   fragment = None,
+//   opaque = None
 // )
 parsed.host
 // res0: String = "api.example.com"
@@ -89,7 +91,8 @@ val withParams = URL.parse("https://api.example.com/search")
 //   parameters = Parameters(
 //     List(("lang", Param(List("en"))), ("q", Param(List("scala http"))))
 //   ),
-//   fragment = None
+//   fragment = None,
+//   opaque = None
 // )
 withParams.toString
 // res3: String = "https://api.example.com/search?lang=en&q=scala%20http"
@@ -107,7 +110,8 @@ val ukUrl = URL.parse("https://www.example.co.uk/path")
 //   port = 443,
 //   path = URLPath(List(/, Literal("path"))),
 //   parameters = Parameters(List()),
-//   fragment = None
+//   fragment = None,
+//   opaque = None
 // )
 ukUrl.tld
 // res4: Option[String] = Some("co.uk")
@@ -683,7 +687,7 @@ val textContent = Content.string("Hello!", ContentType.`text/plain`)
 // textContent: Content = StringContent(
 //   value = "Hello!",
 //   contentType = ContentType(type = "text", subType = "plain", extras = Map()),
-//   lastModified = 1780020747481L
+//   lastModified = 1780093039890L
 // )
 
 // JSON content
@@ -697,7 +701,7 @@ val jsonContent = Content.json(obj("message" -> str("Hello"), "count" -> num(42)
 //     subType = "json",
 //     extras = Map()
 //   ),
-//   lastModified = 1780020747485L
+//   lastModified = 1780093039894L
 // )
 ```
 
@@ -716,8 +720,8 @@ The `spice-core` and `spice-client` modules cross-compile to Scala.js. The JS cl
 
 ```scala
 // In Scala.js code
-libraryDependencies += "com.outr" %%% "spice-core" % "1.8.14"
-libraryDependencies += "com.outr" %%% "spice-client" % "1.8.14"
+libraryDependencies += "com.outr" %%% "spice-core" % "1.8.15"
+libraryDependencies += "com.outr" %%% "spice-client" % "1.8.15"
 ```
 
 URL parsing, content types, headers, and all core HTTP types work identically on both platforms.
