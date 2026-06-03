@@ -17,11 +17,12 @@ class DurableSocketClient[Id: RW, Event: RW, Info: RW](
   outboundLog: EventLog[Id, Event],
   initialChannelId: Id,
   info: Info,
-  clientId: String = UUID.randomUUID().toString
+  clientId: String = UUID.randomUUID().toString,
+  fileTransfer: FileTransferConfig = FileTransferConfig()
 ) {
   private val channelSeqs = new ConcurrentHashMap[Id, Long]()
 
-  val protocol: DurableSocket[Id, Event, Info] = new DurableSocket[Id, Event, Info](config, outboundLog, initialChannelId) {
+  val protocol: DurableSocket[Id, Event, Info] = new DurableSocket[Id, Event, Info](config, outboundLog, initialChannelId, fileTransfer) {
     override protected def handleHandshakeMessage(json: Json, msgType: String): Unit = {
       msgType match {
         case "connected" =>
@@ -64,6 +65,9 @@ class DurableSocketClient[Id: RW, Event: RW, Info: RW](
 
   def push(event: Event): Task[Long] = protocol.push(event)
   def sendEphemeral(json: Json): Unit = protocol.sendEphemeral(json)
+
+  /** Typed file-transfer facet for this connection. See [[FileChannel]]. */
+  def files[F: RW]: FileChannel[F] = protocol.files[F]
 
   val onEvent: Channel[(Long, Event)] = protocol.onEvent
   val onEphemeral: Channel[Json] = protocol.onEphemeral

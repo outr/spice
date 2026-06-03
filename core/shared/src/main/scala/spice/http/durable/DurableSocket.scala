@@ -5,12 +5,15 @@ import fabric.io.{JsonFormatter, JsonParser}
 import fabric.rw.*
 import rapid.Task
 import reactify.{Channel, Val, Var}
-import spice.http.WebSocket
+import spice.http.{ByteBufferData, WebSocket}
+
+import java.nio.ByteBuffer
 
 class DurableSocket[Id: RW, Event: RW, Info: RW](
   val config: DurableSocketConfig,
   val outboundLog: EventLog[Id, Event],
-  initialChannelId: Id
+  initialChannelId: Id,
+  val fileTransfer: FileTransferConfig = FileTransferConfig()
 ) {
   private val _channelId: Var[Id] = Var(initialChannelId)
   def channelId: Id = _channelId()
@@ -29,6 +32,16 @@ class DurableSocket[Id: RW, Event: RW, Info: RW](
   private val tracker = new SequenceTracker(config)
 
   @volatile private var pendingSwitch: rapid.task.Completable[Unit] = scala.compiletime.uninitialized
+
+  // --- File transfer facet (one payload type per socket) ---
+  @volatile private var _files: FileChannel[?] = null
+
+  /** Typed file-transfer facet. The first call fixes the payload type `F` for this socket;
+    * subsequent calls must use the same `F`. See [[FileChannel]]. */
+  def files[F: RW]: FileChannel[F] = synchronized {
+    if (_files == null) _files = new FileChannel[F](this, fileTransfer)
+    _files.asInstanceOf[FileChannel[F]]
+  }
 
   // --- Sending: Events (durable, EventLog seq) ---
 
@@ -88,6 +101,10 @@ class DurableSocket[Id: RW, Event: RW, Info: RW](
   def bind(ws: WebSocket): Unit = {
     rawWs @= Some(ws)
     ws.receive.text.attach(handleRawMessage)
+    ws.receive.binary.attach {
+      case ByteBufferData(bb) => if (_files != null) _files.acceptChunk(bb)
+      case _                  =>
+    }
     ws.receive.close.attach(_ => handleDisconnect())
     ws.status.attach {
       case spice.http.ConnectionStatus.Closed => handleDisconnect()
@@ -142,6 +159,7 @@ class DurableSocket[Id: RW, Event: RW, Info: RW](
   def activate(): Unit = {
     _state @= ProtocolState.Active
     startTimers()
+    if (_files != null) _files.onReactivated()
   }
 
   def replayAfter(seq: Long): Task[Unit] = {
@@ -183,6 +201,12 @@ class DurableSocket[Id: RW, Event: RW, Info: RW](
 
       case Some("error") =>
         onError @= ErrorMessage(json("code").asString, json("message").asString)
+
+      case Some("file-start")  => if (_files != null) _files.acceptStart(json)
+      case Some("file-end")    => if (_files != null) _files.acceptEnd(json)
+      case Some("file-ack")    => if (_files != null) _files.acceptAck(json)
+      case Some("file-resume") => if (_files != null) _files.acceptResume(json)
+      case Some("file-abort")  => if (_files != null) _files.acceptAbort(json)
 
       case _ =>
         onEphemeral @= json
@@ -227,5 +251,9 @@ class DurableSocket[Id: RW, Event: RW, Info: RW](
 
   protected[durable] def sendRaw(text: String): Unit = {
     rawWs().foreach(ws => ws.send.text @= text)
+  }
+
+  protected[durable] def sendBinaryRaw(data: ByteBuffer): Unit = {
+    rawWs().foreach(ws => ws.send.binary @= ByteBufferData(data))
   }
 }

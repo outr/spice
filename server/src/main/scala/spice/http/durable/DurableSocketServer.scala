@@ -33,7 +33,8 @@ class DurableSocketServer[Id: RW, Event: RW, Info: RW](
   eventLog: EventLog[Id, Event],
   resolveChannel: (String, Info) => Task[Id],
   authorizeSwitch: (DurableSession[Id, Event, Info], Id) => Task[Unit] = (_: DurableSession[Id, Event, Info], _: Id) => Task.unit,
-  sessionTimeout: FiniteDuration = 30.minutes
+  sessionTimeout: FiniteDuration = 30.minutes,
+  fileTransfer: FileTransferConfig = FileTransferConfig()
 ) extends WebSocketHandler {
   private val sessions = new ConcurrentHashMap[String, DurableSession[Id, Event, Info]]()
   private val channelSessions = new ConcurrentHashMap[Id, ConcurrentHashMap[String, DurableSession[Id, Event, Info]]]()
@@ -172,9 +173,9 @@ class DurableSocketServer[Id: RW, Event: RW, Info: RW](
 
   // --- Internal ---
 
-  private def createSocket(channelId: Id): DurableSocket[Id, Event, Info] = {
+  protected def createSocket(channelId: Id): DurableSocket[Id, Event, Info] = {
     val server = this
-    new DurableSocket[Id, Event, Info](config, eventLog, channelId) {
+    new DurableSocket[Id, Event, Info](config, eventLog, channelId, fileTransfer) {
       override protected def handleHandshakeMessage(json: Json, msgType: String): Unit = {
         if (msgType == "switch") {
           server.handleSwitch(this, json)
