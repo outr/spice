@@ -604,6 +604,9 @@ class NettyHttpClientInstance(val client: HttpClient) extends HttpClientInstance
           val handlerName = s"streamHandler-${System.nanoTime()}"
           val lineQueue = new java.util.concurrent.LinkedBlockingQueue[Either[Throwable, Option[String]]]()
           val lineBuffer = new StringBuilder
+          // A channel with streaming idle handlers must not return to the pool.
+          val streamReconfigured = client.streamingTimeout.nonEmpty
+          val pollIntervalMillis = 1000L
 
           // Completable surfacing the response headers to the returned
           // StreamHandle. Fires once when the upstream response arrives
@@ -678,16 +681,32 @@ class NettyHttpClientInstance(val client: HttpClient) extends HttpClientInstance
                     if (p.get(handlerName) != null) p.remove(handlerName)
                   } catch { case _: Throwable => }
                   clearActiveRequestTask(channel)
-                  try { pool.release(channel) } catch { case _: Throwable => }
+                  if (streamReconfigured) {
+                    try { if (channel.isOpen) channel.close() } catch { case _: Throwable => }
+                  } else {
+                    try { pool.release(channel) } catch { case _: Throwable => }
+                  }
                 }
 
               case _ =>
             }
 
-            override def exceptionCaught(ctx: ChannelHandlerContext, cause: Throwable): Unit = {
-              lineQueue.offer(Left(cause))
+            override def exceptionCaught(ctx: ChannelHandlerContext, cause: Throwable): Unit = cause match {
+              // Under a streaming budget a read-idle is a truncation, not an
+              // error: end cleanly and let the consumer classify it.
+              case _: ReadTimeoutException if streamReconfigured =>
+                lineQueue.offer(Right(None))
+                clearActiveRequestTask(channel)
+              case _ =>
+                lineQueue.offer(Left(cause))
+                clearActiveRequestTask(channel)
+                ctx.close()
+            }
+
+            override def channelInactive(ctx: ChannelHandlerContext): Unit = {
+              lineQueue.offer(Right(None))
               clearActiveRequestTask(channel)
-              ctx.close()
+              super.channelInactive(ctx)
             }
           }
 
@@ -697,6 +716,15 @@ class NettyHttpClientInstance(val client: HttpClient) extends HttpClientInstance
             pipeline.addBefore("exceptionHandler", handlerName, handler)
           } else {
             pipeline.addLast(handlerName, handler)
+          }
+          // Streaming may pause mid-response; use the streaming budget for the
+          // channel's idle handlers so a live-but-quiet socket isn't cut.
+          client.streamingTimeout.foreach { st =>
+            val secs = math.max(1, st.toSeconds.toInt)
+            try {
+              if (pipeline.get("readTimeout") != null) pipeline.replace("readTimeout", "readTimeout", new ReadTimeoutHandler(secs))
+              if (pipeline.get("idleState") != null) pipeline.replace("idleState", "idleState", new IdleStateHandler(0, 0, secs))
+            } catch { case _: Throwable => }
           }
 
           val cancelled = new AtomicBoolean(false)
@@ -712,16 +740,19 @@ class NettyHttpClientInstance(val client: HttpClient) extends HttpClientInstance
           }.unit
           val pull = rapid.Pull.fromFunction[String](
             pullF = () => {
-              if (cancelled.get()) {
-                rapid.Step.Stop
-              } else {
-                lineQueue.poll(client.timeout.toMillis, java.util.concurrent.TimeUnit.MILLISECONDS) match {
-                  case null => rapid.Step.Stop
-                  case Left(err) => throw err
-                  case Right(None) => rapid.Step.Stop
+              // Keep waiting while the socket is open; terminate only on a
+              // sentinel, error, cancellation, or close — not on idle alone.
+              @scala.annotation.tailrec
+              def next(): rapid.Step[String] = {
+                if (cancelled.get()) rapid.Step.Stop
+                else lineQueue.poll(pollIntervalMillis, java.util.concurrent.TimeUnit.MILLISECONDS) match {
+                  case null              => if (channel.isOpen) next() else rapid.Step.Stop
+                  case Left(err)         => throw err
+                  case Right(None)       => rapid.Step.Stop
                   case Right(Some(line)) => rapid.Step.Emit(line)
                 }
               }
+              next()
             }
           )
           streamReady.success(StreamHandle(

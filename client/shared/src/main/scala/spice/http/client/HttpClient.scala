@@ -19,6 +19,9 @@ case class HttpClient(request: HttpRequest,
                       interceptor: Interceptor,
                       saveDirectory: String,
                       timeout: FiniteDuration,
+                      /** Read-idle timeout for streaming responses, in place of `timeout`.
+                        * `None` leaves streaming on `timeout`. */
+                      streamingTimeout: Option[FiniteDuration],
                       pingInterval: Option[FiniteDuration],
                       dns: DNS,
                       dropNullValuesInJson: Boolean,
@@ -95,6 +98,7 @@ case class HttpClient(request: HttpRequest,
   def interceptor(interceptor: Interceptor): HttpClient = copy(interceptor = interceptor)
   def saveDirectory(saveDirectory: String): HttpClient = copy(saveDirectory = saveDirectory)
   def timeout(timeout: FiniteDuration): HttpClient = copy(timeout = timeout)
+  def streamingTimeout(streamingTimeout: FiniteDuration): HttpClient = copy(streamingTimeout = Some(streamingTimeout))
   def pingInterval(pingInterval: Option[FiniteDuration]): HttpClient = copy(pingInterval = pingInterval)
   def dns(dns: DNS): HttpClient = copy(dns = dns)
   def sessionManager(sessionManager: SessionManager): HttpClient = copy(sessionManager = Some(sessionManager))
@@ -301,6 +305,7 @@ object HttpClient extends HttpClient(
   interceptor = Interceptor.empty,
   saveDirectory = ClientPlatform.defaultSaveDirectory,
   timeout = 60.seconds,
+  streamingTimeout = None,
   pingInterval = None,
   dns = DNS.default,
   dropNullValuesInJson = false,
