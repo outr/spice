@@ -76,7 +76,19 @@ case class URLPath(parts: List[URLPathPart]) {
     }
   }
 
-  def merge(that: URLPath): URLPath = URLPath(this.parts ::: that.parts)
+  def merge(that: URLPath): URLPath = {
+    // Avoid producing a duplicate separator at the junction. A base path of
+    // `/` (parts == [Separator]) merged with `/api/home` must yield
+    // `/api/home`, not `//api/home` — the latter never matches the request
+    // path in routing.
+    val joined =
+      if (this.parts.lastOption.contains(Separator) && that.parts.headOption.contains(Separator)) {
+        this.parts ::: that.parts.tail
+      } else {
+        this.parts ::: that.parts
+      }
+    URLPath(joined)
+  }
 
   override def equals(obj: Any): Boolean = obj match {
     case that: URLPath => if (this.arguments.nonEmpty == that.arguments.nonEmpty) {

@@ -62,5 +62,15 @@ class URLPathSpec extends AnyWordSpec with Matchers {
       val path = path"/styles/v1/mapbox/streets-v12/static/-122.256654%2C37.804077%2C13/500x300"
       path.toString should be("/styles/v1/mapbox/streets-v12/static/-122.256654%2C37.804077%2C13/500x300")
     }
+    "merge a root base path without producing a double separator" in {
+      // Regression: a `/` base path merged with `/api/home` must yield
+      // `/api/home`, not `//api/home` (which never matches in routing).
+      val merged = path"/".merge(path"/api/home")
+      merged.toString should be("/api/home")
+      merged.extractArguments(path"/api/home") should be(Map.empty)
+    }
+    "merge a non-root base path with a service path" in {
+      path"/base".merge(path"/api/home").toString should be("/base/api/home")
+    }
   }
 }
