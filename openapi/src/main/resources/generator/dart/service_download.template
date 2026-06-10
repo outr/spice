@@ -1,0 +1,17 @@
+  static Future<void> restDownload(
+    String fileName,
+    String path,
+    Map<String, dynamic> request,
+  ) async {
+    final String body = jsonEncode(request);
+    final http.Response response = await http.post(
+        Service.host(path),
+        headers: _buildHeaders({
+          "Content-Type": "application/json; charset=UTF-8",
+          "Accept": "application/json"
+        }),
+        body: body
+    );
+    Uint8List bytes = response.bodyBytes;
+    await FileSaver.instance.saveFile(name: fileName, bytes: bytes);
+  }

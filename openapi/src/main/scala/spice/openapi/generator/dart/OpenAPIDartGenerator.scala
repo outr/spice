@@ -27,6 +27,8 @@ case class OpenAPIDartGenerator(api: OpenAPI, config: OpenAPIGeneratorConfig) ex
   private lazy val ParentTemplate: String = loadString("generator/dart/parent.template")
   private lazy val EnumTemplate: String = loadString("generator/dart/enum.template")
   private lazy val ServiceTemplate: String = loadString("generator/dart/service.template")
+  private lazy val ServiceMultipartTemplate: String = loadString("generator/dart/service_multipart.template").stripSuffix("\n")
+  private lazy val ServiceDownloadTemplate: String = loadString("generator/dart/service_download.template").stripSuffix("\n")
 
   override protected def fileExtension: String = ".dart"
 
@@ -835,6 +837,9 @@ case class OpenAPIDartGenerator(api: OpenAPI, config: OpenAPIGeneratorConfig) ex
 
   def generateService(): SourceFile = {
     var imports = mutable.Set.empty[String]
+    var usesMultipart = false
+    var usesPlatformFile = false
+    var usesDownload = false
     val methods: List[String] = api.paths.toList.sortBy(_._1).flatMap {
       case (pathString, path) =>
         val name = "[^a-zA-Z0-9](\\S)".r.replaceAllIn(pathString.substring(1), m => {
@@ -895,6 +900,7 @@ case class OpenAPIDartGenerator(api: OpenAPI, config: OpenAPIGeneratorConfig) ex
                |  }""".stripMargin
           case c: OpenAPISchema.Component => c.format match {
             case Some("binary") =>
+              usesDownload = true
               val requestRef = requestContent.ref
               val requestType = requestContent.refTypeWithGenerics
               safeAddImport(imports, requestContent.refType)
@@ -909,6 +915,7 @@ case class OpenAPIDartGenerator(api: OpenAPI, config: OpenAPIGeneratorConfig) ex
             // Response is spice.http.content.Content — emit a browser download stub.
             // The match resolves the ref via ref2Type so it survives the FQN component-key
             // refactor (where the ref is now `#/components/schemas/spice.http.content.Content`).
+            usesDownload = true
             val requestRef = requestContent.ref
             val requestType = requestContent.refTypeWithGenerics
             safeAddImport(imports, requestContent.refType)
@@ -926,6 +933,7 @@ case class OpenAPIDartGenerator(api: OpenAPI, config: OpenAPIGeneratorConfig) ex
             safeAddImport(imports, responseType)
             responseRef.genericTypeArgs.foreach(gt => safeAddImport(imports, gt.typeName))
             if (requestContentType == ContentType.`multipart/form-data`) {
+              usesMultipart = true
               // Multipart bodies always use `schema` (not `itemSchema`) — extract or fail
               val effectiveSchema = apiContentType.schema.orElse(apiContentType.itemSchema).getOrElse(
                 throw new UnsupportedOperationException(s"OpenAPIContentType has no schema or itemSchema for $name")
@@ -935,7 +943,9 @@ case class OpenAPIDartGenerator(api: OpenAPI, config: OpenAPIGeneratorConfig) ex
                   val params = c.properties.toList.map {
                     case (key, schema) =>
                       val paramType = schema match {
-                        case child: OpenAPISchema.Component if child.format.contains("binary") => "PlatformFile"
+                        case child: OpenAPISchema.Component if child.format.contains("binary") =>
+                          usesPlatformFile = true
+                          "PlatformFile"
                         case child: OpenAPISchema.Component if child.`enum`.nonEmpty =>
                           val parentName = enumValueToTypeMap.getOrElse(child.`enum`.head.asString, throw new NullPointerException(s"Unable to find enum entry ${child.`enum`.head} for $key"))
                           safeAddImport(imports, parentName)
@@ -976,6 +986,7 @@ case class OpenAPIDartGenerator(api: OpenAPI, config: OpenAPIGeneratorConfig) ex
                 case _ => throw new UnsupportedOperationException(s"Unsupported schema: $effectiveSchema")
               }
             } else if (binary) {
+              usesDownload = true
               val requestRef = requestContent.ref
               val requestType = requestContent.refTypeWithGenerics
               safeAddImport(imports, requestContent.refType)
@@ -1011,9 +1022,32 @@ case class OpenAPIDartGenerator(api: OpenAPI, config: OpenAPIGeneratorConfig) ex
     // service.dart lives at lib/, so all model imports are relative to lib/
     val importsTemplate = imports.toList.sorted.map(t => renderImport(t, "lib")).mkString("\n")
     val methodsTemplate = methods.mkString("\n\n")
-    val source = ServiceTemplate
-      .replace("%%IMPORTS%%", importsTemplate)
-      .replace("%%SERVICES%%", methodsTemplate)
+    val optionalImports = {
+      val parts = List.newBuilder[String]
+      if (usesMultipart || usesDownload) parts += "import 'dart:typed_data';"
+      if (usesDownload) parts += "import 'package:file_saver/file_saver.dart';"
+      if (usesPlatformFile) parts += "import 'package:file_picker/file_picker.dart';"
+      parts.result().mkString("\n")
+    }
+    val downloadFilename = if (usesDownload) {
+      "  // Should be updated before a download call\n  static String downloadFileName = 'download';"
+    } else ""
+    def replaceOptional(src: String, token: String, content: String): String =
+      if (content.isEmpty) src.replace(s"$token\n\n", "")
+      else src.replace(token, content)
+    val source = {
+      val base = ServiceTemplate
+        .replace("%%IMPORTS%%", importsTemplate)
+        .replace("%%SERVICES%%", methodsTemplate)
+      val withImports =
+        if (optionalImports.isEmpty) base.replace("%%OPTIONAL_IMPORTS%%\n", "")
+        else base.replace("%%OPTIONAL_IMPORTS%%", optionalImports)
+      val withFilename = replaceOptional(withImports, "%%DOWNLOAD_FILENAME%%", downloadFilename)
+      val withMultipart = replaceOptional(withFilename, "%%MULTIPART_HELPER%%",
+        if (usesMultipart) ServiceMultipartTemplate else "")
+      replaceOptional(withMultipart, "%%DOWNLOAD_HELPER%%",
+        if (usesDownload) ServiceDownloadTemplate else "")
+    }
     SourceFile(
       language = "Dart",
       name = "Service",

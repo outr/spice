@@ -1,9 +1,6 @@
 import 'dart:convert';
-import 'dart:typed_data';
-import 'package:file_saver/file_saver.dart';
 import 'package:http/http.dart' as http;
-import 'package:file_picker/file_picker.dart';
-import 'package:outr_flutter/application.dart';
+%%OPTIONAL_IMPORTS%%
 
 %%IMPORTS%%
 
@@ -12,10 +9,29 @@ import 'package:outr_flutter/application.dart';
 class Service {
   static Uri base = Uri.base;
 
-  // Should be updated before a download call
-  static String downloadFileName = 'download';
+%%DOWNLOAD_FILENAME%%
+
+  /// When set, `Authorization: Bearer $authToken` is added to every request.
+  static String? authToken;
+
+  /// Returned map is merged into every request's headers AFTER the defaults
+  /// and AFTER `authToken`, so it can override either. Use for app-specific
+  /// headers (e.g. tenant/profile ids).
+  static Map<String, String> Function()? headersProvider;
+
+  /// Called when a response body fails to parse. Defaults to a no-op; the
+  /// underlying error is always rethrown to the caller regardless.
+  static void Function(Object error, StackTrace stack)? onError;
 
   static Uri host(String path) => base.replace(path: path);
+
+  static Map<String, String> _buildHeaders(Map<String, String> defaults) {
+    return <String, String>{
+      ...defaults,
+      if (authToken != null) 'Authorization': 'Bearer $authToken',
+      ...?headersProvider?.call(),
+    };
+  }
 
   /// Extract a human-readable error message from a server error response body.
   static String _extractErrorMessage(String body, int statusCode) {
@@ -41,10 +57,10 @@ class Service {
     final String body = jsonEncode(request);
     final http.Response response = await http.post(
         Service.host(path),
-        headers: {
+        headers: _buildHeaders({
           "Content-Type": "application/json; charset=UTF-8",
           "Accept": "application/json"
-        },
+        }),
         body: body
     );
     if (response.statusCode >= 400) {
@@ -52,27 +68,13 @@ class Service {
     }
     try {
       return convert(jsonDecode(response.body));
-    } catch (exc) {
-      Application.logger.e('Error parsing response for $path: $exc');
+    } catch (exc, st) {
+      onError?.call(exc, st);
       rethrow;
     }
   }
 
-  static Future<Response> multiPart<Response>(
-    String path,
-    Function(http.MultipartRequest request) build,
-    Response Function(Map<String, dynamic> json) convert
-  ) async {
-    final http.MultipartRequest request = http.MultipartRequest("POST", Service.host(path));
-    build(request);
-    final http.StreamedResponse response = await request.send();
-    final Uint8List responseData = await response.stream.toBytes();
-    final String jsonString = String.fromCharCodes(responseData);
-    if (response.statusCode >= 400) {
-      throw Exception('Server error ${response.statusCode}: $jsonString');
-    }
-    return convert(jsonDecode(jsonString));
-  }
+%%MULTIPART_HELPER%%
 
   static Future<Response> restGet<Response>(
     String path,
@@ -80,17 +82,17 @@ class Service {
   ) async {
     final http.Response response = await http.get(
         Service.host(path),
-        headers: {
+        headers: _buildHeaders({
           "Accept": "application/json"
-        }
+        })
     );
     if (response.statusCode >= 400) {
       throw Exception(_extractErrorMessage(response.body, response.statusCode));
     }
     try {
       return convert(jsonDecode(response.body));
-    } catch (exc) {
-      Application.logger.e('Error parsing response for $path: $exc');
+    } catch (exc, st) {
+      onError?.call(exc, st);
       rethrow;
     }
   }
@@ -102,30 +104,14 @@ class Service {
     final String body = jsonEncode(request);
     await http.post(
         Service.host(path),
-        headers: {
+        headers: _buildHeaders({
           "Content-Type": "application/json; charset=UTF-8",
-        },
+        }),
         body: body
     );
   }
 
-  static Future<void> restDownload(
-    String fileName,
-    String path,
-    Map<String, dynamic> request,
-  ) async {
-    final String body = jsonEncode(request);
-    final http.Response response = await http.post(
-        Service.host(path),
-        headers: {
-          "Content-Type": "application/json; charset=UTF-8",
-          "Accept": "application/json"
-        },
-        body: body
-    );
-    Uint8List bytes = response.bodyBytes;
-    await FileSaver.instance.saveFile(name: fileName, bytes: bytes);
-  }
+%%DOWNLOAD_HELPER%%
 
 %%SERVICES%%
 }

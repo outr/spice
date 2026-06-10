@@ -334,6 +334,15 @@ class DartGeneratorPreMigrationSpec extends AnyWordSpec with Matchers {
       serviceFile.source should include("\"/reverse\"")
       serviceFile.source should include("request.toJson()")
       serviceFile.source should include("ReverseResponse.fromJson")
+      // A plain JSON POST spec should not drag in download/multipart deps or helpers.
+      serviceFile.source should not include "file_saver"
+      serviceFile.source should not include "file_picker"
+      serviceFile.source should not include "dart:typed_data"
+      serviceFile.source should not include "restDownload"
+      serviceFile.source should not include "multiPart"
+      serviceFile.source should not include "downloadFileName"
+      // No unsubstituted template tokens leaking through.
+      serviceFile.source should not include "%%"
     }
 
     "generate correct service for GET endpoint" in {
@@ -1090,6 +1099,12 @@ class DartGeneratorPreMigrationSpec extends AnyWordSpec with Matchers {
       service should include("await restDownload(fileName,")
       // Should NOT be the generic JSON-response form
       service should not include "static Future<Content> download"
+      // A download endpoint pulls in file_saver + the restDownload helper.
+      service should include("import 'package:file_saver/file_saver.dart';")
+      service should include("static Future<void> restDownload(")
+      // But no multipart deps, since no multipart endpoint here.
+      service should not include "file_picker"
+      service should not include "multiPart"
     }
 
     "use Dart class names (not raw FQNs) in abstract Parent common getters" in {

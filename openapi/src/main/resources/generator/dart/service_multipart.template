@@ -1,0 +1,16 @@
+  static Future<Response> multiPart<Response>(
+    String path,
+    Function(http.MultipartRequest request) build,
+    Response Function(Map<String, dynamic> json) convert
+  ) async {
+    final http.MultipartRequest request = http.MultipartRequest("POST", Service.host(path));
+    request.headers.addAll(_buildHeaders(const {}));
+    build(request);
+    final http.StreamedResponse response = await request.send();
+    final Uint8List responseData = await response.stream.toBytes();
+    final String jsonString = String.fromCharCodes(responseData);
+    if (response.statusCode >= 400) {
+      throw Exception('Server error ${response.statusCode}: $jsonString');
+    }
+    return convert(jsonDecode(jsonString));
+  }
