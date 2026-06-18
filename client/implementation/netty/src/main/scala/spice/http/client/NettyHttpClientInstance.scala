@@ -600,12 +600,36 @@ class NettyHttpClientInstance(val client: HttpClient) extends HttpClientInstance
         streamReady.failure(future.cause())
       } else {
         val channel = future.getNow
+        // A channel with streaming idle handlers must not return to the pool.
+        val streamReconfigured = client.streamingTimeout.nonEmpty
+
+        // Return the acquired channel to its pool EXACTLY ONCE, on every
+        // terminal path (clean end, error, cancel, write-failure, inactive).
+        // `FixedChannelPool` only decrements its acquiredChannelCount on
+        // `release` — closing a channel without releasing leaks the slot, so
+        // a long-lived session of streaming calls (which always close their
+        // reconfigured channel) eventually exhausts the per-host pool and
+        // every further acquire fails with a timeout. A streaming-reconfigured
+        // channel carries streaming idle handlers and must not be re-pooled,
+        // so it's closed first; the release then fails the pool's health
+        // check and discards it while still decrementing the count. `close`
+        // forces the same discard on the error / cancel paths. Defined above
+        // the try so the outer catch can also release.
+        val channelReleased = new AtomicBoolean(false)
+        def returnChannel(close: Boolean): Unit =
+          if (channelReleased.compareAndSet(false, true)) {
+            try {
+              if ((close || streamReconfigured) && channel.isOpen) {
+                try { channel.close() } catch { case _: Throwable => }
+              }
+              pool.release(channel)
+            } catch { case _: Throwable => }
+          }
+
         try {
           val handlerName = s"streamHandler-${System.nanoTime()}"
           val lineQueue = new java.util.concurrent.LinkedBlockingQueue[Either[Throwable, Option[String]]]()
           val lineBuffer = new StringBuilder
-          // A channel with streaming idle handlers must not return to the pool.
-          val streamReconfigured = client.streamingTimeout.nonEmpty
           val pollIntervalMillis = 1000L
 
           // Completable surfacing the response headers to the returned
@@ -681,11 +705,7 @@ class NettyHttpClientInstance(val client: HttpClient) extends HttpClientInstance
                     if (p.get(handlerName) != null) p.remove(handlerName)
                   } catch { case _: Throwable => }
                   clearActiveRequestTask(channel)
-                  if (streamReconfigured) {
-                    try { if (channel.isOpen) channel.close() } catch { case _: Throwable => }
-                  } else {
-                    try { pool.release(channel) } catch { case _: Throwable => }
-                  }
+                  returnChannel(close = false)
                 }
 
               case _ =>
@@ -700,12 +720,13 @@ class NettyHttpClientInstance(val client: HttpClient) extends HttpClientInstance
               case _ =>
                 lineQueue.offer(Left(cause))
                 clearActiveRequestTask(channel)
-                ctx.close()
+                returnChannel(close = true)
             }
 
             override def channelInactive(ctx: ChannelHandlerContext): Unit = {
               lineQueue.offer(Right(None))
               clearActiveRequestTask(channel)
+              returnChannel(close = false)
               super.channelInactive(ctx)
             }
           }
@@ -733,9 +754,7 @@ class NettyHttpClientInstance(val client: HttpClient) extends HttpClientInstance
               // A queued sentinel terminates the consumer if a poll is in flight when cancel runs.
               lineQueue.offer(Right(None))
               clearActiveRequestTask(channel)
-              if (channel.isOpen) {
-                channel.close()
-              }
+              returnChannel(close = true)
             }
           }.unit
           val pull = rapid.Pull.fromFunction[String](
@@ -765,12 +784,14 @@ class NettyHttpClientInstance(val client: HttpClient) extends HttpClientInstance
           channel.writeAndFlush(nettyRequest).addListener((wf: ChannelFuture) => {
             if (!wf.isSuccess) {
               lineQueue.offer(Left(Option(wf.cause()).getOrElse(new RuntimeException("Write failed"))))
+              clearActiveRequestTask(channel)
+              returnChannel(close = true)
             }
           })
         } catch {
           case t: Throwable =>
             clearActiveRequestTask(channel)
-            try { pool.release(channel) } catch { case _: Throwable => }
+            returnChannel(close = true)
             streamReady.failure(t)
         }
       }
