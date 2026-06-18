@@ -455,8 +455,10 @@ case class OpenAPIDartGenerator(api: OpenAPI, config: OpenAPIGeneratorConfig) ex
         case json => throw new UnsupportedOperationException(s"Enum only supports Str: $json")
       }
       parseEnum(typeName, `enum`, componentPath)
-    } else if (schema.properties.isEmpty && schema.`type`.nonEmpty && schema.xFullClass.isDefined && !oneOfParentMap.contains(typeName)) {
-      // Simple type wrapper (e.g., Id wrapping String, Timestamp wrapping int) — not a poly subtype
+    } else if (schema.properties.isEmpty && schema.`type`.nonEmpty && schema.`type` != "object" && schema.xFullClass.isDefined && !oneOfParentMap.contains(typeName)) {
+      // Simple SCALAR wrapper (e.g., Id wrapping String, Timestamp wrapping int) — not a poly
+      // subtype. An empty `object` (e.g. EmptyRequest()) is NOT a scalar wrapper: it falls through
+      // to a normal model class so toJson() yields an empty Map, not a wrapped Object.
       parseTypedWrapper(typeName, schema)
     } else {
       val imports = mutable.Set.empty[String]
@@ -799,7 +801,12 @@ case class OpenAPIDartGenerator(api: OpenAPI, config: OpenAPIGeneratorConfig) ex
               k -> `type`
           }
         }
+        // Only fields shared by BOTH name and identical type belong on the abstract parent;
+        // a same-named field with differing types across children (e.g. MediaState.tmdb is
+        // TmdbMovie on MovieState but TmdbShow on ShowState) must stay on the children, else
+        // the child's getter isn't a valid override of the parent's.
         val commonKeys = maps.map(_.keySet).reduce(_ intersect _)
+          .filter(key => maps.map(_(key)).distinct.sizeIs == 1)
         val baseParams = commonKeys.map(key => key -> maps.head(key)).toMap
         val fields = baseParams.toList.map {
           case (key, value) => s"$value get $key;";
