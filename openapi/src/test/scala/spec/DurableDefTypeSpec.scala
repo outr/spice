@@ -46,6 +46,19 @@ class DurableDefTypeSpec extends AnyWordSpec with Matchers {
   // Nested types — a poly containing another poly
   case class Wrapper(animal: Animal, status: Status, timestamp: Long) derives RW
 
+  // A poly whose child is ITSELF a poly — mirrors `LookupOutput extends
+  // ToolOutput` in Sigil. `Win` is a direct (object) case; `Lookup` is a nested
+  // sealed hierarchy whose leaves serialize with a DOTTED discriminator
+  // (`...Lookup.Found`). The bare `...Lookup` therefore never appears on the
+  // wire, so the parent `Outcome.fromJson` must prefix-match `...Lookup.` and
+  // delegate — an exact `== '...Lookup'` falls through to the `Unknown` throw.
+  sealed trait Outcome derives RW
+  case class Win(score: Int) extends Outcome derives RW
+  enum Lookup extends Outcome derives RW {
+    case Found(name: String)
+    case Missing(reason: String)
+  }
+
   case class TypedRecord(id: UserId, name: String, created: CreatedAt, parentId: Option[UserId]) derives RW
 
   // Sigil bug #178 — nested companion enum. Pre-fix:
@@ -127,6 +140,47 @@ class DurableDefTypeSpec extends AnyWordSpec with Matchers {
       all should include("class DurableDefTypeSpecStatusInactive")
       all should include("class DurableDefTypeSpecStatusPending")
       all should include("if (type == 'DurableDefTypeSpec.Status.Active') return DurableDefTypeSpecStatusActive.fromJson(json);")
+    }
+
+    "route a nested-poly child's dotted leaf discriminator via prefix match (LookupOutput.Found regression)" in {
+      val files = generateFiles("Outcome", summon[RW[Outcome]].definition)
+      val all = allSources(files)
+
+      // The nested poly is its own abstract class that resolves its own leaves.
+      all should include("abstract class DurableDefTypeSpecLookup")
+      all should include("if (type == 'DurableDefTypeSpec.Lookup.Found') return DurableDefTypeSpecLookupFound.fromJson(json);")
+
+      // The PARENT must delegate ANY `...Lookup.*` leaf to Lookup.fromJson. The
+      // wire never carries the bare `...Lookup`, so without the prefix branch
+      // `Lookup.Found` falls through to `throw ArgumentError('Unknown Outcome
+      // type ...')` — the exact crash that froze the web client on
+      // `LookupOutput.Found`.
+      all should include("type?.startsWith('DurableDefTypeSpec.Lookup.')")
+      all should include("return DurableDefTypeSpecLookup.fromJson(json);")
+
+      // The direct (non-poly) child still uses an exact match — no prefix branch.
+      all should include("if (type == 'DurableDefTypeSpec.Win') return DurableDefTypeSpecWin.fromJson(json);")
+    }
+
+    "decode the on<WireType> stream per-event so one bad event can't kill the subscription" in {
+      val config = DurableSocketDartConfig(
+        serviceName = "Test",
+        wireType = "Animal" -> summon[RW[Animal]].definition
+      )
+      val files = DurableSocketDartGenerator(config).generate()
+      val client = files.find(_.fileName == "test_durable_client.dart").get.source
+
+      // Per-event decode that catches + skips, not a bare `.map` that lets a
+      // single undecodable event error the whole stream (which silently stops
+      // ALL further events and hangs in-flight work forever).
+      client should include("expand((e) sync*")
+      client should include("yield (e.")
+      client should include("catch (error, stack)")
+      client should not include "_eventController.stream.map((e) => (e."
+      // The newline in the log line must be a literal `\n` escape, not a real
+      // newline — a real one breaks the single-quoted Dart string (build_runner
+      // parse error). This pins the escape so the closing `')` stays on-line.
+      client should include("""skipped undecodable event: $error\n$stack')""")
     }
 
     "recursively discover nested types" in {

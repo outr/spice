@@ -162,8 +162,20 @@ case class DurableSocketDartGenerator(config: DurableSocketDartConfig) {
     val typedGetter =
       s"""
          |  /// Typed durable events from the server, deserialized via $typeName.fromJson.
+         |  ///
+         |  /// Decodes per-event: a single undecodable event (e.g. a payload type
+         |  /// this build predates) is logged and skipped rather than thrown. A
+         |  /// throw here would propagate as a stream error and tear down the whole
+         |  /// subscription — the client would silently stop receiving ALL further
+         |  /// events and any in-flight work would appear to hang forever.
          |  Stream<(int, $typeName)> get $getterName =>
-         |      _eventController.stream.map((e) => (e.${"$"}1, $typeName.fromJson(e.${"$"}2)));""".stripMargin
+         |      _eventController.stream.expand((e) sync* {
+         |        try {
+         |          yield (e.${"$"}1, $typeName.fromJson(e.${"$"}2));
+         |        } catch (error, stack) {
+         |          print('[$typeName.fromJson] skipped undecodable event: ${"$"}error\\n${"$"}stack'); // ignore: avoid_print
+         |        }
+         |      });""".stripMargin
     val paramName = s"${typeName.head.toLower}${typeName.tail}"
     val push =
       if (config.durableSubtypes.isEmpty) {
@@ -993,7 +1005,20 @@ case class DurableSocketDartGenerator(config: DurableSocketDartConfig) {
       val subName = dartSubtypeName(key, defn, Some(name))
       // Discriminator value matches Fabric's wire format: simple class name (Product.productPrefix).
       // The Poly key from the macro IS the simple name.
-      s"""    if (type == '$key') return $subName.fromJson(json);"""
+      //
+      // When a child is ITSELF a Poly (a nested sealed hierarchy, e.g.
+      // `LookupOutput` under `ToolOutput`), its leaves serialize with a dotted
+      // discriminator (`LookupOutput.Found`) and the bare `LookupOutput` never
+      // appears on the wire. An exact `== 'LookupOutput'` would therefore never
+      // match and the value would fall through to the `Unknown … type` throw.
+      // Match the `Child.` prefix too and delegate to the child's own
+      // `fromJson`, which resolves the leaf case.
+      defn.defType match {
+        case _: DefType.Poly =>
+          s"""    if (type == '$key' || (type?.startsWith('$key.') ?? false)) return $subName.fromJson(json);"""
+        case _ =>
+          s"""    if (type == '$key') return $subName.fromJson(json);"""
+      }
     }.mkString("\n")
 
     // Common-field abstract getters come straight from the polytype's
