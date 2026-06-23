@@ -745,6 +745,8 @@ case class OpenAPIDartGenerator(api: OpenAPI, config: OpenAPIGeneratorConfig) ex
               def recurseType(schema: OpenAPISchema): String = schema match {
                 case c: OpenAPISchema.Component if c.`type` == "array" =>
                   s"List<${recurseType(c.items.get)}>${if (c.nullable.contains(true)) "?" else ""}"
+                case c: OpenAPISchema.Component if c.`type` == "object" && c.additionalProperties.nonEmpty =>
+                  s"Map<String, ${recurseType(c.additionalProperties.get)}>${if (c.nullable.contains(true)) "?" else ""}"
                 case c: OpenAPISchema.Component if c.`enum`.nonEmpty =>
                   val parentName = enumValueToTypeMap(c.`enum`.head.asString)
                   val `enum` = c.`enum`.map {
