@@ -20,7 +20,7 @@ object Dependencies {
 
     val httpMime: String = "4.5.14"
     
-    val undertow: String = "2.4.1.Final"
+    val undertow: String = "2.4.2.Final"
 
     val acme4j: String = "5.1.0"
     
