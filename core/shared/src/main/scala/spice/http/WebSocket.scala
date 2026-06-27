@@ -105,6 +105,13 @@ trait WebSocket {
    */
   def upload(path: Path, userId: String, token: String, remoteFileName: String): Task[Unit] = Task.defer {
     val size = Files.size(path)
+
+    // Register the completion listener BEFORE sending so the server's
+    // "fileUploaded" ack cannot arrive before we're listening for it (which would
+    // strand the returned Task forever).
+    val completable = Task.completable[Unit]
+    receive.text.once(_ => completable.complete(Success(())), s => s == "fileUploaded")
+
     send.text @= s"fileUpload:$remoteFileName:$size:$userId:$token"
 
     val buf = new Array[Byte](65536)
@@ -120,8 +127,6 @@ trait WebSocket {
       is.close()
     }
 
-    val completable = Task.completable[Unit]
-    receive.text.once(_ => completable.complete(Success(())), s => s == "fileUploaded")
     completable
   }
 

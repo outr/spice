@@ -148,6 +148,15 @@ class NettyHttpClientWebSocket(url: URL, instance: NettyHttpClientInstance) exte
                 task.failure(new RuntimeException(s"WebSocket handshake timeout for $url"))
               }
               ctx.close()
+            case _: IdleStateEvent =>
+              // Keepalive: nothing has flowed for KeepAliveIdleSeconds. Send a ping
+              // so proxies (e.g. Cloudflare drops idle sockets after ~100s) keep the
+              // connection open while it sits quiet between sends — for example
+              // during a long server-side import between two uploads. A dead peer
+              // also surfaces promptly instead of stranding the next write.
+              if (ctx.channel().isActive) {
+                ctx.channel().writeAndFlush(new PingWebSocketFrame())
+              }
             case _ => super.userEventTriggered(ctx, evt)
           }
         }
@@ -184,6 +193,7 @@ class NettyHttpClientWebSocket(url: URL, instance: NettyHttpClientInstance) exte
         .group(eventLoopGroup)
         .channel(classOf[NioSocketChannel])
         .option[Integer](ChannelOption.CONNECT_TIMEOUT_MILLIS, 10000) // 10 second timeout
+        .option[io.netty.channel.WriteBufferWaterMark](ChannelOption.WRITE_BUFFER_WATER_MARK, NettyHttpClientWebSocket.WriteWaterMark)
         .handler(new ChannelInitializer[Channel] {
           override def initChannel(ch: Channel): Unit = {
             val p = ch.pipeline()
@@ -195,7 +205,9 @@ class NettyHttpClientWebSocket(url: URL, instance: NettyHttpClientInstance) exte
 
             // Add timeouts
             p.addLast("readTimeout", new ReadTimeoutHandler(60)) // 60 seconds
-            p.addLast("idleState", new IdleStateHandler(0, 0, 300)) // 5 minute idle
+            // Fire an all-idle event after KeepAliveIdleSeconds of silence so the
+            // handler below can emit a keepalive ping (see userEventTriggered).
+            p.addLast("idleState", new IdleStateHandler(0, 0, NettyHttpClientWebSocket.KeepAliveIdleSeconds))
 
             // HTTP codec for initial handshake
             p.addLast("httpCodec", new HttpClientCodec())
@@ -235,6 +247,15 @@ class NettyHttpClientWebSocket(url: URL, instance: NettyHttpClientInstance) exte
 
           send.binary.attach {
             case ByteBufferData(bb) =>
+              // Backpressure: Netty's outbound buffer is unbounded, so a producer
+              // that outruns the network (e.g. streaming a multi-GB file as many
+              // frames) would exhaust the heap. Pause while the channel is over its
+              // write high-water mark. This runs on the producing thread (the one
+              // driving `send.binary @=`), not the event loop, so blocking here just
+              // paces the source while Netty drains.
+              while (!ch.isWritable && ch.isActive) {
+                Thread.sleep(10)
+              }
               if (ch.isActive) {
                 ch.writeAndFlush(new BinaryWebSocketFrame(Unpooled.copiedBuffer(bb)))
               }
@@ -270,4 +291,17 @@ class NettyHttpClientWebSocket(url: URL, instance: NettyHttpClientInstance) exte
     // Schedule cleanup of event loop group
     eventLoopGroup.shutdownGracefully(0, 100, TimeUnit.MILLISECONDS)
   }
+}
+
+object NettyHttpClientWebSocket {
+  // Emit a keepalive ping after this many seconds of inactivity. Kept well under
+  // common proxy idle cut-offs (e.g. Cloudflare ~100s) so a quiet connection
+  // survives long gaps between sends.
+  private val KeepAliveIdleSeconds: Int = 30
+
+  // Outbound backpressure thresholds (low, high). While buffered writes exceed the
+  // high mark the channel reports !isWritable; the producer pauses until Netty
+  // drains below the low mark. Bounded so streaming large files can't OOM.
+  private val WriteWaterMark: io.netty.channel.WriteBufferWaterMark =
+    new io.netty.channel.WriteBufferWaterMark(1 * 1024 * 1024, 4 * 1024 * 1024)
 }
