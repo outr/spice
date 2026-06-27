@@ -10,6 +10,16 @@ import 'package:web_socket_channel/web_socket_channel.dart';
 
 enum DurableSocketState { disconnected, handshaking, active, reconnecting, closed }
 
+/// Carries a server-supplied `code` alongside the message for a failed RPC `ask`,
+/// mirroring the Scala-side RpcException.
+class RpcException implements Exception {
+  final String code;
+  final String message;
+  RpcException(this.code, this.message);
+  @override
+  String toString() => 'RpcException($code): $message';
+}
+
 /// DurableSocket client for the %%SERVICE_NAME%% backend.
 /// Handles connect/resume handshake, sequenced events with ack batching,
 /// channel switching, ephemeral message passthrough, and auto-reconnect.
@@ -48,6 +58,10 @@ class %%SERVICE_NAME%%DurableClient {
   int _highestProcessedSeq = 0;
   int _unackedCount = 0;
   int _outboundSeq = 0;
+
+  // RPC request/response correlation (ephemeral; resolved by matching id)
+  int _rpcCounter = 0;
+  final Map<int, Completer<Map<String, dynamic>>> _pendingRequests = {};
 
   // Per-channel last-seen seq for switch resume
   final Map<String, int> _channelSeqs = {};
@@ -110,6 +124,27 @@ class %%SERVICE_NAME%%DurableClient {
   }
 
   // ---------------------------------------------------------------------------
+  // RPC (request/response, client → server)
+  // ---------------------------------------------------------------------------
+
+  /// Send a typed RPC request and await the server's response payload. Mirrors
+  /// the Scala DurableSocket.ask: a `request` frame correlated by id, resolved
+  /// by the matching `response` frame or rejected with an [RpcException] on
+  /// `response-error`. Fails with a [TimeoutException] if no reply arrives.
+  Future<Map<String, dynamic>> ask(Map<String, dynamic> data,
+      {Duration timeout = const Duration(seconds: 30)}) {
+    _rpcCounter++;
+    final id = _rpcCounter;
+    final completer = Completer<Map<String, dynamic>>();
+    _pendingRequests[id] = completer;
+    _sendRaw({'type': 'request', 'id': id, 'data': data});
+    return completer.future.timeout(timeout, onTimeout: () {
+      _pendingRequests.remove(id);
+      throw TimeoutException('RPC request $id timed out', timeout);
+    });
+  }
+
+  // ---------------------------------------------------------------------------
   // Channel switching
   // ---------------------------------------------------------------------------
 
@@ -167,6 +202,18 @@ class %%SERVICE_NAME%%DurableClient {
         _unackedCount = 0;
         _pendingSwitch?.complete();
         _pendingSwitch = null;
+        break;
+
+      case 'response':
+        final id = json['id'] as int;
+        _pendingRequests.remove(id)?.complete(json['data'] as Map<String, dynamic>);
+        break;
+
+      case 'response-error':
+        final id = json['id'] as int;
+        _pendingRequests.remove(id)?.completeError(
+          RpcException(json['code'] as String? ?? 'error', json['message'] as String? ?? 'RPC error'),
+        );
         break;
 
       case 'error':

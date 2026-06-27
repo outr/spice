@@ -47,6 +47,24 @@ object SwitchedMessage {
   given rw: RW[SwitchedMessage] = RW.gen
 }
 
+// RPC request/response (ephemeral, correlated by id — never logged or replayed). `data` is any
+// RW'able payload; when paired with a polymorphic Event hierarchy, the request payload's own
+// discriminator selects the server handler, so no method name rides the wire.
+case class RequestMessage(id: Long, data: Json)
+object RequestMessage {
+  given rw: RW[RequestMessage] = RW.gen
+}
+
+case class ResponseMessage(id: Long, data: Json)
+object ResponseMessage {
+  given rw: RW[ResponseMessage] = RW.gen
+}
+
+case class ResponseErrorMessage(id: Long, code: String, message: String)
+object ResponseErrorMessage {
+  given rw: RW[ResponseErrorMessage] = RW.gen
+}
+
 case class DurableSocketConfig(
   ackBatchDelay: FiniteDuration = 100.millis,
   ackBatchCount: Int = 10,

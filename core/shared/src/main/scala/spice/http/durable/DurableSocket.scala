@@ -8,6 +8,9 @@ import reactify.{Channel, Val, Var}
 import spice.http.{ByteBufferData, WebSocket}
 
 import java.nio.ByteBuffer
+import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.atomic.AtomicLong
+import scala.concurrent.duration.*
 
 class DurableSocket[Id: RW, Event: RW, Info: RW](
   val config: DurableSocketConfig,
@@ -32,6 +35,17 @@ class DurableSocket[Id: RW, Event: RW, Info: RW](
   private val tracker = new SequenceTracker(config)
 
   @volatile private var pendingSwitch: rapid.task.Completable[Unit] = scala.compiletime.uninitialized
+
+  // --- RPC (request/response) facet: ephemeral, correlated by id ---
+  private val rpcCounter = new AtomicLong(0L)
+  private val pendingRequests = new ConcurrentHashMap[Long, rapid.task.Completable[Json]]()
+
+  /** Handles an inbound RPC request (request payload JSON -> response payload JSON). The owner — a
+    * [[DurableSocketServer]] session for client->server RPC, or the client itself for server->client
+    * RPC — installs this; the default rejects every request. Throw an [[RpcException]] to send a
+    * coded error back to the caller. */
+  @volatile var requestHandler: Json => Task[Json] = _ =>
+    Task.error(new RpcException("no_handler", "No RPC request handler registered"))
 
   // --- File transfer facet (one payload type per socket) ---
   @volatile private var _files: FileChannel[?] = null
@@ -65,6 +79,28 @@ class DurableSocket[Id: RW, Event: RW, Info: RW](
 
   def sendEphemeral(json: Json): Unit = {
     sendRaw(JsonFormatter.Default(json))
+  }
+
+  // --- Sending: RPC requests ---
+
+  /** Send a typed request and complete with the peer's typed response. Request and response ride the
+    * ephemeral plane (never logged or replayed), so a request issued to a dead connection simply
+    * fails on `timeout`. Payloads are any RW values; pairing the request type with a polymorphic
+    * Event hierarchy lets its discriminator pick the server handler — no method name on the wire. A
+    * peer error arrives as a failed [[RpcException]] carrying the handler's `code`. */
+  def ask[Req: RW, Res: RW](request: Req, timeout: FiniteDuration = 30.seconds): Task[Res] = Task.defer {
+    val id = rpcCounter.incrementAndGet()
+    val completable = Task.completable[Json]
+    pendingRequests.put(id, completable)
+    sendRaw(JsonFormatter.Default(obj(
+      "type" -> str("request"),
+      "id" -> num(id),
+      "data" -> request.json
+    )))
+    completable
+      .timeout(timeout)
+      .map(_.as[Res])
+      .guarantee(Task { pendingRequests.remove(id); () })
   }
 
   // --- Channel switching ---
@@ -201,6 +237,28 @@ class DurableSocket[Id: RW, Event: RW, Info: RW](
 
       case Some("error") =>
         onError @= ErrorMessage(json("code").asString, json("message").asString)
+
+      case Some("request") =>
+        val id = json("id").asLong
+        val data = json("data")
+        requestHandler(data).map { result =>
+          sendRaw(JsonFormatter.Default(obj("type" -> str("response"), "id" -> num(id), "data" -> result)))
+        }.handleError { throwable =>
+          val (code, message) = throwable match {
+            case e: RpcException => (e.code, Option(e.getMessage).getOrElse("RPC error"))
+            case other          => ("error", Option(other.getMessage).getOrElse("RPC error"))
+          }
+          sendRaw(JsonFormatter.Default(obj("type" -> str("response-error"), "id" -> num(id), "code" -> str(code), "message" -> str(message))))
+          Task.unit
+        }.start()
+
+      case Some("response") =>
+        val c = pendingRequests.remove(json("id").asLong)
+        if (c != null) c.success(json("data"))
+
+      case Some("response-error") =>
+        val c = pendingRequests.remove(json("id").asLong)
+        if (c != null) c.failure(new RpcException(json("code").asString, json("message").asString))
 
       case Some("file-start")  => if (_files != null) _files.acceptStart(json)
       case Some("file-end")    => if (_files != null) _files.acceptEnd(json)

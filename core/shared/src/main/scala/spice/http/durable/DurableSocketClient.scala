@@ -66,6 +66,13 @@ class DurableSocketClient[Id: RW, Event: RW, Info: RW](
   def push(event: Event): Task[Long] = protocol.push(event)
   def sendEphemeral(json: Json): Unit = protocol.sendEphemeral(json)
 
+  /** Send a typed RPC request to the server and complete with its typed response. See [[DurableSocket.ask]]. */
+  def ask[Req: RW, Res: RW](request: Req, timeout: FiniteDuration = 30.seconds): Task[Res] = protocol.ask[Req, Res](request, timeout)
+
+  /** Install a handler for server->client RPC requests (request payload JSON -> response payload JSON). */
+  def requestHandler_=(handler: Json => Task[Json]): Unit = protocol.requestHandler = handler
+  def requestHandler: Json => Task[Json] = protocol.requestHandler
+
   /** Typed file-transfer facet for this connection. See [[FileChannel]]. */
   def files[F: RW]: FileChannel[F] = protocol.files[F]
 

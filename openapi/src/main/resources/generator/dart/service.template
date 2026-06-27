@@ -23,6 +23,15 @@ class Service {
   /// underlying error is always rethrown to the caller regardless.
   static void Function(Object error, StackTrace stack)? onError;
 
+  /// When set, [restful] (and body-less [restGet]) route through this transport
+  /// instead of an HTTP request — used to run request/response over a
+  /// DurableSocket (RPC). Receives the endpoint path and the request JSON and
+  /// returns the response JSON; throw to signal a failure. Return `null` to
+  /// decline this call so it falls through to plain HTTP (e.g. an endpoint the
+  /// transport can't serve, or while the socket is down). Leave the hook null
+  /// to always use HTTP.
+  static Future<Map<String, dynamic>?> Function(String path, Map<String, dynamic> request)? transport;
+
   static Uri host(String path) => base.replace(path: path);
 
   static Map<String, String> _buildHeaders(Map<String, String> defaults) {
@@ -54,6 +63,17 @@ class Service {
     Map<String, dynamic> request,
     Response Function(Map<String, dynamic> json) convert
   ) async {
+    if (transport != null) {
+      final Map<String, dynamic>? json = await transport!(path, request);
+      if (json != null) {
+        try {
+          return convert(json);
+        } catch (exc, st) {
+          onError?.call(exc, st);
+          rethrow;
+        }
+      }
+    }
     final String body = jsonEncode(request);
     final http.Response response = await http.post(
         Service.host(path),
@@ -80,6 +100,17 @@ class Service {
     String path,
     Response Function(Map<String, dynamic> json) convert
   ) async {
+    if (transport != null) {
+      final Map<String, dynamic>? json = await transport!(path, <String, dynamic>{});
+      if (json != null) {
+        try {
+          return convert(json);
+        } catch (exc, st) {
+          onError?.call(exc, st);
+          rethrow;
+        }
+      }
+    }
     final http.Response response = await http.get(
         Service.host(path),
         headers: _buildHeaders({

@@ -34,7 +34,8 @@ class DurableSocketServer[Id: RW, Event: RW, Info: RW](
   resolveChannel: (String, Info) => Task[Id],
   authorizeSwitch: (DurableSession[Id, Event, Info], Id) => Task[Unit] = (_: DurableSession[Id, Event, Info], _: Id) => Task.unit,
   sessionTimeout: FiniteDuration = 30.minutes,
-  fileTransfer: FileTransferConfig = FileTransferConfig()
+  fileTransfer: FileTransferConfig = FileTransferConfig(),
+  onRequest: (Info, Json) => Task[Json] = (_: Info, _: Json) => Task.error(new RpcException("no_handler", "No RPC handler registered"))
 ) extends WebSocketHandler {
   private val sessions = new ConcurrentHashMap[String, DurableSession[Id, Event, Info]]()
   private val channelSessions = new ConcurrentHashMap[Id, ConcurrentHashMap[String, DurableSession[Id, Event, Info]]]()
@@ -175,13 +176,20 @@ class DurableSocketServer[Id: RW, Event: RW, Info: RW](
 
   protected def createSocket(channelId: Id): DurableSocket[Id, Event, Info] = {
     val server = this
-    new DurableSocket[Id, Event, Info](config, eventLog, channelId, fileTransfer) {
+    val ds = new DurableSocket[Id, Event, Info](config, eventLog, channelId, fileTransfer) {
       override protected def handleHandshakeMessage(json: Json, msgType: String): Unit = {
         if (msgType == "switch") {
           server.handleSwitch(this, json)
         }
       }
     }
+    // Route inbound RPC requests through the server's handler, injecting the calling session's Info
+    // (resolved at the authenticated upgrade) so handlers can authorize per the caller's identity.
+    ds.requestHandler = (data: Json) => sessions.values().asScala.find(_.protocol eq ds) match {
+      case Some(s) => onRequest(s.info, data)
+      case None    => Task.error(new RpcException("no_session", "No session for RPC request"))
+    }
+    ds
   }
 
   private def handleSwitch(ds: DurableSocket[Id, Event, Info], json: Json): Unit = {

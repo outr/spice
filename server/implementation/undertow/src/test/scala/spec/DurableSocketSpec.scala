@@ -28,6 +28,16 @@ object ConnectInfo {
   given rw: RW[ConnectInfo] = RW.gen
 }
 
+case class EchoRequest(text: String)
+object EchoRequest {
+  given rw: RW[EchoRequest] = RW.gen
+}
+
+case class EchoResponse(text: String)
+object EchoResponse {
+  given rw: RW[EchoResponse] = RW.gen
+}
+
 class DurableSocketSpec extends AnyWordSpec with Matchers {
   val testConfig: DurableSocketConfig = DurableSocketConfig(
     ackBatchDelay = 50.millis,
@@ -445,6 +455,68 @@ class DurableSocketSpec extends AnyWordSpec with Matchers {
       eventually(timeout(Span(5, Seconds))) {
         Thread.sleep(100)
         received.exists(_._2.message == "msg-A2") should be(true)
+      }
+
+      client.close()
+    }
+
+    "answer a typed request/response RPC" in {
+      val rpcLog = new InMemoryEventLog[String, ChatEvent]
+      val rpcServer = new DurableSocketServer[String, ChatEvent, ConnectInfo](
+        config = testConfig,
+        eventLog = rpcLog,
+        resolveChannel = (_, info) => Task.pure(info.room),
+        onRequest = (info, data) => {
+          val req = data.as[EchoRequest]
+          Task.pure(EchoResponse(s"${info.userId}:${req.text}").json)
+        }
+      )
+      server.handler(List(path"/ws-rpc" / rpcServer))
+
+      val client = new DurableSocketClient[String, ChatEvent, ConnectInfo](
+        createWebSocket = () => HttpClient.url(url"ws://localhost".withPort(serverPort).withPath(path"/ws-rpc")).webSocket(),
+        config = testConfig,
+        outboundLog = rpcLog,
+        initialChannelId = "rpcuser",
+        info = ConnectInfo("rpcuser", "rpcroom"),
+        clientId = "rpcuser"
+      )
+
+      client.connect().sync()
+      client.state() should be(ProtocolState.Active)
+
+      val response = client.ask[EchoRequest, EchoResponse](EchoRequest("hello")).sync()
+      response.text should be("rpcuser:hello")
+
+      client.close()
+    }
+
+    "surface an RPC handler error as a coded RpcException" in {
+      val errLog = new InMemoryEventLog[String, ChatEvent]
+      val errServer = new DurableSocketServer[String, ChatEvent, ConnectInfo](
+        config = testConfig,
+        eventLog = errLog,
+        resolveChannel = (_, info) => Task.pure(info.room),
+        onRequest = (_, _) => Task.error(new RpcException("bad_input", "rejected"))
+      )
+      server.handler(List(path"/ws-rpc-err" / errServer))
+
+      val client = new DurableSocketClient[String, ChatEvent, ConnectInfo](
+        createWebSocket = () => HttpClient.url(url"ws://localhost".withPort(serverPort).withPath(path"/ws-rpc-err")).webSocket(),
+        config = testConfig,
+        outboundLog = errLog,
+        initialChannelId = "erruser",
+        info = ConnectInfo("erruser", "errroom"),
+        clientId = "erruser"
+      )
+
+      client.connect().sync()
+
+      val result = client.ask[EchoRequest, EchoResponse](EchoRequest("x")).attempt.sync()
+      result.isFailure should be(true)
+      result.failed.get match {
+        case e: RpcException => e.code should be("bad_input")
+        case other          => fail(s"Expected RpcException, got $other")
       }
 
       client.close()
