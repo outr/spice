@@ -163,6 +163,26 @@ class DurableSocket[Id: RW, Event: RW, Info: RW](
     ws.foreach(_.disconnect())
   }
 
+  /**
+    * Drop the current transport WITHOUT closing the protocol.
+    *
+    * Identical to [[close]] except the state lands on `Disconnected` rather than `Closed`, leaving the connection
+    * eligible to be re-established. [[close]] is terminal by design — `DurableSocketClient.handleDisconnect` refuses
+    * to reconnect a `Closed` protocol — which makes it the wrong tool for "drop this socket and re-dial", the case a
+    * rolling deploy needs when the instance holding the socket is being retired and wants the client to land on its
+    * replacement.
+    *
+    * Backs [[DurableSocketClient.reconnect]]. No-op once closed.
+    */
+  def disconnect(): Unit = if (_state() != ProtocolState.Closed) {
+    val ws = rawWs()
+    unbind()
+    // `unbind` only demotes an ACTIVE protocol; a socket dropped mid-handshake
+    // would otherwise be stranded in `Handshaking` and never re-dial.
+    _state @= ProtocolState.Disconnected
+    ws.foreach(_.disconnect())
+  }
+
   // --- Protocol internals ---
 
   def sendConnect(clientId: String, info: Info): Unit = {

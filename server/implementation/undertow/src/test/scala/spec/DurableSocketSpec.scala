@@ -522,6 +522,76 @@ class DurableSocketSpec extends AnyWordSpec with Matchers {
       client.close()
     }
 
+    // `reconnect()` exists for the rolling-deploy case: the instance holding a
+    // socket is being retired and wants the client to land on its replacement.
+    // `close()` cannot serve that role — it parks the protocol in `Closed`,
+    // which permanently disables the reconnect path.
+    "reconnect() re-dials the socket without closing the protocol" in {
+      // The shared testConfig uses ReconnectStrategy.none; an intentional
+      // reconnect needs a strategy that actually yields a delay.
+      val reconnectConfig = testConfig.copy(
+        reconnectStrategy = ReconnectStrategy.exponentialBackoff(
+          baseDelay = 50.millis, maxDelay = 200.millis, maxAttempts = Int.MaxValue
+        )
+      )
+      val userId = "reconnect-user"
+      val client = new DurableSocketClient[String, ChatEvent, ConnectInfo](
+        createWebSocket = () => HttpClient.url(url"ws://localhost".withPort(serverPort).withPath(path"/ws")).webSocket(),
+        config = reconnectConfig,
+        outboundLog = eventLog,
+        initialChannelId = userId,
+        info = ConnectInfo(userId, "reconnect-room"),
+        clientId = userId
+      )
+
+      var received: List[ChatEvent] = Nil
+      client.onEvent.attach { case (_, event) => received = received :+ event }
+
+      client.connect().sync()
+      client.state() should be(ProtocolState.Active)
+
+      client.reconnect()
+
+      // The distinguishing property: NOT terminal. `close()` would leave this
+      // `Closed` forever.
+      client.state() should not be ProtocolState.Closed
+
+      // It re-dials on its own and comes back up.
+      eventually(timeout(Span(10, Seconds))) {
+        client.state() should be(ProtocolState.Active)
+      }
+
+      // And the reconnected socket is genuinely live — a push still round-trips
+      // through the server's echo handler.
+      client.push(ChatEvent("after-reconnect", userId)).sync()
+      eventually(timeout(Span(10, Seconds))) {
+        received.map(_.message) should contain("echo: after-reconnect")
+      }
+
+      client.close()
+      client.state() should be(ProtocolState.Closed)
+    }
+
+    "reconnect() is a no-op once closed" in {
+      val userId = "closed-user"
+      val client = new DurableSocketClient[String, ChatEvent, ConnectInfo](
+        createWebSocket = () => HttpClient.url(url"ws://localhost".withPort(serverPort).withPath(path"/ws")).webSocket(),
+        config = testConfig,
+        outboundLog = eventLog,
+        initialChannelId = userId,
+        info = ConnectInfo(userId, "closed-room"),
+        clientId = userId
+      )
+      client.connect().sync()
+      client.close()
+      client.state() should be(ProtocolState.Closed)
+
+      // A caller that closed deliberately must stay closed — reconnect() must
+      // not resurrect a socket the owner already gave up on.
+      client.reconnect()
+      client.state() should be(ProtocolState.Closed)
+    }
+
     "stop the server" in {
       server.stop().sync()
       server.isRunning should be(false)

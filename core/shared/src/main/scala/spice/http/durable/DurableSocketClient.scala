@@ -41,12 +41,19 @@ class DurableSocketClient[Id: RW, Event: RW, Info: RW](
     override protected def handleDisconnect(): Unit = {
       super.handleDisconnect()
       if (protocol.state() != ProtocolState.Closed) {
-        attemptReconnect()
+        beginReconnect()
       }
     }
   }
 
   val reconnectAttempt: Var[Int] = Var(0)
+
+  // Guards the reconnect loop so at most one runs at a time. `bind` attaches
+  // `handleDisconnect` to BOTH `ws.receive.close` AND `ws.status`, so a single
+  // socket closing can invoke it twice — which previously started two
+  // independent reconnect loops racing to bind two sockets under one clientId,
+  // leaving a half-open zombie that still reports as connected.
+  private val reconnecting = new java.util.concurrent.atomic.AtomicBoolean(false)
 
   def connect(): Task[Unit] = {
     val ws = createWebSocket()
@@ -62,6 +69,27 @@ class DurableSocketClient[Id: RW, Event: RW, Info: RW](
   }
 
   def close(): Unit = protocol.close()
+
+  /**
+    * Force a reconnect: drop the current transport and re-dial (resuming the session) using the configured
+    * `reconnectStrategy`.
+    *
+    * This is the primitive for "the server asked us to move" — a rolling deploy where the instance holding this
+    * socket is being retired and wants the client to land on its replacement, rather than riding a doomed connection
+    * until it dies. [[close]] cannot serve that role: it is terminal (it parks the protocol in `Closed`, which
+    * permanently disables the reconnect path), so a client that calls it goes dark until its process restarts.
+    *
+    * The re-dial is driven explicitly rather than by waiting on the dropped socket's close event, because a half-open
+    * socket may never deliver one. Because this is an intentional move rather than a failure, the attempt counter is
+    * reset so we re-dial at the strategy's base delay instead of an accumulated backoff.
+    *
+    * No-op once [[close]]d.
+    */
+  def reconnect(): Unit = if (protocol.state() != ProtocolState.Closed) {
+    reconnectAttempt @= 0
+    protocol.disconnect()
+    beginReconnect()
+  }
 
   def push(event: Event): Task[Long] = protocol.push(event)
   def sendEphemeral(json: Json): Unit = protocol.sendEphemeral(json)
@@ -90,18 +118,30 @@ class DurableSocketClient[Id: RW, Event: RW, Info: RW](
       protocol.replayAfter(lastClientSeq).start()
     }
     reconnectAttempt @= 0
+    reconnecting.set(false)
     protocol.activate()
+  }
+
+  /** Single entry point into the reconnect loop. Collapses concurrent triggers
+    * (duplicate disconnect events, or an explicit [[reconnect]] racing one)
+    * into a single loop. */
+  private def beginReconnect(): Unit = if (reconnecting.compareAndSet(false, true)) {
+    attemptReconnect()
   }
 
   private def attemptReconnect(): Unit = {
     val attempt = reconnectAttempt()
     config.reconnectStrategy.nextDelay(attempt) match {
       case None =>
+        reconnecting.set(false)
         protocol.close()
       case Some(delay) =>
         reconnectAttempt @= attempt + 1
         Task.sleep(delay).flatMap { _ =>
-          if (protocol.state() == ProtocolState.Closed) Task.unit
+          if (protocol.state() == ProtocolState.Closed) {
+            reconnecting.set(false)
+            Task.unit
+          }
           else {
             val ws = createWebSocket()
             ws.connect().flatMap { status =>
