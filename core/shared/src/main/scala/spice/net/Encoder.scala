@@ -1,6 +1,6 @@
 package spice.net
 
-import scala.util.matching.Regex
+import java.nio.charset.StandardCharsets
 
 object Encoder {
   // RFC 3986 pchar: unreserved / sub-delims / ":" / "@"
@@ -19,10 +19,29 @@ object Encoder {
     '{', '}'                                   // URI template support
   )
   
-  def apply(s: String): String = s.map {
-    case c if unreservedCharacters.contains(c) => c
-    case c => s"%${c.toLong.toHexString.toUpperCase}"
-  }.mkString
+  // Percent-encode per RFC 3986: an unreserved char passes through; anything else is emitted as its
+  // UTF-8 bytes, each %XX. Iterated by CODE POINT so astral chars (emoji) encode as one UTF-8
+  // sequence rather than two broken surrogate halves. Previously each char became a single %XX of its
+  // code value (ISO-8859-1, and outright invalid above U+00FF) — the encode-side twin of the decoder
+  // bug, so spice round-tripped with itself but disagreed with every UTF-8 web client.
+  def apply(s: String): String = {
+    val b = new StringBuilder(s.length)
+    var i = 0
+    while (i < s.length) {
+      val c = s.charAt(i)
+      if (unreservedCharacters.contains(c)) {
+        b.append(c)
+        i += 1
+      } else {
+        val cp = s.codePointAt(i)
+        new String(Character.toChars(cp)).getBytes(StandardCharsets.UTF_8).foreach { byte =>
+          b.append(f"%%${byte & 0xff}%02X")
+        }
+        i += Character.charCount(cp)
+      }
+    }
+    b.toString
+  }
 
   def apply(part: URLPathPart): String = part match {
     case URLPathPart.Separator => "/"

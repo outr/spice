@@ -23,6 +23,17 @@ class URLSpec extends AnyWordSpec with Matchers {
         url.parameters.value("foo.one") should be(Some("1"))
         url.parameters.value("foo.two") should be(Some("2"))
       }
+      "decode a UTF-8 percent-encoded param value as UTF-8 (not ISO-8859-1)" in {
+        // %C3%A9 is the UTF-8 encoding of 'é' (what a browser / java.net.URLEncoder emits). It must
+        // decode to one 'é', not the mojibake "Ã©".
+        val url = URL.parse("https://somewhere.com?q=pok%C3%A9mon")
+        url.parameters.value("q") should be(Some("pokémon"))
+      }
+      "round-trip a UTF-8 param value through encode then parse" in {
+        val encoded = URL.parse("https://somewhere.com").withParam("q", "Beyoncé").encoded.toString
+        encoded should be("https://somewhere.com?q=Beyonc%C3%A9")
+        URL.parse(encoded).parameters.value("q") should be(Some("Beyoncé"))
+      }
       "properly parse an IP address with a ? on the end" in {
         val url = URL.parse("http://192.168.1.1:8080/?")
         url.host should be("192.168.1.1")
