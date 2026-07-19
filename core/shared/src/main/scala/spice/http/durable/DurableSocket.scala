@@ -204,6 +204,16 @@ class DurableSocket[Id: RW, Event: RW, Info: RW](
     )))
   }
 
+  /** Tell the peer this instance is retiring so it should re-dial onto the replacement (see
+    * [[DurableSocketClient.reconnect]]). Application-level, so it works even where the transport can't
+    * surface a coded close; a graceful drain follows it with a WS 1001 close for stragglers. */
+  def sendGoingAway(reason: String): Unit = {
+    sendRaw(JsonFormatter.Default(obj(
+      "type" -> str("going-away"),
+      "reason" -> str(reason)
+    )))
+  }
+
   def sendConnected(lastClientSeq: Long, resumed: Boolean): Unit = {
     sendRaw(JsonFormatter.Default(obj(
       "type" -> str("connected"),
@@ -258,6 +268,9 @@ class DurableSocket[Id: RW, Event: RW, Info: RW](
       case Some("error") =>
         onError @= ErrorMessage(json("code").asString, json("message").asString)
 
+      case Some("going-away") =>
+        handleGoingAway(json)
+
       case Some("request") =>
         val id = json("id").asLong
         val data = json("data")
@@ -292,6 +305,10 @@ class DurableSocket[Id: RW, Event: RW, Info: RW](
   }
 
   protected def handleHandshakeMessage(json: Json, msgType: String): Unit = {}
+
+  /** The server is retiring the instance holding this socket and wants us to re-dial onto its
+    * replacement. [[DurableSocketClient]] overrides this to trigger a reconnect; a no-op elsewhere. */
+  protected def handleGoingAway(json: Json): Unit = {}
 
   protected def handleDisconnect(): Unit = {
     if (_state() != ProtocolState.Closed) {

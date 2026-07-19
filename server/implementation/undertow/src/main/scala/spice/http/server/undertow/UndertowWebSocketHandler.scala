@@ -48,6 +48,13 @@ object UndertowWebSocketHandler {
             Try(channel.sendClose())
           }
         }
+        webSocketListener.send.closeWith.attach { cr =>
+          if (channel.isOpen) {
+            safely(s"send.closeWith dispatch — code=${cr.code} reason='${textPreview(cr.reason)}'") {
+              WebSockets.sendClose(cr.code, cr.reason, channel, null)
+            }
+          }
+        }
 
         // Handle receiving messages
         channel.getReceiveSetter.set(new AbstractReceiveListener {

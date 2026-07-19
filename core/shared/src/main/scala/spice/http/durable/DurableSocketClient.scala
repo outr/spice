@@ -44,6 +44,11 @@ class DurableSocketClient[Id: RW, Event: RW, Info: RW](
         beginReconnect()
       }
     }
+
+    override protected def handleGoingAway(json: Json): Unit = {
+      scribe.info("DurableSocket: server going away; re-dialing onto its replacement")
+      DurableSocketClient.this.reconnect()
+    }
   }
 
   val reconnectAttempt: Var[Int] = Var(0)

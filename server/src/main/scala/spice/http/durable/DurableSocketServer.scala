@@ -85,6 +85,23 @@ class DurableSocketServer[Id: RW, Event: RW, Info: RW](
     expiryLoop(checkInterval).start()
   }
 
+  /** Gracefully drain for a rolling deploy: tell every connected client the instance is going away so it
+    * re-dials onto the replacement, allow a short `grace` for in-flight work to settle and clients to
+    * move, then close any stragglers with a WS 1001 "going away". Register it with
+    * `HttpServer.onDrain` so it runs on SIGTERM before the listeners are torn down. */
+  def drain(reason: String = "server_going_away", grace: FiniteDuration = 5.seconds): Task[Unit] = Task.defer {
+    val current = activeSessions.filter(_.isConnected)
+    scribe.info(s"DurableSocketServer draining ${current.size} session(s); grace=$grace")
+    current.foreach(s => scala.util.Try(s.protocol.sendGoingAway(reason)))
+    Task.sleep(grace).map { _ =>
+      current.foreach { s =>
+        scala.util.Try(s.listener().disconnect(1001, reason))
+        removeSession(s.clientId)
+      }
+      scribe.info("DurableSocketServer drain complete")
+    }
+  }
+
   private def expiryLoop(interval: FiniteDuration): Task[Unit] =
     Task.sleep(interval).flatMap { _ =>
       expireStale()

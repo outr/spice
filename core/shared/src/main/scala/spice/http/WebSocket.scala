@@ -133,4 +133,12 @@ trait WebSocket {
   def connect(): Task[ConnectionStatus]
 
   def disconnect(): Unit
+
+  /** Close with an explicit RFC 6455 status code and reason (e.g. 1001 "going away" on a graceful
+    * drain), rather than the uncoded normal close [[disconnect]] sends. The coded close rides
+    * [[WebSocketChannels.closeWith]]; server transports (Undertow) act on it. */
+  def disconnect(code: Int, reason: String): Unit = {
+    send.closeWith @= CloseReason(code, reason)
+    _status @= ConnectionStatus.Closed
+  }
 }
