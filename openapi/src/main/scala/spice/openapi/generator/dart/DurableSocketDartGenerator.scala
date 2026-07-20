@@ -3,7 +3,7 @@ package spice.openapi.generator.dart
 import fabric.Str as FabricStr
 import fabric.define.{DefType, Definition}
 import spice.api.server.{DurableEnumDescriptor, DurableEventDescriptor, DurableFieldDescriptor}
-import spice.openapi.generator.SourceFile
+import spice.openapi.generator.{GeneratedSourceWriter, SourceFile}
 import spice.streamer.*
 import spice.streamer.given
 
@@ -133,22 +133,19 @@ case class DurableSocketDartGenerator(config: DurableSocketDartConfig) {
   }
 
   def write(sourceFiles: List[SourceFile], path: Path, deleteBeforeWrite: Boolean = true): Unit = {
-    if (deleteBeforeWrite) {
-      sourceFiles.map(_.path).distinct.foreach { filePath =>
-        val directory = path.resolve(filePath).toFile
-        directory.mkdirs()
-        directory.listFiles().foreach { file =>
-          if (isGenerated(file)) {
-            if (!file.delete()) file.deleteOnExit()
-          }
-        }
-      }
+    // An unresolved type placeholder in emitted source guarantees a
+    // broken tree with the error surfacing far from its cause (a
+    // stale-classpath run once wrote one and the breakage went
+    // unnoticed for weeks). Refuse to write; name the files.
+    val invalid = sourceFiles.filter(_.source.contains("InvalidType"))
+    if (invalid.nonEmpty) {
+      val names = invalid.map(sf => s"${sf.path}/${sf.fileName}").mkString(", ")
+      throw new RuntimeException(
+        s"Dart codegen produced unresolved type placeholders (InvalidType) in: $names. " +
+          "Refusing to write a broken tree — the referenced type is not resolvable from the " +
+          "registered definitions (most common cause: a stale or partially-updated classpath).")
     }
-    sourceFiles.foreach { sf =>
-      val filePath = path.resolve(s"${sf.path}/${sf.fileName}")
-      Files.createDirectories(filePath.getParent)
-      Files.writeString(filePath, sf.source)
-    }
+    GeneratedSourceWriter.write(sourceFiles, path, ".dart", generatedComment, deleteBeforeWrite)
   }
 
   // ---------------------------------------------------------------------------

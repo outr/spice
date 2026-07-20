@@ -26,24 +26,6 @@ trait OpenAPIGenerator {
     false
   }
 
-  def write(sourceFiles: List[SourceFile], path: Path, deleteBeforeWrite: Boolean = true): Unit = {
-    if (deleteBeforeWrite) {
-      sourceFiles.map(_.path).distinct.foreach { filePath =>
-        val directory = path.resolve(filePath).toFile
-        directory.mkdirs()
-        directory.listFiles().foreach { file =>
-          if (isGenerated(file)) {
-            if (!file.delete()) {
-              file.deleteOnExit()
-            }
-          }
-        }
-      }
-    }
-    sourceFiles.foreach { sf =>
-      val filePath = path.resolve(s"${sf.path}/${sf.fileName}")
-      Files.createDirectories(filePath.getParent)
-      Files.writeString(filePath, sf.source)
-    }
-  }
+  def write(sourceFiles: List[SourceFile], path: Path, deleteBeforeWrite: Boolean = true): Unit =
+    GeneratedSourceWriter.write(sourceFiles, path, fileExtension, generatedComment, deleteBeforeWrite)
 }
