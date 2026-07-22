@@ -20,6 +20,15 @@ import scala.io.Source
  * marker comment — hand-authored files are never touched, whatever
  * directory they sit in. Directories emptied by the prune are
  * removed.
+ *
+ * **Companion outputs** (`<base>.g<ext>` — Dart build_runner's
+ * `part of` convention, produced downstream from the emitted files by
+ * the consumer's own tooling under its own marker) are pruned as a
+ * unit with their parent: a companion whose sibling `<base><ext>`
+ * neither survives on disk nor is in the current emit set is
+ * structurally broken (a `part of` a nonexistent library) and is
+ * deleted regardless of marker. Companions of live parents are left
+ * for the downstream tool to regenerate or reuse.
  */
 object GeneratedSourceWriter {
 
@@ -41,6 +50,8 @@ object GeneratedSourceWriter {
                     fileExtension: String,
                     generatedComment: String): Unit = {
     val emittedDirs = sourceFiles.map(_.path).distinct.map(p => path.resolve(p).normalize())
+    val emittedFiles: Set[Path] =
+      sourceFiles.map(sf => path.resolve(s"${sf.path}/${sf.fileName}").normalize()).toSet
     // A root nested under another root is covered by the outer walk.
     val roots = emittedDirs.filterNot { dir =>
       emittedDirs.exists(other => (other ne dir) && dir.startsWith(other) && dir != other)
@@ -48,18 +59,38 @@ object GeneratedSourceWriter {
     roots.foreach { root =>
       val rootFile = root.toFile
       rootFile.mkdirs()
-      pruneTree(rootFile, fileExtension, generatedComment, isRoot = true)
+      pruneTree(rootFile, fileExtension, generatedComment, emittedFiles, isRoot = true)
     }
   }
 
-  /** Depth-first: delete generated files, recurse into subdirectories,
-    * then drop any non-root directory the prune emptied. */
-  private def pruneTree(dir: File, fileExtension: String, generatedComment: String, isRoot: Boolean): Unit = {
+  /** Depth-first: delete generated files, then orphaned companions,
+    * recurse into subdirectories, then drop any non-root directory
+    * the prune emptied. */
+  private def pruneTree(dir: File,
+                        fileExtension: String,
+                        generatedComment: String,
+                        emittedFiles: Set[Path],
+                        isRoot: Boolean): Unit = {
     val children = Option(dir.listFiles()).map(_.toList).getOrElse(Nil)
     children.foreach { file =>
-      if (file.isDirectory) pruneTree(file, fileExtension, generatedComment, isRoot = false)
+      if (file.isDirectory) pruneTree(file, fileExtension, generatedComment, emittedFiles, isRoot = false)
       else if (isGenerated(file, fileExtension, generatedComment)) {
         if (!file.delete()) file.deleteOnExit()
+      }
+    }
+    // Companion pass runs AFTER the marker pass so a companion whose
+    // parent was just pruned (and is not being re-emitted) is caught
+    // in the same run.
+    val companionSuffix = s".g$fileExtension"
+    Option(dir.listFiles()).map(_.toList).getOrElse(Nil).foreach { file =>
+      val name = file.getName
+      if (!file.isDirectory && name.toLowerCase.endsWith(companionSuffix.toLowerCase)) {
+        val siblingName = name.substring(0, name.length - companionSuffix.length) + fileExtension
+        val sibling = new File(dir, siblingName)
+        val siblingLives = sibling.exists() || emittedFiles.contains(sibling.toPath.normalize())
+        if (!siblingLives) {
+          if (!file.delete()) file.deleteOnExit()
+        }
       }
     }
     if (!isRoot && Option(dir.listFiles()).exists(_.isEmpty)) {
