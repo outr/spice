@@ -46,6 +46,10 @@ class %%SERVICE_NAME%%DurableClient {
   StreamSubscription? _subscription;
   Timer? _ackTimer;
   int _reconnectAttempt = 0;
+  // True once ANY handshake has succeeded. Reconnects may then RESUME (replay from lastSeq); before the
+  // first successful handshake they must retry as a fresh `connect` (the server never registered this client,
+  // so a resume would be rejected).
+  bool _everConnected = false;
 
   // State
   DurableSocketState _state = DurableSocketState.disconnected;
@@ -188,9 +192,25 @@ class %%SERVICE_NAME%%DurableClient {
       case 'connected':
         // json['resumed'] indicates if this is a resume or fresh connect
         _reconnectAttempt = 0;
+        _everConnected = true; // reconnects may RESUME from here on; before this, retry as a fresh connect
         _activate();
         _connectCompleter?.complete();
         _connectCompleter = null;
+        break;
+
+      case 'going-away':
+        // The server is retiring the instance holding this socket (e.g. a rolling deploy draining a backend):
+        // drop the transport and re-dial (resuming) onto its replacement rather than riding a doomed
+        // connection. Reset the backoff so the re-dial happens at the base delay, not accumulated backoff.
+        if (_state != DurableSocketState.closed) {
+          _reconnectAttempt = 0;
+          _ackTimer?.cancel();
+          _subscription?.cancel();
+          _channel?.sink.close();
+          _state = DurableSocketState.reconnecting;
+          _stateController.add(_state);
+          _attemptReconnect();
+        }
         break;
 
       case 'switched':
@@ -266,11 +286,13 @@ class %%SERVICE_NAME%%DurableClient {
     _ackTimer?.cancel();
     _subscription?.cancel();
     if (_connectCompleter != null && !_connectCompleter!.isCompleted) {
+      // Reject the awaiting connect() call — but DO NOT strand the socket. This branch used to `return`
+      // here, so a drop DURING the handshake (e.g. a device that resumes/boots faster than its network
+      // comes back up) left the session with no live events at all until an app restart. Fall through to
+      // the same reconnect path as any other disconnect; the next attempt is a fresh `connect` because
+      // `_everConnected` is still false.
       _connectCompleter!.completeError(Exception('Disconnected during handshake'));
       _connectCompleter = null;
-      _state = DurableSocketState.disconnected;
-      _stateController.add(_state);
-      return;
     }
     if (_state == DurableSocketState.closed) return;
     _state = DurableSocketState.reconnecting;
@@ -299,12 +321,21 @@ class %%SERVICE_NAME%%DurableClient {
       _listen();
       _state = DurableSocketState.handshaking;
       _stateController.add(_state);
-      _sendRaw({
-        'type': 'resume',
-        'clientId': clientId,
-        'lastSeq': _highestProcessedSeq,
-        'info': %%INFO_TO_JSON%%,
-      });
+      // RESUME only once a session has actually been established (the server knows this clientId and can
+      // replay from lastSeq). A retry after a FAILED first handshake must be a fresh `connect` — the server
+      // never registered us, so a resume would just be rejected.
+      _sendRaw(_everConnected
+          ? {
+              'type': 'resume',
+              'clientId': clientId,
+              'lastSeq': _highestProcessedSeq,
+              'info': %%INFO_TO_JSON%%,
+            }
+          : {
+              'type': 'connect',
+              'clientId': clientId,
+              'info': %%INFO_TO_JSON%%,
+            });
     } catch (_) {
       _attemptReconnect();
     }
