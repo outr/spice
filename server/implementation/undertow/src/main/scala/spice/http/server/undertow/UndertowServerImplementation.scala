@@ -159,7 +159,15 @@ class UndertowServerImplementation(server: HttpServer) extends HttpServerImpleme
               }
             }.flatMap { exchange =>
               val handleMs = System.currentTimeMillis() - startMs
-              if (handleMs > 100) scribe.warn(s"Slow handler chain: ${handleMs}ms for ${url.path}")
+              // Deliberately a HIGHER bar than the per-handler warning in MutableHttpServer. The chain
+              // time is by definition at least the slowest handler's, so at a shared 100ms threshold
+              // every slow handler was reported twice - once naming the culprit, once not - which is
+              // pure duplication in the log (230 lines for 139 requests in one production day).
+              //
+              // The per-handler line is the useful one: it names the handler and the path. This line
+              // earns its place only when the TOTAL is bad on its own terms, including time spent
+              // outside any handler (parsing, dispatch, response), which no other line reports.
+              if (handleMs > 1000) scribe.warn(s"Slow handler chain: ${handleMs}ms for ${url.path}")
               exchange.webSocketListener match {
                 case Some(webSocketListener) => UndertowWebSocketHandler(undertow, server, exchange, webSocketListener)
                 case None => UndertowResponseSender(undertow, server, exchange)
