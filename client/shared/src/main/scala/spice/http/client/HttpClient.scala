@@ -290,7 +290,7 @@ case class HttpClient(request: HttpRequest,
     * native abort support the cancel handle is a no-op and the stream behaves as `streamLines()`. */
   def streamLinesHandle(): Task[StreamHandle[String]] = instance.sendStreamHandle(streamRequest)
 
-  def webSocket(): WebSocket = instance.webSocket(request.url)
+  def webSocket(): WebSocket = instance.webSocket(request.url, request.headers)
 
   def dispose(): Task[Unit] = implementation.dispose()
 }

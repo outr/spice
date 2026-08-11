@@ -3,6 +3,7 @@ package spice.http.client
 import fabric.io.JsonFormatter
 import okhttp3.{Authenticator, Request, Response, Route}
 import rapid.Task
+import spice.http.Headers
 import spice.http.content.FormDataEntry.{FileEntry, StringEntry}
 import spice.http.content.*
 import spice.http.*
@@ -295,7 +296,7 @@ class OkHttpClientInstance(client: HttpClient) extends HttpClientInstance {
     contentLength.exists(l => l > 0L && l < 512000L)
   }
 
-  override def webSocket(url: URL): WebSocket = new OkHttpWebSocket(url, instance)
+  override def webSocket(url: URL, headers: Headers): WebSocket = new OkHttpWebSocket(url, instance)
 
   override def dispose(): Task[Unit] = for {
     _ <- Task(Try(instance.dispatcher().executorService().shutdown()))

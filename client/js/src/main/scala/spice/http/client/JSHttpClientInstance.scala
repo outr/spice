@@ -2,6 +2,7 @@ package spice.http.client
 
 import rapid.Task
 import spice.ajax.{AjaxAction, AjaxRequest}
+import spice.http.Headers
 import spice.http.content.{Content, StringContent}
 import spice.http.{Headers, HttpRequest, HttpResponse, HttpStatus, WebSocket}
 import spice.net.{ContentType, URL}
@@ -59,7 +60,7 @@ class JSHttpClientInstance(client: HttpClient) extends HttpClientInstance {
     }
   }
 
-  override def webSocket(url: URL): WebSocket = new JSWebSocketClient(url)
+  override def webSocket(url: URL, headers: Headers): WebSocket = new JSWebSocketClient(url)
 
   override def dispose(): Task[Unit] = Task.unit
 }

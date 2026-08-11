@@ -800,7 +800,7 @@ class NettyHttpClientInstance(val client: HttpClient) extends HttpClientInstance
     streamReady
   }
 
-  override def webSocket(url: URL): WebSocket = new NettyHttpClientWebSocket(url, this)
+  override def webSocket(url: URL, headers: Headers): WebSocket = new NettyHttpClientWebSocket(url, this, headers)
 
   override def dispose(): Task[Unit] = Task {
     poolManager.close()

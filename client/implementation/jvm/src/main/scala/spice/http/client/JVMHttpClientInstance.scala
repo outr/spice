@@ -2,6 +2,7 @@ package spice.http.client
 
 import org.apache.http.entity.mime.MultipartEntityBuilder
 import rapid.Task
+import spice.http.Headers
 import spice.http.content.FormDataEntry.{FileEntry, StringEntry}
 import spice.http.content.{BytesContent, FormDataContent, StreamContent, StringContent}
 import spice.http.{Headers, HttpMethod, HttpRequest, HttpResponse, HttpStatus, WebSocket}
@@ -98,7 +99,7 @@ class JVMHttpClientInstance(client: HttpClient) extends HttpClientInstance {
     )
   }
 
-  override def webSocket(url: URL): WebSocket = new JVMHttpClientWebSocket(url, this)
+  override def webSocket(url: URL, headers: Headers): WebSocket = new JVMHttpClientWebSocket(url, this)
 
   override def dispose(): Task[Unit] = Task.unit
 

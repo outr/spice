@@ -14,14 +14,14 @@ import io.netty.handler.timeout.{IdleStateEvent, IdleStateHandler, ReadTimeoutEx
 import reactify.Var
 import rapid.Task
 import spice.UserException
-import spice.http.{ByteBufferData, ConnectionStatus, WebSocket}
+import spice.http.{ByteBufferData, ConnectionStatus, Headers, WebSocket}
 import spice.net.URL
 
 import java.net.URI
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
 
-class NettyHttpClientWebSocket(url: URL, instance: NettyHttpClientInstance) extends WebSocket {
+class NettyHttpClientWebSocket(url: URL, instance: NettyHttpClientInstance, requestHeaders: Headers = Headers.empty) extends WebSocket {
   // Use MultiThreadIoEventLoopGroup for Netty 4.2.x
   private val eventLoopGroup = new MultiThreadIoEventLoopGroup(NioIoHandler.newFactory())
   private val channelVar = Var[Option[Channel]](None)
@@ -62,13 +62,33 @@ class NettyHttpClientWebSocket(url: URL, instance: NettyHttpClientInstance) exte
         null
       }
 
+      // Forward the client's configured headers onto the HANDSHAKE request.
+      //
+      // These were dropped: the handshaker was built with an empty DefaultHttpHeaders, so anything set
+      // via HttpClient.header(...) never reached the server. Most WebSocket auth rides a query
+      // parameter or an in-band message, which is why this went unnoticed - but a server that
+      // authenticates the upgrade itself (Jellyfin 12 requires an `Authorization` header on /socket and
+      // answers 403 without one) could not be connected to at all through this client.
+      //
+      // Hop-by-hop and handshake-owned headers are excluded: the handshaker sets Host, Connection,
+      // Upgrade, Sec-WebSocket-Key/Version itself, and letting a caller override them produces an
+      // invalid upgrade rather than a customized one.
+      val handshakeHeaders = new DefaultHttpHeaders()
+      val reserved = Set("host", "connection", "upgrade", "sec-websocket-key", "sec-websocket-version",
+        "sec-websocket-extensions", "content-length")
+      requestHeaders.map.foreach {
+        case (key, values) if !reserved.contains(key.toLowerCase) =>
+          values.foreach(value => handshakeHeaders.add(key, value))
+        case _ => // handshake-owned; the handshaker sets these
+      }
+
       // Create WebSocket handshaker
       val handshaker = WebSocketClientHandshakerFactory.newHandshaker(
         uri,
         WebSocketVersion.V13,
         null,  // subprotocols
         true,  // allowExtensions
-        new DefaultHttpHeaders(),
+        handshakeHeaders,
         67108864  // maxFramePayloadLength
       )
 
