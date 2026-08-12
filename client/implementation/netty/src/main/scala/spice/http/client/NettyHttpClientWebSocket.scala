@@ -196,7 +196,18 @@ class NettyHttpClientWebSocket(url: URL, instance: NettyHttpClientInstance, requ
               
               ctx.close()
             case _ =>
-              scribe.error(s"WebSocket exception on $url (handshakeComplete=$handshakeComplete, channel=${ctx.channel()})", cause)
+              // WARN, not ERROR. A client socket to a remote host drops for reasons that are not
+              // faults of this process: the peer restarts, a home NAS goes to sleep, a router NATs the
+              // connection away. An application holding long-lived sockets to many third-party servers
+              // sees this constantly - 63 in one day across five servers - and every one of them landed
+              // in the error count, which is meant to mean "something here is broken".
+              //
+              // The failure is still SURFACED, not swallowed: `error @= cause` fires the caller's
+              // handler either way, and a caller that considers a drop noteworthy is the one with the
+              // context to say so. Callers already do exactly that - see the Emby/Jellyfin listener,
+              // which logs its own at debug BECAUSE it expects them - and then had this line contradict
+              // it at ERROR for the same event.
+              scribe.warn(s"WebSocket exception on $url (handshakeComplete=$handshakeComplete, channel=${ctx.channel()}): ${cause.getMessage}")
               error @= cause
               _status @= ConnectionStatus.Closed
 
