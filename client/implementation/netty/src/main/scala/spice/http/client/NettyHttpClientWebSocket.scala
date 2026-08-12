@@ -11,6 +11,7 @@ import io.netty.handler.ssl.SslContextBuilder
 import io.netty.handler.ssl.util.InsecureTrustManagerFactory
 import io.netty.handler.codec.http.websocketx.WebSocketClientProtocolHandler.ClientHandshakeStateEvent
 import io.netty.handler.timeout.{IdleStateEvent, IdleStateHandler, ReadTimeoutException, ReadTimeoutHandler}
+import io.netty.util.concurrent.DefaultThreadFactory
 import reactify.Var
 import rapid.Task
 import spice.UserException
@@ -22,8 +23,8 @@ import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
 
 class NettyHttpClientWebSocket(url: URL, instance: NettyHttpClientInstance, requestHeaders: Headers = Headers.empty) extends WebSocket {
-  // Use MultiThreadIoEventLoopGroup for Netty 4.2.x
-  private val eventLoopGroup = new MultiThreadIoEventLoopGroup(NioIoHandler.newFactory())
+  import NettyHttpClientWebSocket.eventLoopGroup
+
   private val channelVar = Var[Option[Channel]](None)
 
   override def connect(): Task[ConnectionStatus] = {
@@ -307,13 +308,32 @@ class NettyHttpClientWebSocket(url: URL, instance: NettyHttpClientInstance, requ
       }
     }
     _status @= ConnectionStatus.Closed
-
-    // Schedule cleanup of event loop group
-    eventLoopGroup.shutdownGracefully(0, 100, TimeUnit.MILLISECONDS)
+    // The event loop group is SHARED and deliberately outlives this socket - see its definition.
+    // Closing the channel above releases everything this connection owned.
   }
 }
 
 object NettyHttpClientWebSocket {
+  /**
+   * ONE event loop group for every client WebSocket in the process.
+   *
+   * This was a `private val` on the CLASS, so each socket built its own group. Netty sizes a group at
+   * `availableProcessors * 2` when no count is given, which on a 56-core host is 112 threads PER
+   * CONNECTION - five sockets already accounted for a large share of a JVM's threads, and an
+   * application holding a socket per remote server hit the process thread limit in the low hundreds.
+   * Multiplexing many channels over a few threads is the entire point of an event loop; allocating one
+   * per channel inverts it.
+   *
+   * Shared, so it must OUTLIVE any individual socket: `disconnect()` no longer shuts it down, because
+   * doing so would kill every other live connection in the process. Closing the channel is what
+   * releases a connection's own resources.
+   *
+   * Daemon threads, because a permanently-shared group is never shut down and non-daemon Netty threads
+   * would keep the JVM alive after main returns - turning a leak of threads into a hang on exit.
+   */
+  private[client] lazy val eventLoopGroup: MultiThreadIoEventLoopGroup =
+    new MultiThreadIoEventLoopGroup(0, new DefaultThreadFactory("spice-ws", true), NioIoHandler.newFactory())
+
   // Emit a keepalive ping after this many seconds of inactivity. Kept well under
   // common proxy idle cut-offs (e.g. Cloudflare ~100s) so a quiet connection
   // survives long gaps between sends.
