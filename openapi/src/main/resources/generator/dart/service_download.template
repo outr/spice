@@ -3,7 +3,7 @@
     String path,
     Map<String, dynamic> request,
   ) async {
-    final String body = jsonEncode(request);
+    final String body = await _encodeJson(request);
     final http.Response response = await http.post(
         Service.host(path),
         headers: _buildHeaders({

@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:isolate';
 import 'package:http/http.dart' as http;
 %%OPTIONAL_IMPORTS%%
 
@@ -58,6 +59,45 @@ class Service {
     return 'Server error $statusCode';
   }
 
+
+  /// Threshold past which JSON is converted on a background isolate rather than inline.
+  ///
+  /// Encoding or decoding a large payload on the calling isolate blocks it outright, and in a UI
+  /// application that isolate is the one drawing frames - so a single multi-megabyte request or
+  /// response freezes the interface for as long as the conversion takes, wherever the user happens to
+  /// be. It is not the request that is slow, it is everything else that stops.
+  ///
+  /// Small payloads stay inline deliberately: spawning an isolate costs more than converting them.
+  static int isolateThresholdBytes = 128 * 1024;
+
+  /// Isolates do not exist on the web, where `Isolate.run` throws. Detected without depending on
+  /// Flutter, so this template stays usable from plain Dart.
+  static const bool _web = bool.fromEnvironment('dart.library.js_util');
+
+  /// True when [request] carries a value big enough to be worth moving off this isolate.
+  ///
+  /// A shallow scan of the top-level values, because the case this exists for is a blob passed
+  /// through the API - a relayed response body, an upload, a document - and that arrives as one large
+  /// String or List rather than as depth. Walking the whole tree to decide would cost what it saves.
+  static bool _bulky(Map<String, dynamic> request) {
+    for (final value in request.values) {
+      if (value is String && value.length >= isolateThresholdBytes) return true;
+      if (value is List && value.length >= isolateThresholdBytes) return true;
+    }
+    return false;
+  }
+
+  static Future<String> _encodeJson(Map<String, dynamic> request) async {
+    if (_web || !_bulky(request)) return jsonEncode(request);
+    return await Isolate.run(() => jsonEncode(request));
+  }
+
+  static Future<dynamic> _decodeJson(http.Response response) async {
+    if (_web || response.bodyBytes.length < isolateThresholdBytes) return jsonDecode(response.body);
+    final bytes = response.bodyBytes;
+    return await Isolate.run(() => jsonDecode(utf8.decode(bytes)));
+  }
+
   static Future<Response> restful<Response>(
     String path,
     Map<String, dynamic> request,
@@ -74,7 +114,7 @@ class Service {
         }
       }
     }
-    final String body = jsonEncode(request);
+    final String body = await _encodeJson(request);
     final http.Response response = await http.post(
         Service.host(path),
         headers: _buildHeaders({
@@ -87,7 +127,7 @@ class Service {
       throw Exception(_extractErrorMessage(response.body, response.statusCode));
     }
     try {
-      return convert(jsonDecode(response.body));
+      return convert(await _decodeJson(response));
     } catch (exc, st) {
       onError?.call(exc, st);
       rethrow;
@@ -121,7 +161,7 @@ class Service {
       throw Exception(_extractErrorMessage(response.body, response.statusCode));
     }
     try {
-      return convert(jsonDecode(response.body));
+      return convert(await _decodeJson(response));
     } catch (exc, st) {
       onError?.call(exc, st);
       rethrow;
@@ -132,7 +172,7 @@ class Service {
     String path,
     Map<String, dynamic> request,
   ) async {
-    final String body = jsonEncode(request);
+    final String body = await _encodeJson(request);
     await http.post(
         Service.host(path),
         headers: _buildHeaders({
