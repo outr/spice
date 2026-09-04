@@ -2,7 +2,7 @@ name := "spice"
 ThisBuild / organization := "com.outr"
 ThisBuild / version := "1.10.8"
 
-val scala3: String = "3.8.4"
+val scala3: String = "3.9.0"
 
 ThisBuild / scalaVersion := scala3
 ThisBuild / scalacOptions ++= Seq("-deprecation", "-Xmax-inlines", "64", "-language:implicitConversions")
