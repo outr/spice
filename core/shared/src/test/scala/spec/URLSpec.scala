@@ -305,6 +305,14 @@ class URLSpec extends AnyWordSpec with Matchers {
       "still reject a bare host with a trailing period" in {
         URLParser("example.").isLeft should be(true)
       }
+      "parse a root-anchored FQDN host, normalizing the trailing dot away" in {
+        val url = URL.parse("http://www.sec.gov./")
+        url.host should be("www.sec.gov")
+        url.toString should be("http://www.sec.gov/")
+      }
+      "parse a protocol-less trailing-dot host when a path disambiguates it" in {
+        URL.parse("www.sec.gov./cgi-bin/browse-edgar").host should be("www.sec.gov")
+      }
     }
   }
 }

@@ -26,10 +26,16 @@ object URLParser {
     if (opaque.isDefined) return Right(opaque.get)
     if ((s.contains('.') || s.contains(":")) && !s.startsWith(":")) {
       val (protocolOption, stage1) = extractProtocol(s)
-      val (hostSection, pathSection) = separateHostAndPath(stage1)
-      // The trailing-dot rejection guards against bare inputs like "example." —
-      // it must test only the host, not the whole URL: a path or fragment may
-      // legitimately end with '.' (e.g. a #:~:text= fragment quoting a sentence).
+      val (rawHostSection, pathSection) = separateHostAndPath(stage1)
+      // A trailing-dot host is a legal root-anchored FQDN (http://www.sec.gov./)
+      // — normalize the dot away. The rejection below survives only for bare,
+      // protocol-less, path-less inputs like "example.", which are far more
+      // likely sentence fragments than URLs. A path or fragment ending in '.'
+      // is likewise legitimate (e.g. a #:~:text= fragment quoting a sentence).
+      val hostSection =
+        if (rawHostSection.endsWith(".") && (protocolOption.nonEmpty || pathSection.nonEmpty)) {
+          rawHostSection.stripSuffix(".")
+        } else rawHostSection
       if (hostSection.endsWith(".")) {
         return Left(URLParseFailure(s"$s is not a valid URL", URLParseFailure.QuickFail))
       }
