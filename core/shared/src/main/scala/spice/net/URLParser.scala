@@ -24,9 +24,15 @@ object URLParser {
             defaultProtocol: Protocol = Protocol.Https): Either[URLParseFailure, URL] = {
     val opaque = parseOpaque(s)
     if (opaque.isDefined) return Right(opaque.get)
-    if ((s.contains('.') || s.contains(":")) && !s.startsWith(":") && !s.endsWith(".")) {
+    if ((s.contains('.') || s.contains(":")) && !s.startsWith(":")) {
       val (protocolOption, stage1) = extractProtocol(s)
       val (hostSection, pathSection) = separateHostAndPath(stage1)
+      // The trailing-dot rejection guards against bare inputs like "example." —
+      // it must test only the host, not the whole URL: a path or fragment may
+      // legitimately end with '.' (e.g. a #:~:text= fragment quoting a sentence).
+      if (hostSection.endsWith(".")) {
+        return Left(URLParseFailure(s"$s is not a valid URL", URLParseFailure.QuickFail))
+      }
       val (host, port) = separateHostAndPort(hostSection)
       val (stage2, fragment) = extractFragment(pathSection)
       val (stage3, parameters) = extractParameters(stage2)

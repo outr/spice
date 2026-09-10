@@ -294,6 +294,17 @@ class URLSpec extends AnyWordSpec with Matchers {
         val url = URL.parse("https://places.googleapis.com/v1/places:searchText")
         url.toString should be("https://places.googleapis.com/v1/places:searchText")
       }
+      "parse a URL whose text fragment ends with a period" in {
+        val url = URL.parse("https://www.epa.gov/dera/learn-about-impacts#:~:text=Human%20health%2C%20our%20environment%2C%20global,all%20affected%20by%20diesel%20emissions.")
+        url.host should be("www.epa.gov")
+        url.fragment should be(Some(":~:text=Human%20health%2C%20our%20environment%2C%20global,all%20affected%20by%20diesel%20emissions."))
+      }
+      "parse a URL whose path ends with a period" in {
+        URL.parse("https://example.com/docs/v1.").host should be("example.com")
+      }
+      "still reject a bare host with a trailing period" in {
+        URLParser("example.").isLeft should be(true)
+      }
     }
   }
 }
