@@ -757,17 +757,25 @@ class NettyHttpClientInstance(val client: HttpClient) extends HttpClientInstance
               returnChannel(close = true)
             }
           }.unit
+          // Once the body has ended the pull stays ended: a consumer that
+          // polls again after Stop must not wait on an open keep-alive
+          // socket for a sentinel that was already consumed.
+          val finished = new AtomicBoolean(false)
           val pull = rapid.Pull.fromFunction[String](
             pullF = () => {
               // Keep waiting while the socket is open; terminate only on a
               // sentinel, error, cancellation, or close — not on idle alone.
               @scala.annotation.tailrec
               def next(): rapid.Step[String] = {
-                if (cancelled.get()) rapid.Step.Stop
+                if (finished.get() || cancelled.get()) rapid.Step.Stop
                 else lineQueue.poll(pollIntervalMillis, java.util.concurrent.TimeUnit.MILLISECONDS) match {
-                  case null              => if (channel.isOpen) next() else rapid.Step.Stop
-                  case Left(err)         => throw err
-                  case Right(None)       => rapid.Step.Stop
+                  case null =>
+                    if (channel.isOpen) next()
+                    else { finished.set(true); rapid.Step.Stop }
+                  case Left(err) =>
+                    finished.set(true); throw err
+                  case Right(None) =>
+                    finished.set(true); rapid.Step.Stop
                   case Right(Some(line)) => rapid.Step.Emit(line)
                 }
               }
