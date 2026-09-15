@@ -27,7 +27,7 @@ import scala.concurrent.duration.*
   *   for {
   *     _ <- acme.ensureCert            // issues if missing/expiring; loads otherwise
   *     _ <- server.start()             // HTTP+HTTPS listeners are now live
-  *     _ <- acme.renewalLoop(server.restart()).start()  // background renewer
+  *     _ <- acme.renewalLoop(server).start()  // background renewer
   *   } yield ()
   * }}}
   *
@@ -35,9 +35,9 @@ import scala.concurrent.duration.*
   * HTTP listener is required for HTTP-01 validation; the HTTPS listener reads the JKS
   * keystore that `ensureCert` writes.
   *
-  * The renewal loop restarts the server after a successful re-issue so the new cert takes
-  * effect. This drops in-flight TLS connections — that's the documented MVP tradeoff.
-  * Zero-downtime cert swap (Undertow rebuild without listener teardown) is future work. */
+  * After a successful re-issue, the renewal loop calls `server.reloadCertificates()` to
+  * atomically swap the new cert into the running HTTPS listeners — no restart, no dropped
+  * connections. */
 class AcmeManager private (val config: AcmeConfig,
                            val challengeStore: AcmeChallengeStore) {
   /** True if the keystore exists and its leaf cert is not within `config.renewBefore` of expiry. */
