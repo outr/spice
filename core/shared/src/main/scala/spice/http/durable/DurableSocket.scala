@@ -127,6 +127,9 @@ class DurableSocket[Id: RW, Event: RW, Info: RW](
     }
   }
 
+  /** Forget the inbound high-water mark: the peer's numbering has started over. */
+  def resetInbound(): Unit = tracker.reset(0L)
+
   def updateChannelId(newChannelId: Id): Unit = {
     _channelId @= newChannelId
     tracker.reset(0L)

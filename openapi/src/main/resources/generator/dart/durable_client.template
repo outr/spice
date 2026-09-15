@@ -81,6 +81,7 @@ class %%SERVICE_NAME%%DurableClient {
   final _ephemeralController = StreamController<Map<String, dynamic>>.broadcast();
   final _errorController = StreamController<Map<String, dynamic>>.broadcast();
   final _stateController = StreamController<DurableSocketState>.broadcast();
+  final _connectedController = StreamController<bool>.broadcast();
 
 %%TYPED_STREAM_GETTER%%
 
@@ -92,6 +93,11 @@ class %%SERVICE_NAME%%DurableClient {
 
   /// State changes.
   Stream<DurableSocketState> get onStateChange => _stateController.stream;
+
+  /// Fires on every completed handshake with whether the server resumed the session. `false` after an
+  /// earlier connection means the server no longer held it (a restart, a deploy, an expiry): the new
+  /// session starts empty, so anything derived from the previous one is stale and should be resynced.
+  Stream<bool> get onConnected => _connectedController.stream;
 
   // ---------------------------------------------------------------------------
   // Connect / Close
@@ -190,12 +196,20 @@ class %%SERVICE_NAME%%DurableClient {
         break;
 
       case 'connected':
-        // json['resumed'] indicates if this is a resume or fresh connect
+        final resumed = json['resumed'] == true;
+        if (!resumed) {
+          // A fresh session numbers its events from the start again; a high-water mark kept from an
+          // earlier session would drop every one of them until the new numbering passed it.
+          _highestProcessedSeq = 0;
+          _unackedCount = 0;
+          _channelSeqs.clear();
+        }
         _reconnectAttempt = 0;
         _everConnected = true; // reconnects may RESUME from here on; before this, retry as a fresh connect
         _activate();
         _connectCompleter?.complete();
         _connectCompleter = null;
+        _connectedController.add(resumed);
         break;
 
       case 'going-away':

@@ -109,6 +109,11 @@ class DurableSocketClient[Id: RW, Event: RW, Info: RW](
   /** Typed file-transfer facet for this connection. See [[FileChannel]]. */
   def files[F: RW]: FileChannel[F] = protocol.files[F]
 
+  /** Fires on every completed handshake with whether the server resumed the session. `false` after an
+    * earlier connection means the server no longer held it (a restart, a deploy, an expiry): the new
+    * session starts empty, so anything derived from the previous one is stale and should be resynced. */
+  val onConnected: Channel[Boolean] = Channel[Boolean]
+
   val onEvent: Channel[(Long, Event)] = protocol.onEvent
   val onEphemeral: Channel[Json] = protocol.onEphemeral
   val state: Val[ProtocolState] = protocol.state
@@ -121,10 +126,16 @@ class DurableSocketClient[Id: RW, Event: RW, Info: RW](
   private def handleConnectedResponse(lastClientSeq: Long, resumed: Boolean): Unit = {
     if (resumed) {
       protocol.replayAfter(lastClientSeq).start()
+    } else {
+      // A fresh session numbers its events from the start again; a high-water mark kept from an
+      // earlier session would drop every one of them until the new numbering passed it.
+      protocol.resetInbound()
+      channelSeqs.clear()
     }
     reconnectAttempt @= 0
     reconnecting.set(false)
     protocol.activate()
+    onConnected @= resumed
   }
 
   /** Single entry point into the reconnect loop. Collapses concurrent triggers
