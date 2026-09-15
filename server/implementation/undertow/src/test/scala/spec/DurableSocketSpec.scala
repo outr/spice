@@ -267,6 +267,65 @@ class DurableSocketSpec extends AnyWordSpec with Matchers {
       client.close()
     }
 
+    "deliver an event broadcast while a resume is replaying, after the replay" in {
+      // The replay takes its snapshot, then this runs before the replay is sent: an event broadcast then is in
+      // neither the snapshot nor, while the session is not yet active, the live stream.
+      class SlowReplayLog extends InMemoryEventLog[String, ChatEvent] {
+        @volatile var during: Task[Unit] = Task.unit
+        override def replay(channelId: String, afterSeq: Long): Task[List[(Long, ChatEvent)]] =
+          super.replay(channelId, afterSeq).flatMap { events =>
+            val hook = during
+            during = Task.unit
+            hook.flatMap(_ => Task.sleep(200.millis)).map(_ => events)
+          }
+      }
+      val slowLog = new SlowReplayLog
+      val slowServer = new DurableSocketServer[String, ChatEvent, ConnectInfo](
+        config = testConfig,
+        eventLog = slowLog,
+        resolveChannel = (_, info) => Task.pure(info.room)
+      )
+      server.handler(List(path"/ws-slow" / slowServer))
+
+      val userId = "slow-user"
+      val client = new DurableSocketClient[String, ChatEvent, ConnectInfo](
+        createWebSocket = () => HttpClient.url(url"ws://localhost".withPort(serverPort).withPath(path"/ws-slow")).webSocket(),
+        config = testConfig,
+        outboundLog = slowLog,
+        initialChannelId = userId,
+        info = ConnectInfo(userId, "slow-room"),
+        clientId = userId
+      )
+      var received: List[(Long, ChatEvent)] = Nil
+      client.onEvent.attach { e => received = received :+ e }
+
+      client.connect().sync()
+      eventually(timeout(Span(5, Seconds))) {
+        slowServer.session(userId) should not be empty
+      }
+      slowServer.broadcast("slow-room", ChatEvent("before", "s")).sync()
+      eventually(timeout(Span(5, Seconds))) {
+        received.size should be(1)
+      }
+
+      client.protocol.unbind()
+      // logged while away, so the resume has something to replay
+      slowLog.append("slow-room", ChatEvent("missed", "s")).sync()
+      slowLog.during = slowServer.broadcast("slow-room", ChatEvent("late", "s")).unit
+
+      val ws2 = HttpClient.url(url"ws://localhost".withPort(serverPort).withPath(path"/ws-slow")).webSocket()
+      ws2.connect().sync()
+      client.protocol.bind(ws2)
+      client.protocol.sendResume(userId, client.protocol.highestProcessedSeq, ConnectInfo(userId, "slow-room"))
+
+      eventually(timeout(Span(5, Seconds))) {
+        received.map(_._2.message) should be(List("before", "missed", "late"))
+      }
+      received.map(_._1) should be(List(1L, 2L, 3L))
+
+      client.close()
+    }
+
     "look up sessions by channel" in {
       durableServer.sessionsByChannel("chatroom").foreach(s => durableServer.removeSession(s.clientId))
 

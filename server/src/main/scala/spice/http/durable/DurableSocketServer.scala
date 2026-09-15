@@ -112,11 +112,7 @@ class DurableSocketServer[Id: RW, Event: RW, Info: RW](
 
   def broadcast(channelId: Id, event: Event): Task[Long] = {
     eventLog.append(channelId, event).map { seq =>
-      sessionsByChannel(channelId).foreach { session =>
-        if (session.protocol.state() == ProtocolState.Active) {
-          session.protocol.sendLogged(seq, event)
-        }
-      }
+      sessionsByChannel(channelId).foreach(_.protocol.deliver(seq, event))
       seq
     }
   }
@@ -159,10 +155,10 @@ class DurableSocketServer[Id: RW, Event: RW, Info: RW](
               existing.touch()
               val lastClientSeq = existing.protocol.highestProcessedSeq
               existing.protocol.sendConnected(lastClientSeq, resumed = true)
-              existing.protocol.replayAfter(lastServerSeq).map { _ =>
-                existing.protocol.activate()
-                onSession @= existing
-              }
+              // live events are held from here and follow the replay, so none falls between the two
+              val replay = existing.protocol.replayAfter(lastServerSeq)
+              existing.protocol.activate()
+              replay.map(_ => onSession @= existing)
             }.handleError { throwable =>
               sendError(listener, "auth_failed", throwable)
               Task.unit
@@ -219,6 +215,8 @@ class DurableSocketServer[Id: RW, Event: RW, Info: RW](
         if (oldMap != null) oldMap.remove(s.clientId)
 
         ds.updateChannelId(newChannelId)
+        // held from before the session joins the channel's broadcasts, sent after "switched" and the replay
+        val replay = ds.replayAfter(lastSeq)
         val newMap = channelSessions.computeIfAbsent(newChannelId, _ => new ConcurrentHashMap())
         newMap.put(s.clientId, s)
         s.touch()
@@ -229,7 +227,7 @@ class DurableSocketServer[Id: RW, Event: RW, Info: RW](
           "lastSeq" -> num(ds.highestProcessedSeq)
         ))
         ds.sendRaw(switched)
-        ds.replayAfter(lastSeq).start()
+        replay.start()
       }.handleError { throwable =>
         val errorMsg = JsonFormatter.Default(obj(
           "type" -> str("error"),

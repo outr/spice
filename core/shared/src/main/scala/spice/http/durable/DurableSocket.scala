@@ -34,6 +34,11 @@ class DurableSocket[Id: RW, Event: RW, Info: RW](
   private val remoteAckedSeq: Var[Long] = Var(0L)
   private val tracker = new SequenceTracker(config)
 
+  // Replays and live events go out in sequence order: see [[replayAfter]].
+  private val delivery = new Object
+  private var replaying: Boolean = false
+  private var held: Vector[(Long, Event)] = Vector.empty
+
   @volatile private var pendingSwitch: rapid.task.Completable[Unit] = scala.compiletime.uninitialized
 
   // --- RPC (request/response) facet: ephemeral, correlated by id ---
@@ -61,9 +66,20 @@ class DurableSocket[Id: RW, Event: RW, Info: RW](
 
   def push(event: Event): Task[Long] = {
     outboundLog.append(channelId, event).map { seq =>
-      sendLogged(seq, event)
+      delivery.synchronized {
+        if (replaying) held = held :+ (seq -> event)
+        else sendLogged(seq, event)
+      }
       seq
     }
+  }
+
+  /** Send a logged event appended elsewhere (a [[DurableSocketServer.broadcast]]) if this socket is active. While a
+    * replay is under way the event is held and sent after the replayed ones, so the peer never sees a later sequence
+    * number before an earlier one (it drops anything at or below the highest it has seen). */
+  def deliver(seq: Long, event: Event): Unit = delivery.synchronized {
+    if (replaying) held = held :+ (seq -> event)
+    else if (_state() == ProtocolState.Active) sendLogged(seq, event)
   }
 
   def sendLogged(seq: Long, event: Event): Unit = {
@@ -231,12 +247,29 @@ class DurableSocket[Id: RW, Event: RW, Info: RW](
     if (_files != null) _files.onReactivated()
   }
 
+  /** Resend the logged events after `seq`. Live events are held from this call (not from when the task runs) until
+    * the replay has been sent, then follow it in order: without that, an event logged after the replay's snapshot but
+    * before the socket was active reached the peer by neither path, and one sent live ahead of the replay made the
+    * peer drop the replayed ones below it. */
   def replayAfter(seq: Long): Task[Unit] = {
-    outboundLog.replay(channelId, seq).map { events =>
-      events.foreach { case (eventSeq, event) =>
-        sendLogged(eventSeq, event)
+    delivery.synchronized { replaying = true }
+    val channel = channelId
+    outboundLog.replay(channel, seq).map { events =>
+      delivery.synchronized {
+        events.foreach { case (eventSeq, event) => sendLogged(eventSeq, event) }
+        release(events.lastOption.map(_._1).getOrElse(seq))
       }
+    }.handleError { throwable =>
+      delivery.synchronized(release(seq))
+      Task.error(throwable)
     }
+  }
+
+  /** End a replay that sent everything up to `sent`: the held events above it go out in order. */
+  private def release(sent: Long): Unit = {
+    held.filter(_._1 > sent).sortBy(_._1).foreach { case (eventSeq, event) => sendLogged(eventSeq, event) }
+    held = Vector.empty
+    replaying = false
   }
 
   def highestProcessedSeq: Long = tracker.highestProcessedSeq
