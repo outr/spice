@@ -106,12 +106,35 @@ class %%SERVICE_NAME%%DurableClient {
   Future<void> connect() async {
     _state = DurableSocketState.handshaking;
     _stateController.add(_state);
-    _connectCompleter = Completer<void>();
-    _channel = WebSocketChannel.connect(wsUri);
-    await _channel!.ready;
+    final completer = Completer<void>();
+    _connectCompleter = completer;
+    // A listener for the WHOLE life of this completer, beyond the `await` at the end. If the channel
+    // never opens, the await below is never reached and the completer is left orphaned - and the
+    // disconnect that later rejects it (_handleDisconnect) then has no listener at all, which Dart
+    // reports as an UNHANDLED zone error. Observed in the field as "Exception: Disconnected during
+    // handshake" with no stack and no route, for a condition the socket already recovers from.
+    // Awaiting still receives the error normally; a future may have many listeners.
+    completer.future.ignore();
+    try {
+      _channel = WebSocketChannel.connect(wsUri);
+      await _channel!.ready;
+    } catch (e) {
+      // The channel never opened, so _listen() never ran, so no disconnect will ever fire, so the
+      // reconnect loop is never entered: the session then runs with NO live events until the app is
+      // restarted. Any server restart or rolling deploy creates exactly this window, so a client
+      // launching or reconnecting across one could lose every push for the rest of its life.
+      // Retry on the same backoff as any other drop.
+      _connectCompleter = null;
+      if (_state != DurableSocketState.closed) {
+        _state = DurableSocketState.reconnecting;
+        _stateController.add(_state);
+        _attemptReconnect();
+      }
+      rethrow;
+    }
     _listen();
     _sendRaw({'type': 'connect', 'clientId': clientId, 'info': %%INFO_TO_JSON%%});
-    await _connectCompleter!.future;
+    await completer.future;
   }
 
   void close() {
