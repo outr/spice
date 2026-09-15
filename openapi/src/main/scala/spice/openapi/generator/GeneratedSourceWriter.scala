@@ -3,7 +3,7 @@ package spice.openapi.generator
 import java.io.File
 import java.nio.file.Path
 import java.nio.file.Files
-import scala.io.Source
+import _root_.scala.io.Source
 
 /**
  * Shared write-with-prune for source generators. Writing emissions is

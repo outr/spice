@@ -4,7 +4,7 @@ import spice.openapi.OpenAPI
 
 import java.io.File
 import java.nio.file.{Files, Path}
-import scala.io.Source
+import _root_.scala.io.Source
 
 trait OpenAPIGenerator {
   def api: OpenAPI
