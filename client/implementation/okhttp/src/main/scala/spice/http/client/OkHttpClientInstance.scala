@@ -211,7 +211,7 @@ class OkHttpClientInstance(client: HttpClient) extends HttpClientInstance {
     // Content
     val body = request.content.map {
       case StringContent(value, contentType, _) => okhttp3.RequestBody.create(value, ct(contentType))
-      case FileContent(file, contentType, _) => okhttp3.RequestBody.create(file, ct(contentType))
+      case fc: FileContent => okhttp3.RequestBody.create(fc.file, ct(fc.contentType))
       case BytesContent(array, contentType, _) => okhttp3.RequestBody.create(array, ct(contentType))
       case JsonContent(json, compact, contentType, _) =>
         val jsonString = if (compact) JsonFormatter.Compact(json) else JsonFormatter.Default(json)

@@ -62,6 +62,8 @@ object Headers {
     case object `If-Modified-Since` extends DateHeaderKey("If-Modified-Since")
     case object `If-None-Match` extends StringHeaderKey("If-None-Match")
     case object `Origin` extends StringHeaderKey("Origin")
+    /** The bytes wanted of what is asked for: `bytes=0-1023`, `bytes=1024-`, `bytes=-512`. */
+    case object `Range` extends StringHeaderKey("Range", commaSeparated = false)
     case object `User-Agent` extends StringHeaderKey("User-Agent", commaSeparated = false)
     case object `X-Forwarded-For` extends StringHeaderKey("X-Forwarded-For")
     case object `X-Forwarded-For-Host` extends StringHeaderKey("X-Forwarded-For-Host")
@@ -94,6 +96,10 @@ object Headers {
       }
     }
 
+    /** That a range may be asked for at all: `bytes`, or `none`. */
+    case object `Accept-Ranges` extends StringHeaderKey("Accept-Ranges", commaSeparated = false)
+    /** Which bytes these are, of how many: `bytes 0-1023/9823959`, or `bytes *\/9823959` for a range refused. */
+    case object `Content-Range` extends StringHeaderKey("Content-Range", commaSeparated = false)
     case object `ETag` extends StringHeaderKey("ETag")
     case object `Expires` extends DateHeaderKey("Expires")
     case object `Last-Modified` extends DateHeaderKey("Last-Modified")

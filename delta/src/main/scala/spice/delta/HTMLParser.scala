@@ -31,7 +31,7 @@ object HTMLParser {
   private val parsers = new ConcurrentHashMap[File, StreamableHTML]().asScala
 
   def cache(content: Content): StreamableHTML = content match {
-    case FileContent(file, _, _) => cache(file)
+    case fc: FileContent => cache(fc.file)
     case URLContent(url, _, _) => cache(url)
     case StringContent(value, _, _) => cache(value)
   }

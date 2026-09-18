@@ -297,8 +297,8 @@ class NettyHttpClientInstance(val client: HttpClient) extends HttpClientInstance
   private def contentToBytes(content: Content): Array[Byte] = content match {
     case StringContent(value, _, _) => value.getBytes(StandardCharsets.UTF_8)
     case BytesContent(array, _, _) => array
-    case FileContent(file, _, _) =>
-      val fis = new java.io.FileInputStream(file)
+    case fc: FileContent =>
+      val fis = new java.io.FileInputStream(fc.file)
       try {
         fis.readAllBytes()
       } finally {

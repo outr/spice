@@ -33,6 +33,25 @@ object UndertowResponseSender {
   private def sendContent(contentOption: Option[Content], undertow: HttpServerExchange, server: HttpServer): Task[Unit] = {
     contentOption match {
       case Some(content) => content match {
+        // A window of a file (a `Range` was asked for) writes its own bytes: Undertow's resource server sends the
+        // file entire, which is exactly what the range asked it not to do.
+        case fc: FileContent if !fc.whole => Task {
+          undertow.startBlocking()
+          val out = undertow.getOutputStream
+          val in = fc.window
+          try {
+            val buffer = new Array[Byte](8192)
+            var read = in.read(buffer)
+            while (read > 0) {
+              out.write(buffer, 0, read)
+              read = in.read(buffer)
+            }
+            out.flush()
+          } finally {
+            in.close()
+            out.close()
+          }
+        }
         case fc: FileContent => Task(ResourceServer.serve(undertow, fc))
         case URLContent(url, _, _) => Task {
           val resource = new URLResource(url, "")
