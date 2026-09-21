@@ -68,7 +68,14 @@ object ResponseErrorMessage {
 case class DurableSocketConfig(
   ackBatchDelay: FiniteDuration = 100.millis,
   ackBatchCount: Int = 10,
-  reconnectStrategy: ReconnectStrategy = ReconnectStrategy.exponentialBackoff()
+  reconnectStrategy: ReconnectStrategy = ReconnectStrategy.exponentialBackoff(),
+  /** How long a handshake may go unanswered before the connection is given up on and re-dialled.
+    *
+    * A socket that opens and is then never answered is the worst shape of failure available here: the transport
+    * is up, so nothing reports an error and nothing closes, and the client waits in `Handshaking` for ever while
+    * everything it would have sent over the socket quietly goes by other means instead. A deadline turns that
+    * into an ordinary reconnect. */
+  handshakeTimeout: FiniteDuration = 15.seconds
 )
 
 trait ReconnectStrategy {

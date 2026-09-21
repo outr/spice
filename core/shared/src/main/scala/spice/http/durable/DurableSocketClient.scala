@@ -45,6 +45,12 @@ class DurableSocketClient[Id: RW, Event: RW, Info: RW](
       }
     }
 
+    override protected def handleHandshakeError(json: Json): Unit = {
+      scribe.warn("DurableSocket: the server refused the handshake (" +
+        json.get("code").map(_.toString).getOrElse("?") + "); re-dialling")
+      DurableSocketClient.this.handshakeFailed()
+    }
+
     override protected def handleGoingAway(json: Json): Unit = {
       scribe.info("DurableSocket: server going away; re-dialing onto its replacement")
       DurableSocketClient.this.reconnect()
@@ -178,8 +184,30 @@ class DurableSocketClient[Id: RW, Event: RW, Info: RW](
     }
   }
 
-  private def waitForActive(): Task[Unit] = {
+  /** Wait for the handshake to be answered, but not for ever.
+    *
+    * A socket that opens and is then never answered leaves nothing to report and nothing to close: the transport
+    * is up, so no error arrives and no disconnect fires, and without a deadline this waited in `Handshaking`
+    * until the process restarted -- with everything gated on `Active` quietly taking some other path meanwhile.
+    * On the deadline the connection is given up on and re-dialled, which is what every other failure here does. */
+  private def waitForActive(waited: FiniteDuration = Duration.Zero): Task[Unit] =
     if (protocol.state() == ProtocolState.Active) Task.unit
-    else Task.sleep(50.millis).flatMap(_ => waitForActive())
+    else if (protocol.state() == ProtocolState.Closed) Task.unit
+    else if (waited >= config.handshakeTimeout) {
+      scribe.warn("DurableSocket: no answer to the handshake in " + config.handshakeTimeout.toString + "; re-dialling")
+      handshakeFailed()
+      Task.unit
+    }
+    else Task.sleep(50.millis).flatMap(_ => waitForActive(waited + 50.millis))
+
+  /** A handshake that will not complete: drop the transport and try again.
+    *
+    * It continues the reconnect loop rather than starting one where a loop is already running. `beginReconnect`
+    * collapses concurrent triggers by refusing to start a second loop, which is right for duplicate disconnect
+    * events and exactly wrong here -- a handshake failing INSIDE the loop would find the guard already taken and
+    * stop the loop dead, which is how a client ended up stranded for good rather than for one attempt. */
+  private def handshakeFailed(): Unit = if (protocol.state() != ProtocolState.Closed) {
+    protocol.disconnect()
+    if (reconnecting.get()) attemptReconnect() else beginReconnect()
   }
 }

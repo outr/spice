@@ -1,11 +1,16 @@
 name := "spice"
 ThisBuild / organization := "com.outr"
-ThisBuild / version := "1.10.9-SNAPSHOT3"
+ThisBuild / version := "1.10.9-SNAPSHOT4"
 
 val scala3: String = "3.8.4"
 
 ThisBuild / scalaVersion := scala3
-ThisBuild / scalacOptions ++= Seq("-deprecation", "-Xmax-inlines", "64", "-language:implicitConversions")
+// -Ylegacy-lazy-vals: Scala 3 holds a lazy val in a java.lang.invoke.VarHandle, whose compareAndSet is
+// signature-polymorphic. Android has no such thing before API 33, so every class with a lazy val -- ContentType
+// among them, which is to say every HTTP call -- is thrown out by the verifier on an Android 11 television. The
+// older scheme is a synchronized block and costs nothing anyone can measure here.
+ThisBuild / scalacOptions ++= Seq("-deprecation", "-Xmax-inlines", "64", "-language:implicitConversions",
+  "-Ylegacy-lazy-vals")
 ThisBuild / javacOptions ++= Seq("-source", "11", "-target", "11")
 
 ThisBuild / sonatypeCredentialHost := xerial.sbt.Sonatype.sonatypeCentralHost

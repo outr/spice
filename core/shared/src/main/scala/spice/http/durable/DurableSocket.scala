@@ -303,6 +303,10 @@ class DurableSocket[Id: RW, Event: RW, Info: RW](
 
       case Some("error") =>
         onError @= ErrorMessage(json("code").asString, json("message").asString)
+        // An error arriving DURING a handshake is the answer to the handshake, and the connection is not going to
+        // become active. Published alone it went nowhere on a reconnect -- there is no caller waiting on one --
+        // and the client sat in `Handshaking` for ever, which is the state everything else is gated on.
+        if (_state() == ProtocolState.Handshaking) handleHandshakeError(json)
 
       case Some("going-away") =>
         handleGoingAway(json)
@@ -341,6 +345,10 @@ class DurableSocket[Id: RW, Event: RW, Info: RW](
   }
 
   protected def handleHandshakeMessage(json: Json, msgType: String): Unit = {}
+
+  /** The server refused, or could not answer, a connect or a resume. Whoever is driving the connection decides what
+    * to do about it; doing nothing leaves the protocol where it is, which is what used to happen. */
+  protected def handleHandshakeError(json: Json): Unit = {}
 
   /** The server is retiring the instance holding this socket and wants us to re-dial onto its
     * replacement. [[DurableSocketClient]] overrides this to trigger a reconnect; a no-op elsewhere. */
