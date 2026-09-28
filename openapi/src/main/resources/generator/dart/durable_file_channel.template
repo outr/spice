@@ -1,0 +1,467 @@
+/// Tuning for chunked file transfers; the same knobs as the server's `FileTransferConfig`.
+class FileTransferConfig {
+  /// Bytes per binary frame this side sends.
+  final int frameSize;
+
+  /// How many unacknowledged chunks a send may have in flight before it waits.
+  final int windowChunks;
+
+  /// A receive acknowledges at least once every this many chunks.
+  final int ackEvery;
+
+  /// A transfer with no activity for this long is aborted.
+  final Duration transferTimeout;
+
+  /// The largest file the server may send this client; `null` for no limit.
+  final int? maxInboundBytes;
+
+  const FileTransferConfig({
+    this.frameSize = 64 * 1024,
+    this.windowChunks = 16,
+    this.ackEvery = 4,
+    this.transferTimeout = const Duration(minutes: 5),
+    this.maxInboundBytes,
+  });
+}
+
+/// Progress of a transfer in either direction.
+class FileProgress {
+  final String transferId;
+  final int bytesSoFar;
+  final int totalBytes;
+
+  const FileProgress(this.transferId, this.bytesSoFar, this.totalBytes);
+
+  /// Fraction complete in `[0, 1]`.
+  double get fraction => totalBytes <= 0 ? 0 : bytesSoFar / totalBytes;
+}
+
+/// A file received whole from the server.
+class ReceivedFile<F> {
+  final String transferId;
+  final F value;
+  final String name;
+  final String contentType;
+  final Map<String, List<String>> headers;
+  final Uint8List bytes;
+
+  const ReceivedFile(this.transferId, this.value, this.name, this.contentType, this.headers, this.bytes);
+
+  int get size => bytes.length;
+}
+
+/// A transfer that did not complete: aborted by either side, timed out, or cut off by the socket closing.
+class FileTransferException implements Exception {
+  final String transferId;
+  final String message;
+
+  FileTransferException(this.transferId, this.message);
+
+  @override
+  String toString() => 'FileTransferException($transferId): $message';
+}
+
+/// Reads `length` bytes of a file being sent, starting at `offset`.
+typedef FileChunkReader = Future<Uint8List> Function(int offset, int length);
+
+/// Chunked binary file transfer over a [%%SERVICE_NAME%%DurableClient], wire-compatible with the server's
+/// `FileChannel`. Control messages (`file-start`, `file-end`, `file-ack`, `file-resume`, `file-abort`) ride
+/// the text channel; the bytes ride binary frames, each `[length][id length][id][chunk index][bytes]`.
+/// A send keeps at most `windowChunks` chunks unacknowledged. After a reconnect that resumes the session
+/// both sides continue from the first chunk the receiver lacks; after one that starts a fresh session, an
+/// unfinished send starts over and an unfinished receive is dropped.
+class %%SERVICE_NAME%%FileChannel {
+  final %%SERVICE_NAME%%DurableClient _client;
+  final FileTransferConfig config;
+
+  %%SERVICE_NAME%%FileChannel._(this._client, this.config);
+
+  final _fileController = StreamController<ReceivedFile<%%FILE_VALUE%%>>.broadcast();
+  final _progressController = StreamController<FileProgress>.broadcast();
+  final Map<String, _OutboundFile> _outbound = {};
+  final Map<String, _InboundFile> _inbound = {};
+  final BytesBuilder _reassembly = BytesBuilder();
+  Timer? _sweep;
+
+  static final Random _random = Random.secure();
+
+  /// Files received whole from the server.
+  Stream<ReceivedFile<%%FILE_VALUE%%>> get onFile => _fileController.stream;
+
+  /// Progress of every transfer, both directions.
+  Stream<FileProgress> get onProgress => _progressController.stream;
+
+  /// Send `bytes` to the server as a file; completes with the transfer's id once the server holds all of it.
+  Future<String> send(String name, String contentType, Uint8List bytes, %%FILE_VALUE%% value,
+          {Map<String, List<String>> headers = const {}}) =>
+      sendFrom(name, contentType, bytes.length,
+          (offset, length) async => Uint8List.sublistView(bytes, offset, offset + length), value,
+          headers: headers);
+
+  /// Send a file of `size` bytes read a chunk at a time through `read` — a browser file read by slices, say —
+  /// so the whole file need not be in memory. Completes with the transfer's id once the server holds all of it.
+  Future<String> sendFrom(String name, String contentType, int size, FileChunkReader read, %%FILE_VALUE%% value,
+      {Map<String, List<String>> headers = const {}}) {
+    final transferId = _newTransferId();
+    final frameSize = config.frameSize;
+    final totalChunks = size == 0 ? 0 : (size + frameSize - 1) ~/ frameSize;
+    final envelope = <String, List<String>>{
+      ...headers,
+      'Content-Type': [contentType],
+      'Content-Length': ['$size'],
+      'Content-Disposition': ['attachment; filename="$name"'],
+    };
+    final t = _OutboundFile(transferId, size, frameSize, totalChunks, read, {
+      'transferId': transferId,
+      'name': name,
+      'contentType': contentType,
+      'size': size,
+      'frameSize': frameSize,
+      'totalChunks': totalChunks,
+      'value': %%FILE_VALUE_ENCODE%%,
+      'headers': envelope,
+    });
+    _outbound[transferId] = t;
+    _ensureSweep();
+    _pump(t).catchError((Object e) => _abortOutbound(t, '$e'));
+    return t.completion.future;
+  }
+
+  /// Abandon a transfer in either direction, telling the server why.
+  void abort(String transferId, String reason) {
+    final t = _outbound[transferId];
+    if (t != null) _abortOutbound(t, reason);
+    final r = _inbound.remove(transferId);
+    if (r != null) _control('file-abort', {'transferId': transferId, 'reason': reason});
+  }
+
+  // --- Outbound ---
+
+  Future<void> _pump(_OutboundFile t) async {
+    while (!t.done) {
+      if (_client._state != DurableSocketState.active) {
+        await t.park();
+      } else if (!t.startSent) {
+        t.startSent = true;
+        _control('file-start', t.start);
+        t.touch();
+      } else if (t.cursor >= t.totalChunks) {
+        if (!t.endSent) {
+          t.endSent = true;
+          _control('file-end', {'transferId': t.transferId, 'totalBytes': t.size});
+        }
+        if (t.ackedThrough >= t.totalChunks - 1) {
+          _finishOutbound(t);
+        } else {
+          await t.park();
+        }
+      } else if (t.cursor - t.ackedThrough > config.windowChunks) {
+        await t.park();
+      } else {
+        final index = t.cursor++;
+        final offset = index * t.frameSize;
+        final length = min(t.frameSize, t.size - offset);
+        final payload = await t.read(offset, length);
+        if (t.done) return;
+        if (payload.length != length) {
+          throw FileTransferException(t.transferId, 'read ${payload.length} bytes at $offset, expected $length');
+        }
+        _client._sendBinary(_frame(t.transferId, index, payload));
+        t.touch();
+        _progressController.add(FileProgress(t.transferId, offset + length, t.size));
+      }
+    }
+  }
+
+  void _finishOutbound(_OutboundFile t) {
+    if (t.done) return;
+    t.done = true;
+    _outbound.remove(t.transferId);
+    t.completion.complete(t.transferId);
+  }
+
+  void _abortOutbound(_OutboundFile t, String reason, {bool tellServer = true}) {
+    if (t.done) return;
+    t.done = true;
+    _outbound.remove(t.transferId);
+    if (tellServer) _control('file-abort', {'transferId': t.transferId, 'reason': reason});
+    t.signal();
+    t.completion.completeError(FileTransferException(t.transferId, reason));
+  }
+
+  void _acceptAck(Map<String, dynamic> json) {
+    final t = _outbound[json['transferId']];
+    if (t == null) return;
+    final through = (json['throughIndex'] as num).toInt();
+    if (through > t.ackedThrough) t.ackedThrough = through;
+    t.touch();
+    t.signal();
+  }
+
+  void _acceptResume(Map<String, dynamic> json) {
+    final t = _outbound[json['transferId']];
+    if (t == null) return;
+    final from = (json['fromIndex'] as num).toInt();
+    t.cursor = from;
+    t.ackedThrough = from - 1;
+    t.endSent = false;
+    t.touch();
+    t.signal();
+  }
+
+  // --- Inbound ---
+
+  void _acceptStart(Map<String, dynamic> json) {
+    final transferId = json['transferId'] as String;
+    final size = (json['size'] as num).toInt();
+    final frameSize = (json['frameSize'] as num).toInt();
+    final totalChunks = (json['totalChunks'] as num).toInt();
+    final expected = size == 0 || frameSize <= 0 ? 0 : (size + frameSize - 1) ~/ frameSize;
+    final limit = config.maxInboundBytes;
+    final String? refusal = limit != null && size > limit
+        ? 'file of $size bytes is over the $limit-byte limit'
+        : size < 0 || frameSize <= 0 || totalChunks != expected
+            ? 'inconsistent transfer: $size bytes in $totalChunks chunks of $frameSize'
+            : null;
+    if (refusal != null) {
+      _control('file-abort', {'transferId': transferId, 'reason': refusal});
+      return;
+    }
+    final %%FILE_VALUE%% value;
+    try {
+      value = %%FILE_VALUE_DECODE%%;
+    } catch (e) {
+      _control('file-abort', {'transferId': transferId, 'reason': 'unreadable file value: $e'});
+      return;
+    }
+    final headers = <String, List<String>>{};
+    (json['headers'] as Map<String, dynamic>? ?? const {}).forEach((k, v) {
+      headers[k] = (v as List).map((e) => '$e').toList();
+    });
+    _inbound[transferId] = _InboundFile(transferId, value, json['name'] as String? ?? 'file',
+        json['contentType'] as String? ?? 'application/octet-stream', headers, size, frameSize, totalChunks);
+    _ensureSweep();
+  }
+
+  void _acceptEnd(Map<String, dynamic> json) {
+    final transferId = json['transferId'] as String;
+    _trySeal(transferId);
+    // The end marker can outrun the last chunks; ask for the first gap again.
+    final r = _inbound[transferId];
+    if (r != null) _control('file-resume', {'transferId': transferId, 'fromIndex': r.firstMissing});
+  }
+
+  void _acceptAbort(Map<String, dynamic> json) {
+    final transferId = json['transferId'] as String;
+    final reason = json['reason'] as String? ?? 'aborted';
+    final t = _outbound[transferId];
+    if (t != null) _abortOutbound(t, 'the server aborted the transfer: $reason', tellServer: false);
+    _inbound.remove(transferId);
+  }
+
+  /// Binary frames may arrive split or joined; each is length-prefixed and read once whole.
+  void _acceptBytes(Uint8List bytes) {
+    _reassembly.add(bytes);
+    final data = _reassembly.takeBytes();
+    final view = ByteData.sublistView(data);
+    var offset = 0;
+    while (data.length - offset >= 4) {
+      final length = view.getInt32(offset);
+      if (length < 0 || data.length - offset - 4 < length) break;
+      _handleFrame(Uint8List.sublistView(data, offset + 4, offset + 4 + length));
+      offset += 4 + length;
+    }
+    if (offset < data.length) _reassembly.add(Uint8List.sublistView(data, offset));
+  }
+
+  void _handleFrame(Uint8List frame) {
+    if (frame.length < 6) return;
+    final view = ByteData.sublistView(frame);
+    final idLength = view.getUint16(0);
+    if (frame.length < 2 + idLength + 4) return;
+    final transferId = utf8.decode(Uint8List.sublistView(frame, 2, 2 + idLength));
+    final index = view.getInt32(2 + idLength);
+    final payload = Uint8List.sublistView(frame, 6 + idLength);
+    final r = _inbound[transferId];
+    if (r == null) return;
+    final at = index * r.frameSize;
+    if (index < 0 || index >= r.totalChunks || payload.length > r.frameSize || at + payload.length > r.size) {
+      _inbound.remove(transferId);
+      _control('file-abort', {
+        'transferId': transferId,
+        'reason': 'chunk $index of ${payload.length} bytes falls outside the declared ${r.size}-byte file',
+      });
+      return;
+    }
+    r.data.setRange(at, at + payload.length, payload);
+    r.mark(index, payload.length);
+    r.touch();
+    _progressController.add(FileProgress(transferId, r.bytesReceived, r.size));
+    if (++r.ackCounter >= config.ackEvery) {
+      r.ackCounter = 0;
+      _control('file-ack', {'transferId': transferId, 'throughIndex': r.firstMissing - 1});
+    }
+    _trySeal(transferId);
+  }
+
+  void _trySeal(String transferId) {
+    final r = _inbound[transferId];
+    if (r == null || r.firstMissing != r.totalChunks || r.bytesReceived != r.size) return;
+    _inbound.remove(transferId);
+    _control('file-ack', {'transferId': transferId, 'throughIndex': r.totalChunks - 1});
+    _fileController.add(ReceivedFile(transferId, r.value, r.name, r.contentType, r.headers, r.data));
+  }
+
+  // --- Connection lifecycle ---
+
+  void _onConnected(bool resumed) {
+    if (resumed) {
+      for (final r in _inbound.values) {
+        if (r.firstMissing < r.totalChunks) {
+          _control('file-resume', {'transferId': r.transferId, 'fromIndex': r.firstMissing});
+        }
+      }
+    } else {
+      // A fresh session holds none of the server's transfer state: sends start over, receives are gone.
+      _inbound.clear();
+      for (final t in _outbound.values) {
+        t.startSent = false;
+        t.cursor = 0;
+        t.ackedThrough = -1;
+        t.endSent = false;
+      }
+    }
+    for (final t in _outbound.values) {
+      t.signal();
+    }
+  }
+
+  void _onDisconnected() {
+    // A frame part-way through arriving is lost with the connection.
+    _reassembly.clear();
+  }
+
+  void _close() {
+    _sweep?.cancel();
+    _sweep = null;
+    for (final t in _outbound.values.toList()) {
+      _abortOutbound(t, 'the socket closed', tellServer: false);
+    }
+    _inbound.clear();
+  }
+
+  void _ensureSweep() {
+    _sweep ??= Timer.periodic(config.transferTimeout, (_) {
+      final cutoff = DateTime.now().millisecondsSinceEpoch - config.transferTimeout.inMilliseconds;
+      for (final t in _outbound.values.where((t) => t.lastActivity < cutoff).toList()) {
+        _abortOutbound(t, 'transfer timed out');
+      }
+      _inbound.removeWhere((_, r) => r.lastActivity < cutoff);
+      if (_outbound.isEmpty && _inbound.isEmpty) {
+        _sweep?.cancel();
+        _sweep = null;
+      }
+    });
+  }
+
+  // --- Wire helpers ---
+
+  void _control(String type, Map<String, dynamic> json) => _client._sendRaw({...json, 'type': type});
+
+  static Uint8List _frame(String transferId, int index, Uint8List payload) {
+    final id = utf8.encode(transferId);
+    final body = 2 + id.length + 4 + payload.length;
+    final out = Uint8List(4 + body);
+    final view = ByteData.sublistView(out);
+    view.setInt32(0, body);
+    view.setUint16(4, id.length);
+    out.setRange(6, 6 + id.length, id);
+    view.setInt32(6 + id.length, index);
+    out.setRange(10 + id.length, out.length, payload);
+    return out;
+  }
+
+  static String _newTransferId() {
+    final b = List<int>.generate(16, (_) => _random.nextInt(256));
+    b[6] = (b[6] & 0x0f) | 0x40;
+    b[8] = (b[8] & 0x3f) | 0x80;
+    final h = b.map((x) => x.toRadixString(16).padLeft(2, '0')).join();
+    return '${h.substring(0, 8)}-${h.substring(8, 12)}-${h.substring(12, 16)}-${h.substring(16, 20)}-${h.substring(20)}';
+  }
+}
+
+class _OutboundFile {
+  final String transferId;
+  final int size;
+  final int frameSize;
+  final int totalChunks;
+  final FileChunkReader read;
+  final Map<String, dynamic> start;
+  final Completer<String> completion = Completer<String>();
+  bool startSent = false;
+  int cursor = 0;
+  int ackedThrough = -1;
+  bool endSent = false;
+  bool done = false;
+  int lastActivity = DateTime.now().millisecondsSinceEpoch;
+  Completer<void>? _wake;
+  bool _woken = false;
+
+  _OutboundFile(this.transferId, this.size, this.frameSize, this.totalChunks, this.read, this.start);
+
+  void touch() => lastActivity = DateTime.now().millisecondsSinceEpoch;
+
+  /// Wait for [signal]; returns at once when it was signalled since the last wait.
+  Future<void> park() {
+    if (_woken) {
+      _woken = false;
+      return Future.value();
+    }
+    return (_wake = Completer<void>()).future;
+  }
+
+  void signal() {
+    final w = _wake;
+    _wake = null;
+    if (w != null) {
+      w.complete();
+    } else {
+      _woken = true;
+    }
+  }
+}
+
+class _InboundFile {
+  final String transferId;
+  final %%FILE_VALUE%% value;
+  final String name;
+  final String contentType;
+  final Map<String, List<String>> headers;
+  final int size;
+  final int frameSize;
+  final int totalChunks;
+  final Uint8List data;
+  final List<bool> _received;
+  int bytesReceived = 0;
+  int ackCounter = 0;
+  int lastActivity = DateTime.now().millisecondsSinceEpoch;
+
+  /// The first chunk index not yet received; `totalChunks` once every chunk is in.
+  int firstMissing = 0;
+
+  _InboundFile(this.transferId, this.value, this.name, this.contentType, this.headers, this.size, this.frameSize,
+      this.totalChunks)
+      : data = Uint8List(size),
+        _received = List<bool>.filled(totalChunks, false);
+
+  void mark(int index, int length) {
+    if (_received[index]) return;
+    _received[index] = true;
+    bytesReceived += length;
+    while (firstMissing < totalChunks && _received[firstMissing]) {
+      firstMissing++;
+    }
+  }
+
+  void touch() => lastActivity = DateTime.now().millisecondsSinceEpoch;
+}

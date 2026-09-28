@@ -314,6 +314,8 @@ class FileChannel[F: RW](socket: DurableSocket[?, ?, ?], config: FileTransferCon
   /** Called by the socket when it (re)activates after a reconnect. Receivers re-request resume of
     * incomplete inbound transfers; senders wake their pumps to re-evaluate connection state. */
   private[durable] def onReactivated(): Unit = {
+    // A frame part-way through arriving was lost with the old connection.
+    reasmLock.synchronized(reasm.reset())
     inbound.values().asScala.foreach { in =>
       if (in.firstMissing < in.totalChunks) {
         sendControl("file-resume", FileResumeMessage(in.transferId, in.firstMissing).json)

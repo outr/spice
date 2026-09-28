@@ -2,6 +2,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:math';
+import 'dart:typed_data';
 
 import 'package:web_socket_channel/web_socket_channel.dart';
 %%WIRE_IMPORT%%
@@ -32,6 +33,9 @@ class %%SERVICE_NAME%%DurableClient {
   final int maxReconnectAttempts;
   final Duration maxReconnectDelay;
 
+  /// Tuning for file transfers over [files].
+  final FileTransferConfig fileTransfer;
+
   %%SERVICE_NAME%%DurableClient({
     required this.wsUri,
     required this.clientId,
@@ -40,6 +44,7 @@ class %%SERVICE_NAME%%DurableClient {
     this.ackBatchCount = 10,
     this.maxReconnectAttempts = 20,
     this.maxReconnectDelay = const Duration(seconds: 30),
+    this.fileTransfer = const FileTransferConfig(),
   });
 
   WebSocketChannel? _channel;
@@ -109,6 +114,12 @@ class %%SERVICE_NAME%%DurableClient {
   /// session starts empty, so anything derived from the previous one is stale and should be resynced.
   Stream<bool> get onConnected => _connectedController.stream;
 
+  %%SERVICE_NAME%%FileChannel? _files;
+
+  /// Chunked binary file transfer over this socket, both ways. Created on first use: a file the server
+  /// sends before then is not received, so read this before a download is asked for.
+  %%SERVICE_NAME%%FileChannel get files => _files ??= %%SERVICE_NAME%%FileChannel._(this, fileTransfer);
+
   // ---------------------------------------------------------------------------
   // Connect / Close
   // ---------------------------------------------------------------------------
@@ -153,6 +164,7 @@ class %%SERVICE_NAME%%DurableClient {
     _ackTimer?.cancel();
     _subscription?.cancel();
     _channel?.sink.close();
+    _files?._close();
   }
 
   // ---------------------------------------------------------------------------
@@ -211,9 +223,21 @@ class %%SERVICE_NAME%%DurableClient {
   }
 
   void _onMessage(dynamic raw) {
+    if (raw is! String) {
+      // Binary frames carry file-transfer chunks.
+      final bytes = raw is Uint8List
+          ? raw
+          : raw is ByteBuffer
+              ? raw.asUint8List()
+              : raw is List<int>
+                  ? Uint8List.fromList(raw)
+                  : null;
+      if (bytes != null) _files?._acceptBytes(bytes);
+      return;
+    }
     final Map<String, dynamic> json;
     try {
-      json = jsonDecode(raw as String) as Map<String, dynamic>;
+      json = jsonDecode(raw) as Map<String, dynamic>;
     } catch (error) {
       print('[DurableClient] skipped a message that could not be read: $error'); // ignore: avoid_print
       return;
@@ -262,6 +286,7 @@ class %%SERVICE_NAME%%DurableClient {
         _connectCompleter?.complete();
         _connectCompleter = null;
         _connectedController.add(resumed);
+        _files?._onConnected(resumed);
         break;
 
       case 'going-away':
@@ -300,6 +325,26 @@ class %%SERVICE_NAME%%DurableClient {
         _pendingRequests.remove(id)?.completeError(
           RpcException(json['code'] as String? ?? 'error', json['message'] as String? ?? 'RPC error'),
         );
+        break;
+
+      case 'file-start':
+        _files?._acceptStart(json);
+        break;
+
+      case 'file-end':
+        _files?._acceptEnd(json);
+        break;
+
+      case 'file-ack':
+        _files?._acceptAck(json);
+        break;
+
+      case 'file-resume':
+        _files?._acceptResume(json);
+        break;
+
+      case 'file-abort':
+        _files?._acceptAbort(json);
         break;
 
       case 'error':
@@ -354,6 +399,7 @@ class %%SERVICE_NAME%%DurableClient {
     // A message part-way through its chunks is lost with the connection; what the server reads is learnt again.
     _partial.clear();
     _peerReadsChunks = false;
+    _files?._onDisconnected();
     if (_connectCompleter != null && !_connectCompleter!.isCompleted) {
       // Reject the awaiting connect() call — but DO NOT strand the socket. This branch used to `return`
       // here, so a drop DURING the handshake (e.g. a device that resumes/boots faster than its network
@@ -439,4 +485,8 @@ class %%SERVICE_NAME%%DurableClient {
       sink.add(jsonEncode({'type': 'chunk', 'id': id, 'index': i, 'count': count, 'data': text.substring(bounds[i], bounds[i + 1])}));
     }
   }
+
+  void _sendBinary(Uint8List data) => _channel?.sink.add(data);
 }
+
+%%FILE_CHANNEL%%

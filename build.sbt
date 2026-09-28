@@ -49,7 +49,7 @@ lazy val root = project.in(file("."))
 		clientJS, clientJVM, clientImplementationOkHttp, clientImplementationJVM, clientImplementationNetty,
 		delta,
 		server, serverImplementationUndertow,
-		openAPI,
+		openAPI, openAPIDartTests,
 		mcp,
 		apiJS, apiJVM
 	)
@@ -187,6 +187,19 @@ lazy val openAPI = project
 	.in(file("openapi"))
 	.settings(
 		name := "spice-openapi",
+		fork := true,
+		libraryDependencies ++= Seq(
+			dep.scalaTest
+		)
+	)
+
+lazy val openAPIDartTests = project
+	.dependsOn(openAPI, serverImplementationUndertow)
+	.in(file("openapi/dart-tests"))
+	.settings(
+		name := "spice-openapi-dart-tests",
+		publish := {},
+		publishLocal := {},
 		fork := true,
 		libraryDependencies ++= Seq(
 			dep.scalaTest

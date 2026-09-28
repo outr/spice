@@ -80,7 +80,11 @@ case class DurableSocketDartConfig(
     * uses `"name"` so the wire stays aligned with `Mode.name`) override here. The
     * parent's `fromJson` dispatcher reads from this key and every subtype's
     * `toJson()` writes to it. */
-  polyDiscriminatorKeys: Map[String, String] = Map.empty
+  polyDiscriminatorKeys: Map[String, String] = Map.empty,
+  /** The payload type `F` of the server's `socket.files[F]`: the generated client's `files` facet sends and
+    * receives it as that Dart class (via `toJson` / `fromJson`), and the type is emitted with the others.
+    * When None the facet carries the payload as untyped JSON. */
+  fileValueType: Option[(String, Definition)] = None
 )
 
 /** Generates Dart code for a DurableSocket client, event handler, event sender,
@@ -92,6 +96,7 @@ case class DurableSocketDartGenerator(config: DurableSocketDartConfig) {
   private lazy val TypesTemplate: String = loadString("generator/dart/durable_types.template")
   private lazy val SenderTemplate: String = loadString("generator/dart/durable_event_sender.template")
   private lazy val RestTemplate: String = loadString("generator/dart/durable_rest_client.template")
+  private lazy val FileChannelTemplate: String = loadString("generator/dart/durable_file_channel.template")
 
   private val generatedComment = "/// GENERATED CODE: Do not edit!"
   private val sn = config.serviceName
@@ -116,13 +121,12 @@ case class DurableSocketDartGenerator(config: DurableSocketDartConfig) {
   /** Rename fields that would be private in Dart (underscore prefix). */
   private def dartFieldName(name: String): String = if (name.startsWith("_")) name.drop(1) else name
 
-  /** Effective list of (name, Definition) to emit as Dart types. Auto-includes the wireType
-    * so the user doesn't have to also add it to `defTypes`. */
-  private lazy val effectiveDefTypes: List[(String, Definition)] = {
-    val (wireName, wireDefn) = config.wireType
-    if (config.defTypes.exists(_._1 == wireName)) config.defTypes
-    else config.defTypes :+ (wireName -> wireDefn)
-  }
+  /** Effective list of (name, Definition) to emit as Dart types. Auto-includes the wireType and the file
+    * payload type so the user doesn't have to also add them to `defTypes`. */
+  private lazy val effectiveDefTypes: List[(String, Definition)] =
+    (config.wireType :: config.fileValueType.toList).foldLeft(config.defTypes) { case (types, (name, defn)) =>
+      if (types.exists(_._1 == name)) types else types :+ (name -> defn)
+    }
 
   def generate(): List[SourceFile] = {
     val base = List(generateClient(), generateHandler(), generateSender(), generateRestClient())
@@ -211,7 +215,16 @@ case class DurableSocketDartGenerator(config: DurableSocketDartConfig) {
            |    }
            |  }""".stripMargin
       }
+    val (fileValue, fileEncode, fileDecode) = config.fileValueType match {
+      case Some((name, _)) => (name, "value.toJson()", s"$name.fromJson(json['value'] as Map<String, dynamic>)")
+      case None => ("dynamic", "value", "json['value']")
+    }
+    val fileChannel = FileChannelTemplate
+      .replace("%%FILE_VALUE_ENCODE%%", fileEncode)
+      .replace("%%FILE_VALUE_DECODE%%", fileDecode)
+      .replace("%%FILE_VALUE%%", fileValue)
     val source = ClientTemplate
+      .replace("%%FILE_CHANNEL%%", fileChannel)
       .replace("%%SERVICE_NAME%%", sn)
       .replace("%%INFO_CLASS%%", generateInfoClass())
       .replace("%%INFO_TO_JSON%%", infoToJson())
