@@ -164,12 +164,36 @@ class FileChannel[F: RW](socket: DurableSocket[?, ?, ?], config: FileTransferCon
 
   private[durable] def acceptStart(json: Json): Unit = {
     val msg = json.as[FileStartMessage]
-    val value = msg.value.as[F]
-    val headers = Headers(msg.headers)
-    val tmp = createTempFile()
-    val fc = NioFileChannel.open(tmp, StandardOpenOption.WRITE)
-    val in = new Inbound(msg.transferId, value, headers, tmp, fc, msg.size, msg.frameSize, msg.totalChunks)
-    inbound.put(msg.transferId, in)
+    startRefusal(msg) match {
+      case Some(reason) => sendControl("file-abort", FileAbortMessage(msg.transferId, reason).json)
+      case None =>
+        val value = msg.value.as[F]
+        val headers = Headers(msg.headers)
+        val tmp = createTempFile()
+        val fc = NioFileChannel.open(tmp, StandardOpenOption.WRITE)
+        val in = new Inbound(msg.transferId, value, headers, tmp, fc, msg.size, msg.frameSize, msg.totalChunks)
+        inbound.put(msg.transferId, in)
+    }
+  }
+
+  /** Why a declared transfer is not accepted: over [[FileTransferConfig.maxInboundBytes]], or a shape (size, frame size,
+    * chunk count) that does not describe one file, since chunks are placed by index times the declared frame size. */
+  private def startRefusal(msg: FileStartMessage): Option[String] = {
+    val expectedChunks = if (msg.size == 0L || msg.frameSize <= 0) 0L else (msg.size + msg.frameSize - 1) / msg.frameSize
+    config.maxInboundBytes.filter(msg.size > _) match {
+      case Some(max) => Some(s"file of ${msg.size} bytes is over the $max-byte limit")
+      case None if msg.size < 0L || msg.frameSize <= 0 || msg.totalChunks.toLong != expectedChunks =>
+        Some(s"inconsistent transfer: ${msg.size} bytes in ${msg.totalChunks} chunks of ${msg.frameSize}")
+      case None => None
+    }
+  }
+
+  private def abortInbound(in: Inbound, reason: String): Unit = {
+    if (inbound.remove(in.transferId) != null) {
+      try in.fc.close() catch { case _: Throwable => () }
+      try Files.deleteIfExists(in.path) catch { case _: Throwable => () }
+      sendControl("file-abort", FileAbortMessage(in.transferId, reason).json)
+    }
   }
 
   /** The binary channel is a byte stream, not a frame boundary: the ws layer may split one logical
@@ -206,7 +230,10 @@ class FileChannel[F: RW](socket: DurableSocket[?, ?, ?], config: FileTransferCon
     val payload = new Array[Byte](bb.remaining())
     bb.get(payload)
     val in = inbound.get(transferId)
-    if (in != null) {
+    if (in != null && (idx < 0 || idx >= in.totalChunks || payload.length > in.frameSize ||
+        idx.toLong * in.frameSize + payload.length > in.size)) {
+      abortInbound(in, s"chunk $idx of ${payload.length} bytes falls outside the declared ${in.size}-byte file")
+    } else if (in != null) {
       val isNew = !in.received.get(idx)
       in.fc.write(ByteBuffer.wrap(payload), idx.toLong * in.frameSize)
       if (isNew) {

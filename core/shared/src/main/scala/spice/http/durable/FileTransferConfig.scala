@@ -11,11 +11,14 @@ import scala.concurrent.duration.*
  * @param ackEvery         the receiver emits a `file-ack` at least once every this many received chunks
  * @param transferTimeout  an in-flight transfer with no activity for this long is aborted and its temp file reaped
  * @param spoolDirectory   where inbound chunks and spooled stream sources are written; system temp dir when None
+ * @param maxInboundBytes  the largest file a peer may send; a transfer declaring more is refused at its start and one whose
+ *                         chunks run past its declared size is aborted. No limit when None
  */
 case class FileTransferConfig(
   frameSize: Int = 64 * 1024,
   windowChunks: Int = 16,
   ackEvery: Int = 4,
   transferTimeout: FiniteDuration = 5.minutes,
-  spoolDirectory: Option[Path] = None
+  spoolDirectory: Option[Path] = None,
+  maxInboundBytes: Option[Long] = None
 )

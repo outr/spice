@@ -48,7 +48,7 @@ class FileTransferSpec extends AnyWordSpec with Matchers {
   object server extends MutableHttpServer
   private def serverPort: Int = server.config.listeners().head.port.getOrElse(0)
 
-  private def newClient(room: String, userId: String): DurableSocketClient[String, ChatEvent, ConnectInfo] =
+  private def newClient(room: String, userId: String, files: FileTransferConfig = fileConfig): DurableSocketClient[String, ChatEvent, ConnectInfo] =
     new DurableSocketClient[String, ChatEvent, ConnectInfo](
       createWebSocket = () => HttpClient.url(url"ws://localhost".withPort(serverPort).withPath(path"/wsf")).webSocket(),
       config = testConfig,
@@ -56,7 +56,7 @@ class FileTransferSpec extends AnyWordSpec with Matchers {
       initialChannelId = userId,
       info = ConnectInfo(userId, room),
       clientId = userId,
-      fileTransfer = fileConfig
+      fileTransfer = files
     )
 
   private def randomFile(size: Int, seed: Long): Path = {
@@ -124,6 +124,25 @@ class FileTransferSpec extends AnyWordSpec with Matchers {
       val rf = received.get
       rf.value should be(FileMeta("preview.png", "image"))
       java.util.Arrays.equals(Files.readAllBytes(rf.path), Files.readAllBytes(src)) should be(true)
+
+      client.close()
+    }
+
+    "refuse a file over the receiver's limit, failing the send" in {
+      val client = newClient("limit-room", "limited", fileConfig.copy(maxInboundBytes = Some(100_000L)))
+
+      @volatile var received: Option[ReceivedFile[FileMeta]] = None
+      client.files[FileMeta].onFile.attach { rf => received = Some(rf) }
+      client.connect().sync()
+      eventually(timeout(Span(5, Seconds))) {
+        durableServer.session("limited") should not be empty
+      }
+
+      val src = randomFile(180_000, seed = 4L)
+      val session = durableServer.session("limited").get
+      val outcome = session.protocol.files[FileMeta].send(src, FileMeta("huge.bin", "blob")).attempt.sync()
+      outcome.failed.get.getMessage should include("over the 100000-byte limit")
+      received should be(None)
 
       client.close()
     }
