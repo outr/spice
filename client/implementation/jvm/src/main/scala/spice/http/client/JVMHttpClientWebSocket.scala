@@ -6,6 +6,8 @@ import spice.UserException
 import spice.http.{ByteBufferData, ConnectionStatus, WebSocket}
 import spice.net.URL
 
+import java.io.ByteArrayOutputStream
+import java.lang.StringBuilder as TextBuilder
 import java.net.{URI, http as jvm}
 import java.nio.ByteBuffer
 import java.util.concurrent.CompletionStage
@@ -59,17 +61,41 @@ class JVMHttpClientWebSocket(url: URL, instance: JVMHttpClientInstance) extends 
     super.onOpen(webSocket)
   }
 
+  // The JDK hands a long message over in parts, `last` marking its end: the parts so far of the one in progress.
+  private val textParts = new TextBuilder
+  private val binaryParts = new ByteArrayOutputStream
+
+  /** A message is received once, whole: a part is kept until the one marked `last` completes it. */
   override def onText(webSocket: jvm.WebSocket,
                       data: CharSequence,
                       last: Boolean): CompletionStage[?] = {
-    receive.text @= data.toString
+    if (last && textParts.length == 0) receive.text @= data.toString
+    else {
+      textParts.append(data)
+      if (last) {
+        val text = textParts.toString
+        textParts.setLength(0)
+        receive.text @= text
+      }
+    }
     super.onText(webSocket, data, last)
   }
 
   override def onBinary(webSocket: jvm.WebSocket,
                         data: ByteBuffer,
                         last: Boolean): CompletionStage[?] = {
-    receive.binary @= ByteBufferData(data)
+    if (last && binaryParts.size == 0) receive.binary @= ByteBufferData(data)
+    else {
+      // A part's buffer is the JDK's to reuse once this returns: its bytes are copied out.
+      val bytes = new Array[Byte](data.remaining())
+      data.get(bytes)
+      binaryParts.write(bytes)
+      if (last) {
+        val whole = ByteBuffer.wrap(binaryParts.toByteArray)
+        binaryParts.reset()
+        receive.binary @= ByteBufferData(whole)
+      }
+    }
     super.onBinary(webSocket, data, last)
   }
 

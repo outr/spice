@@ -11,6 +11,7 @@ import java.nio.ByteBuffer
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicLong
 import scala.concurrent.duration.*
+import scala.util.{Failure, Success, Try}
 
 class DurableSocket[Id: RW, Event: RW, Info: RW](
   val config: DurableSocketConfig,
@@ -170,6 +171,9 @@ class DurableSocket[Id: RW, Event: RW, Info: RW](
   def unbind(): Unit = {
     stopTimers()
     rawWs @= None
+    // A message part-way through its chunks is lost with the connection; what the peer can read is learnt again.
+    partial.clear()
+    peerReadsChunks = false
     if (_state() == ProtocolState.Active) {
       _state @= ProtocolState.Disconnected
     }
@@ -209,7 +213,8 @@ class DurableSocket[Id: RW, Event: RW, Info: RW](
     sendRaw(JsonFormatter.Default(obj(
       "type" -> str("connect"),
       "clientId" -> str(clientId),
-      "info" -> info.json
+      "info" -> info.json,
+      "chunks" -> bool(true)
     )))
   }
 
@@ -219,7 +224,8 @@ class DurableSocket[Id: RW, Event: RW, Info: RW](
       "type" -> str("resume"),
       "clientId" -> str(clientId),
       "lastSeq" -> num(lastSeq),
-      "info" -> info.json
+      "info" -> info.json,
+      "chunks" -> bool(true)
     )))
   }
 
@@ -237,7 +243,8 @@ class DurableSocket[Id: RW, Event: RW, Info: RW](
     sendRaw(JsonFormatter.Default(obj(
       "type" -> str("connected"),
       "lastClientSeq" -> num(lastClientSeq),
-      "resumed" -> bool(resumed)
+      "resumed" -> bool(resumed),
+      "chunks" -> bool(true)
     )))
   }
 
@@ -284,9 +291,76 @@ class DurableSocket[Id: RW, Event: RW, Info: RW](
 
   // --- Internal: message dispatch ---
 
-  private def handleRawMessage(text: String): Unit = {
-    val json = JsonParser(text)
+  /** Whether the peer said in its handshake that it reads `chunk` frames: only then is a long message sent as chunks. */
+  @volatile private var peerReadsChunks: Boolean = false
+
+  /** Record what the peer's handshake said about reading `chunk` frames. */
+  def peerChunks(json: Json): Unit = peerReadsChunks = json.get("chunks").exists {
+    case Bool(b, _) => b
+    case _ => false
+  }
+
+  private val chunkCounter = new AtomicLong(0L)
+  /** How many messages this socket has sent as chunks. */
+  private[durable] def chunkedMessagesSent: Long = chunkCounter.get()
+  // Messages arriving as chunks, by id: the parts received so far and their total length.
+  private val partial = new ConcurrentHashMap[String, (Array[String], Long)]()
+
+  private val TypePrefix = """"type"\s*:\s*"([A-Za-z\-]+)"""".r
+  private val IdPrefix = """"id"\s*:\s*(\d+)""".r
+  private val SeqPrefix = """"seq"\s*:\s*(\d+)""".r
+
+  /**
+   * Answer a message that could not be read — too long, or not the JSON it should be — instead of dropping it: a
+   * request by its id, so the caller's pending `ask` fails at once, anything else with an `error` frame carrying its
+   * `seq` where it had one. What it was is read from its opening, which is all a message too long to parse offers.
+   */
+  private def refuse(text: String, code: String, message: String): Unit = {
+    val head = text.take(512)
+    scribe.warn(s"DurableSocket: refused a message of ${text.length} characters ($code): $message")
+    (TypePrefix.findFirstMatchIn(head).map(_.group(1)), IdPrefix.findFirstMatchIn(head).map(_.group(1).toLong)) match {
+      case (Some("request"), Some(id)) =>
+        sendRaw(JsonFormatter.Default(obj("type" -> str("response-error"), "id" -> num(id), "code" -> str(code), "message" -> str(message))))
+      case _ =>
+        val seq = SeqPrefix.findFirstMatchIn(head).map(m => "seq" -> num(m.group(1).toLong)).toList
+        sendRaw(JsonFormatter.Default(obj((List("type" -> str("error"), "code" -> str(code), "message" -> str(message)) ++ seq)*)))
+    }
+  }
+
+  /** One part of a message sent as chunks; the whole is read once every part has arrived. */
+  private def acceptChunk(json: Json): Unit = {
+    val id = json("id").asString
+    val index = json("index").asInt
+    val count = json("count").asInt
+    val data = json("data").asString
+    val (parts, total) = partial.computeIfAbsent(id, _ => (new Array[String](count), 0L))
+    val length = total + data.length
+    if (length > config.maxMessageChars) {
+      partial.remove(id)
+      refuse(data, "message-too-large", s"A message longer than ${config.maxMessageChars} characters is not accepted.")
+    } else if (index >= 0 && index < parts.length) {
+      parts(index) = data
+      partial.put(id, (parts, length))
+      if (parts.forall(_ != null)) {
+        partial.remove(id)
+        handleRawMessage(parts.mkString)
+      }
+    }
+  }
+
+  private def handleRawMessage(text: String): Unit =
+    if (text.length > config.maxMessageChars)
+      refuse(text, "message-too-large", s"A message longer than ${config.maxMessageChars} characters is not accepted.")
+    else Try(JsonParser(text)) match {
+      case Failure(t) => refuse(text, "unreadable", s"The message could not be read: ${t.getMessage}")
+      case Success(json) => dispatch(json)
+    }
+
+  private def dispatch(json: Json): Unit = {
     json.get("type").map(_.asString) match {
+      case Some("chunk") =>
+        acceptChunk(json)
+
       case Some("event") =>
         val seq = json("seq").asLong
         if (tracker.acceptInbound(seq)) {
@@ -388,8 +462,35 @@ class DurableSocket[Id: RW, Event: RW, Info: RW](
 
   // --- Raw send ---
 
+  /**
+   * Send one message. Longer than [[DurableSocketConfig.maxMessageChars]] it is refused here, where the sender can be
+   * told, rather than by a peer that could only drop it; longer than [[DurableSocketConfig.maxFrameChars]], to a peer
+   * that reads chunks, it goes as `chunk` frames the peer reassembles before reading — never splitting a surrogate pair.
+   */
   protected[durable] def sendRaw(text: String): Unit = {
-    rawWs().foreach(ws => ws.send.text @= text)
+    if (text.length > config.maxMessageChars)
+      throw new IllegalArgumentException(
+        s"A message of ${text.length} characters exceeds the ${config.maxMessageChars} a durable socket sends; large files go over the file channel.")
+    rawWs().foreach { ws =>
+      if (!peerReadsChunks || text.length <= config.maxFrameChars) ws.send.text @= text
+      else {
+        val id = s"${System.identityHashCode(this).toHexString}-${chunkCounter.incrementAndGet()}"
+        val bounds = Iterator.iterate(0) { from =>
+          val until = (from + config.maxFrameChars).min(text.length)
+          if (until < text.length && Character.isHighSurrogate(text.charAt(until - 1))) until - 1 else until
+        }.takeWhile(_ < text.length).toVector :+ text.length
+        val parts = bounds.zip(bounds.tail)
+        parts.zipWithIndex.foreach { case ((from, until), index) =>
+          ws.send.text @= JsonFormatter.Compact(obj(
+            "type" -> str("chunk"),
+            "id" -> str(id),
+            "index" -> num(index),
+            "count" -> num(parts.size),
+            "data" -> str(text.substring(from, until))
+          ))
+        }
+      }
+    }
   }
 
   protected[durable] def sendBinaryRaw(data: ByteBuffer): Unit = {

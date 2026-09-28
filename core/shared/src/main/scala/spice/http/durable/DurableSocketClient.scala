@@ -26,6 +26,7 @@ class DurableSocketClient[Id: RW, Event: RW, Info: RW](
     override protected def handleHandshakeMessage(json: Json, msgType: String): Unit = {
       msgType match {
         case "connected" =>
+          peerChunks(json)
           val lastClientSeq = json("lastClientSeq").asLong
           val resumed = json("resumed").asBoolean
           handleConnectedResponse(lastClientSeq, resumed)

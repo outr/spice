@@ -131,6 +131,7 @@ class DurableSocketServer[Id: RW, Event: RW, Info: RW](
           resolveChannel(clientId, info).map { channelId =>
             val ds = createSocket(channelId)
             ds.bind(listener)
+            ds.peerChunks(json)
             val durableSession = DurableSession(clientId, info, ds, reactify.Var(listener))
             registerSession(durableSession)
 
@@ -151,6 +152,7 @@ class DurableSocketServer[Id: RW, Event: RW, Info: RW](
             resolveChannel(clientId, info).flatMap { _ =>
               existing.protocol.unbind()
               existing.protocol.bind(listener)
+              existing.protocol.peerChunks(json)
               existing.listener @= listener
               existing.touch()
               val lastClientSeq = existing.protocol.highestProcessedSeq
@@ -167,6 +169,7 @@ class DurableSocketServer[Id: RW, Event: RW, Info: RW](
             resolveChannel(clientId, info).map { channelId =>
               val ds = createSocket(channelId)
               ds.bind(listener)
+              ds.peerChunks(json)
               val durableSession = DurableSession(clientId, info, ds, reactify.Var(listener))
               registerSession(durableSession)
 

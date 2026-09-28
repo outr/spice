@@ -75,7 +75,19 @@ case class DurableSocketConfig(
     * is up, so nothing reports an error and nothing closes, and the client waits in `Handshaking` for ever while
     * everything it would have sent over the socket quietly goes by other means instead. A deadline turns that
     * into an ordinary reconnect. */
-  handshakeTimeout: FiniteDuration = 15.seconds
+  handshakeTimeout: FiniteDuration = 15.seconds,
+  /** Characters above which a text message is sent as `chunk` frames, reassembled by the peer before it is read.
+    *
+    * Only to a peer that said in its handshake it reads chunks; to any other the message goes whole as before.
+    * Chunking keeps each frame under the caps websocket servers and proxies put on a frame; it does not change the
+    * size of the message the peer reads, which [[maxMessageChars]] bounds. */
+  maxFrameChars: Int = 1_000_000,
+  /** The longest message, in characters, either side sends or reads — whole or reassembled from chunks.
+    *
+    * A message over it is refused before it is parsed: the peer gets an `error` frame (a `response-error` for a
+    * request), and a send over it fails at the sender, so neither end holds an unbounded message in memory and
+    * neither waits on one that will never be answered. */
+  maxMessageChars: Int = 64_000_000
 )
 
 trait ReconnectStrategy {

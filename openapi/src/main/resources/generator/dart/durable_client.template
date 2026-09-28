@@ -51,6 +51,16 @@ class %%SERVICE_NAME%%DurableClient {
   // so a resume would be rejected).
   bool _everConnected = false;
 
+  /// Whether the server said in its handshake that it reads `chunk` frames: only then is a long message sent as chunks.
+  bool _peerReadsChunks = false;
+
+  /// Characters above which a message to a server that reads chunks goes as `chunk` frames it reassembles.
+  static const int _maxFrameChars = 1000000;
+  int _chunkCounter = 0;
+
+  /// Messages arriving as chunks, by id: the parts received so far.
+  final Map<String, List<String?>> _partial = {};
+
   // State
   DurableSocketState _state = DurableSocketState.disconnected;
   DurableSocketState get state => _state;
@@ -133,7 +143,7 @@ class %%SERVICE_NAME%%DurableClient {
       rethrow;
     }
     _listen();
-    _sendRaw({'type': 'connect', 'clientId': clientId, 'info': %%INFO_TO_JSON%%});
+    _sendRaw({'type': 'connect', 'clientId': clientId, 'info': %%INFO_TO_JSON%%, 'chunks': true});
     await completer.future;
   }
 
@@ -201,10 +211,28 @@ class %%SERVICE_NAME%%DurableClient {
   }
 
   void _onMessage(dynamic raw) {
-    final json = jsonDecode(raw as String) as Map<String, dynamic>;
+    final Map<String, dynamic> json;
+    try {
+      json = jsonDecode(raw as String) as Map<String, dynamic>;
+    } catch (error) {
+      print('[DurableClient] skipped a message that could not be read: $error'); // ignore: avoid_print
+      return;
+    }
     final type = json['type'] as String?;
 
     switch (type) {
+      case 'chunk':
+        // One part of a message sent as chunks; the whole is read once every part has arrived.
+        final id = json['id'] as String;
+        final parts = _partial.putIfAbsent(id, () => List<String?>.filled(json['count'] as int, null));
+        final index = json['index'] as int;
+        if (index >= 0 && index < parts.length) parts[index] = json['data'] as String;
+        if (parts.every((p) => p != null)) {
+          _partial.remove(id);
+          _onMessage(parts.join());
+        }
+        break;
+
       case 'event':
         final seq = json['seq'] as int;
         if (_acceptInbound(seq)) {
@@ -219,6 +247,7 @@ class %%SERVICE_NAME%%DurableClient {
         break;
 
       case 'connected':
+        _peerReadsChunks = json['chunks'] == true;
         final resumed = json['resumed'] == true;
         if (!resumed) {
           // A fresh session numbers its events from the start again; a high-water mark kept from an
@@ -322,6 +351,9 @@ class %%SERVICE_NAME%%DurableClient {
   void _handleDisconnect() {
     _ackTimer?.cancel();
     _subscription?.cancel();
+    // A message part-way through its chunks is lost with the connection; what the server reads is learnt again.
+    _partial.clear();
+    _peerReadsChunks = false;
     if (_connectCompleter != null && !_connectCompleter!.isCompleted) {
       // Reject the awaiting connect() call — but DO NOT strand the socket. This branch used to `return`
       // here, so a drop DURING the handshake (e.g. a device that resumes/boots faster than its network
@@ -367,11 +399,13 @@ class %%SERVICE_NAME%%DurableClient {
               'clientId': clientId,
               'lastSeq': _highestProcessedSeq,
               'info': %%INFO_TO_JSON%%,
+              'chunks': true,
             }
           : {
               'type': 'connect',
               'clientId': clientId,
               'info': %%INFO_TO_JSON%%,
+              'chunks': true,
             });
     } catch (_) {
       _attemptReconnect();
@@ -382,7 +416,27 @@ class %%SERVICE_NAME%%DurableClient {
   // Raw send
   // ---------------------------------------------------------------------------
 
+  /// Send one message: whole, or as `chunk` frames the server reassembles when it is longer than
+  /// [_maxFrameChars] and the server reads chunks, never splitting a surrogate pair.
   void _sendRaw(Map<String, dynamic> json) {
-    _channel?.sink.add(jsonEncode(json));
+    final text = jsonEncode(json);
+    final sink = _channel?.sink;
+    if (sink == null) return;
+    if (!_peerReadsChunks || text.length <= _maxFrameChars) {
+      sink.add(text);
+      return;
+    }
+    final bounds = <int>[0];
+    while (bounds.last < text.length) {
+      var until = min(bounds.last + _maxFrameChars, text.length);
+      final unit = text.codeUnitAt(until - 1);
+      if (until < text.length && unit >= 0xD800 && unit <= 0xDBFF) until--;
+      bounds.add(until);
+    }
+    final id = '${clientId}-${++_chunkCounter}';
+    final count = bounds.length - 1;
+    for (var i = 0; i < count; i++) {
+      sink.add(jsonEncode({'type': 'chunk', 'id': id, 'index': i, 'count': count, 'data': text.substring(bounds[i], bounds[i + 1])}));
+    }
   }
 }
