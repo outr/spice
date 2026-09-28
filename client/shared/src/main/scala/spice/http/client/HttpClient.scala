@@ -29,6 +29,8 @@ case class HttpClient(request: HttpRequest,
                       failOnHttpStatus: Boolean,
                       validateSSLCertificates: Boolean,
                       proxy: Option[Proxy],
+                      /** Whether a redirect response is followed to its target, or returned as it is. */
+                      followRedirects: Boolean,
                       failures: Int) {
   private[client] lazy val instanceKey: String = List(
     implementation.getClass.getName,
@@ -36,7 +38,8 @@ case class HttpClient(request: HttpRequest,
     pingInterval,
     dns,
     validateSSLCertificates,
-    proxy
+    proxy,
+    followRedirects
   ).map(_.toString).mkString(",")
   private lazy val instance: HttpClientInstance = implementation.instance(this)
 
@@ -109,6 +112,9 @@ case class HttpClient(request: HttpRequest,
   def noFailOnHttpStatus: HttpClient = failOnHttpStatus(failOnHttpStatus = false)
   def ignoreSSLCertificates: HttpClient = copy(validateSSLCertificates = false)
   def proxy(proxy: Proxy): HttpClient = copy(proxy = Some(proxy))
+  def followRedirects(followRedirects: Boolean): HttpClient = copy(followRedirects = followRedirects)
+  /** Return a redirect response as it is, for the caller to decide whether to follow it. */
+  def noFollowRedirects: HttpClient = followRedirects(followRedirects = false)
 
   /**
    * Sets the content to be sent. If this request is set to GET, it will automatically be changed to POST.
@@ -313,5 +319,6 @@ object HttpClient extends HttpClient(
   failOnHttpStatus = true,
   validateSSLCertificates = true,
   proxy = None,
+  followRedirects = true,
   failures = 0
 )

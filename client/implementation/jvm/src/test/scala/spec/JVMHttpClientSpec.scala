@@ -21,6 +21,30 @@ class JVMHttpClientSpec extends AnyWordSpec with Matchers {
     "be the default implementation" in {
       HttpClient.implementation should be(JVMHttpClientImplementation)
     }
+    "return a redirect as it is when told not to follow it, and follow it by default" in {
+      Moduload.load()
+      val server = com.sun.net.httpserver.HttpServer.create(new java.net.InetSocketAddress("127.0.0.1", 0), 0)
+      server.createContext("/from", exchange => {
+        exchange.getResponseHeaders.add("Location", "/to")
+        exchange.sendResponseHeaders(302, -1)
+        exchange.close()
+      })
+      server.createContext("/to", exchange => {
+        val body = "arrived".getBytes("UTF-8")
+        exchange.sendResponseHeaders(200, body.length.toLong)
+        exchange.getResponseBody.write(body)
+        exchange.close()
+      })
+      server.start()
+      try {
+        val from = URL.parse(s"http://127.0.0.1:${server.getAddress.getPort}/from")
+        val held = HttpClient.url(from).noFollowRedirects.noFailOnHttpStatus.send().sync()
+        held.status.code should be(302)
+        held.headers.first(Headers.Response.`Location`) should be(Some("/to"))
+        val followed = HttpClient.url(from).noFailOnHttpStatus.send().sync()
+        followed.status should be(HttpStatus.OK)
+      } finally server.stop(0)
+    }
     "GET the user-agent" in {
       HttpClient.url(url"https://httpbin.org/user-agent").get.send().map { response =>
         response.status should be(HttpStatus.OK)

@@ -28,7 +28,7 @@ class JVMHttpClientInstance(client: HttpClient) extends HttpClientInstance {
   }
   private[client] lazy val jvmClient = jvm.HttpClient.newBuilder()
     .version(Version.HTTP_2)
-    .followRedirects(Redirect.NORMAL)
+    .followRedirects(if (client.followRedirects) Redirect.NORMAL else Redirect.NEVER)
     .connectTimeout(Duration.ofMillis(client.timeout.toMillis))
     .proxy(proxy)
     .build()

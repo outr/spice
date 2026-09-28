@@ -51,6 +51,8 @@ class OkHttpClientInstance(client: HttpClient) extends HttpClientInstance {
     b.connectTimeout(client.timeout.toMillis, TimeUnit.MILLISECONDS)
     b.readTimeout(client.timeout.toMillis, TimeUnit.MILLISECONDS)
     b.writeTimeout(client.timeout.toMillis, TimeUnit.MILLISECONDS)
+    b.followRedirects(client.followRedirects)
+    b.followSslRedirects(client.followRedirects)
     b.dns((hostname: String) => {
       val list = new util.ArrayList[InetAddress]()
       client.dns.lookup(hostname).sync() match {
