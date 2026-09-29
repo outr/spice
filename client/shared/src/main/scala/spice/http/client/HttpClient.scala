@@ -31,6 +31,9 @@ case class HttpClient(request: HttpRequest,
                       proxy: Option[Proxy],
                       /** Whether a redirect response is followed to its target, or returned as it is. */
                       followRedirects: Boolean,
+                      /** Whether a browser sends cookies and HTTP authentication with a cross-origin request. It sends them to its
+                        * own origin either way; elsewhere a client has no browser and this means nothing. */
+                      withCredentials: Boolean,
                       failures: Int) {
   private[client] lazy val instanceKey: String = List(
     implementation.getClass.getName,
@@ -39,7 +42,8 @@ case class HttpClient(request: HttpRequest,
     dns,
     validateSSLCertificates,
     proxy,
-    followRedirects
+    followRedirects,
+    withCredentials
   ).map(_.toString).mkString(",")
   private lazy val instance: HttpClientInstance = implementation.instance(this)
 
@@ -115,6 +119,7 @@ case class HttpClient(request: HttpRequest,
   def followRedirects(followRedirects: Boolean): HttpClient = copy(followRedirects = followRedirects)
   /** Return a redirect response as it is, for the caller to decide whether to follow it. */
   def noFollowRedirects: HttpClient = followRedirects(followRedirects = false)
+  def withCredentials(withCredentials: Boolean): HttpClient = copy(withCredentials = withCredentials)
 
   /**
    * Sets the content to be sent. If this request is set to GET, it will automatically be changed to POST.
@@ -320,5 +325,6 @@ object HttpClient extends HttpClient(
   validateSSLCertificates = true,
   proxy = None,
   followRedirects = true,
+  withCredentials = false,
   failures = 0
 )
