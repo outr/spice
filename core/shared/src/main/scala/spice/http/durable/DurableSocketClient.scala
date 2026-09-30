@@ -67,9 +67,12 @@ class DurableSocketClient[Id: RW, Event: RW, Info: RW](
   // leaving a half-open zombie that still reports as connected.
   private val reconnecting = new java.util.concurrent.atomic.AtomicBoolean(false)
 
+  /** Dial and handshake. A socket that will not open fails the returned task, as it always did, and is re-dialled
+    * by the `reconnectStrategy` as a dropped one is: the first dial is no different from any other, and a client
+    * whose first dial failed was otherwise left for good with nothing trying again. */
   def connect(): Task[Unit] = {
     val ws = createWebSocket()
-    ws.connect().flatMap { status =>
+    open(ws).flatMap { status =>
       if (status == ConnectionStatus.Open) {
         protocol.bind(ws)
         protocol.sendConnect(clientId, info)
@@ -77,7 +80,26 @@ class DurableSocketClient[Id: RW, Event: RW, Info: RW](
       } else {
         Task.error(new RuntimeException(s"WebSocket connection failed: $status"))
       }
+    }.handleError { t =>
+      if (protocol.state() != ProtocolState.Closed && config.reconnectStrategy.nextDelay(reconnectAttempt()).nonEmpty) {
+        beginReconnect()
+      }
+      Task.error(t)
     }
+  }
+
+  /** Open the transport, but not for ever.
+    *
+    * A socket that never opens reports nothing either: a server that takes the connection and never answers the
+    * upgrade (one with no upgrade handler, or a proxy holding the request) leaves a browser's socket `CONNECTING`
+    * with no error and no close, and the dial waited on it for good, re-dialling nothing. It is given the handshake's
+    * deadline and then dropped, which fails the dial like any other socket that would not open. */
+  private def open(ws: WebSocket): Task[ConnectionStatus] = ws.connect().timeout(config.handshakeTimeout).handleError {
+    case t: java.util.concurrent.TimeoutException =>
+      scribe.warn("DurableSocket: the socket did not open in " + config.handshakeTimeout.toString + "; re-dialling")
+      ws.disconnect()
+      Task.error(t)
+    case t => Task.error(t)
   }
 
   def close(): Unit = protocol.close()
@@ -167,7 +189,7 @@ class DurableSocketClient[Id: RW, Event: RW, Info: RW](
           }
           else {
             val ws = createWebSocket()
-            ws.connect().flatMap { status =>
+            open(ws).flatMap { status =>
               if (status == ConnectionStatus.Open) {
                 protocol.bind(ws)
                 protocol.sendResume(clientId, protocol.highestProcessedSeq, info)
@@ -206,9 +228,13 @@ class DurableSocketClient[Id: RW, Event: RW, Info: RW](
     * It continues the reconnect loop rather than starting one where a loop is already running. `beginReconnect`
     * collapses concurrent triggers by refusing to start a second loop, which is right for duplicate disconnect
     * events and exactly wrong here -- a handshake failing INSIDE the loop would find the guard already taken and
-    * stop the loop dead, which is how a client ended up stranded for good rather than for one attempt. */
+    * stop the loop dead, which is how a client ended up stranded for good rather than for one attempt.
+    *
+    * Whether a loop is running is read before the transport is dropped: a socket that reports its close at once (the
+    * browser's does) has started one by the time `disconnect` returns, and continuing that loop as well ran two. */
   private def handshakeFailed(): Unit = if (protocol.state() != ProtocolState.Closed) {
+    val inLoop = reconnecting.get()
     protocol.disconnect()
-    if (reconnecting.get()) attemptReconnect() else beginReconnect()
+    if (inLoop) attemptReconnect() else beginReconnect()
   }
 }
