@@ -643,6 +643,21 @@ class NettyHttpClientInstance(val client: HttpClient) extends HttpClientInstance
             private var errorCode: Int = 0
             private val errorBody = new StringBuilder
             private var errorHeaders: spice.http.Headers = spice.http.Headers.empty
+            private val bodyDecoder = new Utf8ChunkDecoder
+
+            private def appendText(text: String): Unit =
+              if (errorCode > 0) errorBody.append(text)
+              else {
+                for (c <- text) {
+                  if (c == '\n') {
+                    val line = lineBuffer.toString.stripSuffix("\r")
+                    lineBuffer.clear()
+                    lineQueue.offer(Right(Some(line)))
+                  } else {
+                    lineBuffer.append(c)
+                  }
+                }
+              }
 
             override def channelRead0(ctx: ChannelHandlerContext, msg: HttpObject): Unit = msg match {
               case response: NettyHttpResponse =>
@@ -667,23 +682,10 @@ class NettyHttpClientInstance(val client: HttpClient) extends HttpClientInstance
                 if (content.readableBytes() > 0) {
                   val bytes = new Array[Byte](content.readableBytes())
                   content.readBytes(bytes)
-                  val text = new String(bytes, StandardCharsets.UTF_8)
-                  if (errorCode > 0) {
-                    // Buffer error response body instead of emitting lines
-                    errorBody.append(text)
-                  } else {
-                    for (c <- text) {
-                      if (c == '\n') {
-                        val line = lineBuffer.toString.stripSuffix("\r")
-                        lineBuffer.clear()
-                        lineQueue.offer(Right(Some(line)))
-                      } else {
-                        lineBuffer.append(c)
-                      }
-                    }
-                  }
+                  appendText(bodyDecoder.decode(bytes))
                 }
                 if (chunk.isInstanceOf[LastHttpContent]) {
+                  appendText(bodyDecoder.finish())
                   if (errorCode > 0) {
                     // Emit error with full response body and captured headers.
                     val body = errorBody.toString.take(2000)
