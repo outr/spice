@@ -1,7 +1,7 @@
 package spice.http.client
 
 import rapid.{Stream, Task}
-import spice.http.{Headers, HttpRequest, HttpResponse, WebSocket}
+import spice.http.{Headers, HttpMethod, HttpRequest, HttpResponse, WebSocket}
 import spice.net.URL
 
 import scala.util.Try
@@ -44,4 +44,14 @@ trait HttpClientInstance {
   def webSocket(url: URL, headers: Headers = Headers.empty): WebSocket
 
   def dispose(): Task[Unit]
+}
+object HttpClientInstance {
+  private val BodylessMethods: Set[HttpMethod] =
+    Set(HttpMethod.Get, HttpMethod.Head, HttpMethod.Delete, HttpMethod.Options, HttpMethod.Trace, HttpMethod.Connect)
+
+  /** Whether `request` carries a body framing (a Content-Length) on the wire: a request with content does, as does
+    * one whose method anticipates a body (POST, PUT, PATCH) with none, as `Content-Length: 0`. A GET, HEAD, DELETE,
+    * OPTIONS, TRACE or CONNECT with no content sends none (RFC 9110 §8.6) — some servers refuse a body-less GET that
+    * carries one. */
+  def hasBody(request: HttpRequest): Boolean = request.content.nonEmpty || !BodylessMethods.contains(request.method)
 }

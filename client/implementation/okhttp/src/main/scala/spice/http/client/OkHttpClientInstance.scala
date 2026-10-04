@@ -243,8 +243,9 @@ class OkHttpClientInstance(client: HttpClient) extends HttpClientInstance {
         }
       case c => throw new RuntimeException(s"Unsupported request content: $c")
     }.getOrElse {
-      if (request.method != HttpMethod.Get) {
-        okhttp3.RequestBody.create("", None.orNull)
+      // OkHttp frames the body itself: a Content-Length from its length, or none when there is no body
+      if (HttpClientInstance.hasBody(request)) {
+        okhttp3.RequestBody.create(Array.emptyByteArray, None.orNull)
       } else {
         None.orNull
       }
@@ -253,7 +254,6 @@ class OkHttpClientInstance(client: HttpClient) extends HttpClientInstance {
     // Method
     r
       .method(request.method.value, if (request.method == HttpMethod.Head) null else body)
-      .header("Content-Length", Option(body).map(_.contentLength().toString).getOrElse("0"))
       .build()
   }
 

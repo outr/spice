@@ -17,6 +17,7 @@ import java.net.{InetSocketAddress, ProxySelector, URI, http as jvm}
 import java.nio.channels.{Channels, Pipe}
 import java.nio.file.Files
 import java.time.Duration
+import java.util.Optional
 import java.util.concurrent.{CompletableFuture, CompletionException}
 import scala.jdk.CollectionConverters.*
 import scala.jdk.FutureConverters.*
@@ -155,9 +156,23 @@ class JVMHttpClientInstance(client: HttpClient) extends HttpClientInstance {
         builder.headers(request.headers.map.toList.flatMap {
           case (key, values) => values.flatMap(value => List(key, value))
         }*)
-        builder.build()
+        val built = builder.build()
+        if (HttpClientInstance.hasBody(request)) built else withoutBody(built)
       }
     } yield jvmRequest
+  }
+
+  /** `built` with no body publisher at all, so java.net.http sends no Content-Length: `method(name, noBody())`
+    * still sends `Content-Length: 0`, and only GET, DELETE and HEAD have builder methods that leave the publisher
+    * out. */
+  private def withoutBody(built: jvm.HttpRequest): jvm.HttpRequest = new jvm.HttpRequest {
+    override def bodyPublisher(): Optional[jvm.HttpRequest.BodyPublisher] = Optional.empty()
+    override def method(): String = built.method()
+    override def timeout(): Optional[Duration] = built.timeout()
+    override def expectContinue(): Boolean = built.expectContinue()
+    override def uri(): URI = built.uri()
+    override def version(): Optional[jvm.HttpClient.Version] = built.version()
+    override def headers(): jvm.HttpHeaders = built.headers()
   }
 
   private def response2Spice(jvmResponse: jvm.HttpResponse[Array[Byte]]): Task[HttpResponse] = Task {

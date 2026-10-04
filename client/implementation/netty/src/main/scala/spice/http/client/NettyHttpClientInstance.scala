@@ -265,7 +265,9 @@ class NettyHttpClientInstance(val client: HttpClient) extends HttpClientInstance
     }
     nettyRequest.headers().set(HttpHeaderNames.HOST, hostHeader)
     nettyRequest.headers().set(HttpHeaderNames.CONNECTION, HttpHeaderValues.KEEP_ALIVE)
-    nettyRequest.headers().set(HttpHeaderNames.CONTENT_LENGTH, nettyContent.readableBytes())
+    if (HttpClientInstance.hasBody(request)) {
+      nettyRequest.headers().set(HttpHeaderNames.CONTENT_LENGTH, nettyContent.readableBytes())
+    }
 
     // Set content type if present
     contentType.foreach { ct =>
