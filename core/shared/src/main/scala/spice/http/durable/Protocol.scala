@@ -87,8 +87,12 @@ case class DurableSocketConfig(
     * A message over it is refused before it is parsed: the peer gets an `error` frame (a `response-error` for a
     * request), and a send over it fails at the sender, so neither end holds an unbounded message in memory and
     * neither waits on one that will never be answered. */
-  maxMessageChars: Int = 64_000_000
-)
+  maxMessageChars: Int = 64_000_000,
+  /** Maximum input events awaiting an application's durable-receipt handler. */
+  maxPendingInbound: Int = 256
+) {
+  require(maxPendingInbound > 0, "maxPendingInbound must be positive")
+}
 
 trait ReconnectStrategy {
   def nextDelay(attempt: Int): Option[FiniteDuration]

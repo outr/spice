@@ -27,6 +27,14 @@ class DurableSocket[Id: RW, Event: RW, Info: RW](
   val onError: Channel[ErrorMessage] = Channel[ErrorMessage]
   val onEphemeral: Channel[Json] = Channel[Json]
 
+  /** Await durable receipt before acknowledging the inbound sequence. The handler builds its task at arrival
+    * (so it can capture identity); tasks run in wire order. onEvent then observes successful processing.
+    * Without a handler, synchronous channel delivery remains unchanged. */
+  @volatile var inboundHandler: Option[(Long, Event) => Task[Unit]] = None
+  private val inboundLock = new Object
+  private var inboundTail: Task[Unit] = Task.unit
+  private var pendingInbound = 0
+
   private val _state: Var[ProtocolState] = Var(ProtocolState.Disconnected)
   val state: Val[ProtocolState] = _state
 
@@ -368,6 +376,44 @@ class DurableSocket[Id: RW, Event: RW, Info: RW](
       case Success(json) => dispatch(json)
     }
 
+  private def enqueueInbound(seq: Long, event: Event, handler: (Long, Event) => Task[Unit]): Unit = {
+    val queued = inboundLock.synchronized {
+      if (_state() == ProtocolState.Closed || seq <= tracker.highestProcessedSeq) None
+      else if (pendingInbound >= config.maxPendingInbound) {
+        onError @= ErrorMessage("input-overflow", "Too many input events await durable receipt")
+        close()
+        None
+      } else {
+        val done = Task.completable[Unit]
+        val previous = inboundTail
+        inboundTail = done
+        pendingInbound += 1
+        // Capture application identity now; effects remain inside the returned task.
+        val work = Try(handler(seq, event)).fold(Task.error, identity)
+        Some((previous, done, work))
+      }
+    }
+    queued.foreach { (previous, done, work) =>
+      previous.flatMap { _ =>
+        if (_state() == ProtocolState.Closed || seq <= tracker.highestProcessedSeq) Task.unit
+        else work.map { _ =>
+          tracker.acceptInbound(seq)
+          onEvent @= (seq, event)
+          maybeAck()
+        }
+      }.map(_ => { done.success(()); () }).handleError { error =>
+        Task {
+          done.failure(error)
+          if (_state() != ProtocolState.Closed) {
+            onError @= ErrorMessage("input-failed", "Input was not durably accepted")
+            scribe.warn(s"DurableSocket: input seq=$seq failed before acknowledgement", error)
+            close()
+          }
+        }
+      }.guarantee(Task { inboundLock.synchronized { pendingInbound -= 1 }; () }).startUnit()
+    }
+  }
+
   private def dispatch(json: Json): Unit = {
     json.get("type").map(_.asString) match {
       case Some("chunk") =>
@@ -375,10 +421,11 @@ class DurableSocket[Id: RW, Event: RW, Info: RW](
 
       case Some("event") =>
         val seq = json("seq").asLong
-        if (tracker.acceptInbound(seq)) {
-          val event = json("data").as[Event]
-          onEvent @= (seq, event)
-          maybeAck()
+        val event = json("data").as[Event]
+        inboundHandler match {
+          case Some(handler) => enqueueInbound(seq, event, handler)
+          case None if tracker.acceptInbound(seq) => onEvent @= (seq, event); maybeAck()
+          case _ => ()
         }
 
       case Some("ack") =>
