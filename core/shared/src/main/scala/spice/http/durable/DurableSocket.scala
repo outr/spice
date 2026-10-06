@@ -40,6 +40,10 @@ class DurableSocket[Id: RW, Event: RW, Info: RW](
   private var replaying: Boolean = false
   private var held: Vector[(Long, Event)] = Vector.empty
 
+  /** Re-authorize recorded payloads against the current session identity on every replay. Returning None omits
+    * the payload while retaining its sequence watermark. Live delivery remains the sender's responsibility. */
+  @volatile var replayTransform: (Id, Event) => Task[Option[Event]] = (_, event) => Task.pure(Some(event))
+
   @volatile private var pendingSwitch: rapid.task.Completable[Unit] = scala.compiletime.uninitialized
 
   // --- RPC (request/response) facet: ephemeral, correlated by id ---
@@ -261,22 +265,30 @@ class DurableSocket[Id: RW, Event: RW, Info: RW](
   def replayAfter(seq: Long): Task[Unit] = {
     delivery.synchronized { replaying = true }
     val channel = channelId
-    outboundLog.replay(channel, seq).map { events =>
-      delivery.synchronized {
-        events.foreach { case (eventSeq, event) => sendLogged(eventSeq, event) }
-        release(events.lastOption.map(_._1).getOrElse(seq))
-      }
+    outboundLog.replay(channel, seq).flatMap { events =>
+      replayEvents(channel, events).flatMap(_ => drainReplay(channel, events.lastOption.map(_._1).getOrElse(seq)))
     }.handleError { throwable =>
-      delivery.synchronized(release(seq))
+      // A failed authorization must never flush unfiltered held payloads.
+      delivery.synchronized { held = Vector.empty; replaying = false }
       Task.error(throwable)
     }
   }
 
-  /** End a replay that sent everything up to `sent`: the held events above it go out in order. */
-  private def release(sent: Long): Unit = {
-    held.filter(_._1 > sent).sortBy(_._1).foreach { case (eventSeq, event) => sendLogged(eventSeq, event) }
-    held = Vector.empty
-    replaying = false
+  private def replayEvents(channel: Id, events: Iterable[(Long, Event)]): Task[Unit] =
+    events.foldLeft(Task.unit) { case (previous, (seq, event)) =>
+      previous.flatMap(_ => Task.defer(replayTransform(channel, event)).map(_.foreach(sendLogged(seq, _))))
+    }
+
+  /** Keep live pushes held until every batch has passed the same authorization as logged replay. */
+  private def drainReplay(channel: Id, sent: Long): Task[Unit] = Task.defer {
+    val batch = delivery.synchronized {
+      val pending = held.filter(_._1 > sent).sortBy(_._1)
+      held = Vector.empty
+      if (pending.isEmpty) replaying = false
+      pending
+    }
+    if (batch.isEmpty) Task.unit
+    else replayEvents(channel, batch).flatMap(_ => drainReplay(channel, batch.last._1))
   }
 
   def highestProcessedSeq: Long = tracker.highestProcessedSeq
