@@ -1,6 +1,6 @@
 name := "spice"
 ThisBuild / organization := "com.outr"
-ThisBuild / version := "1.10.9-SNAPSHOT8"
+ThisBuild / version := "1.10.9-sigil-replay-SNAPSHOT"
 
 val scala3: String = "3.8.4"
 
@@ -14,7 +14,9 @@ ThisBuild / scalacOptions ++= Seq("-deprecation", "-Xmax-inlines", "64", "-langu
 ThisBuild / javacOptions ++= Seq("-source", "11", "-target", "11")
 
 ThisBuild / sonatypeCredentialHost := xerial.sbt.Sonatype.sonatypeCentralHost
-ThisBuild / publishTo := sonatypePublishToBundle.value
+ThisBuild / publishTo := Some("GitHub Packages outr/spice" at "https://maven.pkg.github.com/outr/spice")
+ThisBuild / credentials += Credentials("GitHub Package Registry", "maven.pkg.github.com",
+  sys.env.getOrElse("GITHUB_ACTOR", "outr"), sys.env.getOrElse("GITHUB_TOKEN", ""))
 ThisBuild / sonatypeProfileName := "com.outr"
 ThisBuild / licenses := Seq("MIT" -> url("https://github.com/outr/spice/blob/master/LICENSE"))
 ThisBuild / sonatypeProjectHosting := Some(xerial.sbt.Sonatype.GitHubHosting("outr", "spice", "matt@matthicks.com"))
