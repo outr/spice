@@ -1,7 +1,7 @@
 package spice.http.client
 
 import rapid.*
-import spice.http.{HttpRequest, HttpResponse}
+import spice.http.{HttpMethod, HttpRequest, HttpResponse}
 
 import scala.concurrent.duration.FiniteDuration
 import scala.util.{Failure, Try}
@@ -11,9 +11,22 @@ trait RetryManager {
             retry: Task[Try[HttpResponse]],
             failures: Int,
             throwable: Throwable): Task[Try[HttpResponse]]
+
+  /** Whether a failed request may be sent again at all: one whose method is idempotent, or one that failed before a
+    * connection was made. A POST or PATCH that timed out may already have been acted on, so it is not sent again.
+    * Override to resend such requests, for example ones carrying an idempotency key. */
+  def retryable(request: HttpRequest, throwable: Throwable): Boolean =
+    RetryManager.idempotent(request.method) || ClientPlatform.failedBeforeConnect(throwable)
 }
 
 object RetryManager {
+  /** The methods RFC 9110 §9.2.2 defines as idempotent. */
+  def idempotent(method: HttpMethod): Boolean = method match {
+    case HttpMethod.Get | HttpMethod.Head | HttpMethod.Options | HttpMethod.Trace | HttpMethod.Put |
+        HttpMethod.Delete => true
+    case _ => false
+  }
+
   def none: RetryManager = apply(warnRetries = true)(_ => None)
 
   def simple(retries: Int, delay: FiniteDuration, warnRetries: Boolean = true): RetryManager = apply(warnRetries) { failures =>

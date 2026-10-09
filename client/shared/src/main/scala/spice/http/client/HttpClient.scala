@@ -180,6 +180,7 @@ case class HttpClient(request: HttpRequest,
         }
 
         Task.pure(Success(response))
+      case Failure(t) if !retryManager.retryable(request, t) => Task.pure(Failure(t))
       case Failure(t) =>
         val failures = this.failures + 1
         val client = copy(failures = failures)
