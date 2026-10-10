@@ -24,7 +24,7 @@ object Dependencies {
 
     val acme4j: String = "5.1.0"
     
-    val moduload: String = "1.1.7"
+    val moduload: String = "1.1.8"
 
     val scalaJSDOM: String = "2.8.1"
 
