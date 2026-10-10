@@ -94,13 +94,14 @@ class NettyConnectionPoolManager(
             p.addLast("ssl", sslCtx.newHandler(ch.alloc(), key.host, key.port))
           }
 
-          val timeoutSeconds = client.timeout.toSeconds.toInt
-          p.addLast("readTimeout", new ReadTimeoutHandler(timeoutSeconds))
-          p.addLast("writeTimeout", new WriteTimeoutHandler(timeoutSeconds))
+          val timeoutMillis = client.timeout.toMillis
+          p.addLast("readTimeout", new ReadTimeoutHandler(timeoutMillis, TimeUnit.MILLISECONDS))
+          p.addLast("writeTimeout", new WriteTimeoutHandler(timeoutMillis, TimeUnit.MILLISECONDS))
           p.addLast("idleState", new IdleStateHandler(
-            keepAlive.toSeconds.toInt,
-            keepAlive.toSeconds.toInt,
-            keepAlive.toSeconds.toInt
+            keepAlive.toMillis,
+            keepAlive.toMillis,
+            keepAlive.toMillis,
+            TimeUnit.MILLISECONDS
           ))
           // Consume the IdleStateEvent the IdleStateHandler fires: when
           // a pooled channel has sat idle for `keepAlive`, close it

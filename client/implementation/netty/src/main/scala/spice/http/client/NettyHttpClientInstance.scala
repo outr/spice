@@ -161,10 +161,10 @@ class NettyHttpClientInstance(val client: HttpClient) extends HttpClientInstance
         }
 
         // Add timeout handlers
-        val timeoutSeconds = client.timeout.toSeconds.toInt
-        p.addLast("readTimeout", new ReadTimeoutHandler(timeoutSeconds))
-        p.addLast("writeTimeout", new WriteTimeoutHandler(timeoutSeconds))
-        p.addLast("idleState", new IdleStateHandler(0, 0, timeoutSeconds))
+        val timeoutMillis = client.timeout.toMillis
+        p.addLast("readTimeout", new ReadTimeoutHandler(timeoutMillis, TimeUnit.MILLISECONDS))
+        p.addLast("writeTimeout", new WriteTimeoutHandler(timeoutMillis, TimeUnit.MILLISECONDS))
+        p.addLast("idleState", new IdleStateHandler(0L, 0L, timeoutMillis, TimeUnit.MILLISECONDS))
 
         // HTTP codec
         p.addLast("httpCodec", new HttpClientCodec())
@@ -745,10 +745,12 @@ class NettyHttpClientInstance(val client: HttpClient) extends HttpClientInstance
           // Streaming may pause mid-response; use the streaming budget for the
           // channel's idle handlers so a live-but-quiet socket isn't cut.
           client.streamingTimeout.foreach { st =>
-            val secs = math.max(1, st.toSeconds.toInt)
+            val millis = math.max(1L, st.toMillis)
             try {
-              if (pipeline.get("readTimeout") != null) pipeline.replace("readTimeout", "readTimeout", new ReadTimeoutHandler(secs))
-              if (pipeline.get("idleState") != null) pipeline.replace("idleState", "idleState", new IdleStateHandler(0, 0, secs))
+              if (pipeline.get("readTimeout") != null)
+                pipeline.replace("readTimeout", "readTimeout", new ReadTimeoutHandler(millis, TimeUnit.MILLISECONDS))
+              if (pipeline.get("idleState") != null)
+                pipeline.replace("idleState", "idleState", new IdleStateHandler(0L, 0L, millis, TimeUnit.MILLISECONDS))
             } catch { case _: Throwable => }
           }
 
