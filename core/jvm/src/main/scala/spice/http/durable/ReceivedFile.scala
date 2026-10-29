@@ -17,9 +17,8 @@ import java.nio.file.{Files, Path}
 case class ReceivedFile[F](transferId: String,
                            value: F,
                            headers: Headers,
-                           path: Path) {
-  /** Lazy byte stream over the spooled file. Built from `Stream.fromIterator` (the shared
-    * companion) rather than rapid's JVM-only `fromPath`, so this stays cross-compile-safe. */
+                           path: Path) extends ReceivedFileHeaders {
+  /** Lazy byte stream over the spooled file. */
   def bytes: Stream[Byte] = Stream.fromIterator(Task {
     val input: InputStream = new BufferedInputStream(Files.newInputStream(path))
     Iterator.continually(input.read())
@@ -29,21 +28,4 @@ case class ReceivedFile[F](transferId: String,
 
   /** Size in bytes of the received file. */
   def size: Long = Files.size(path)
-
-  /** Declared content type, if the sender provided one. */
-  def contentType: Option[String] = headers.first(Headers.`Content-Type`)
-
-  /** Declared file name, if the sender provided one (Content-Disposition `filename`). */
-  def fileName: Option[String] = headers.first(Headers.Response.`Content-Disposition`)
-    .flatMap { v =>
-      val marker = "filename="
-      val i = v.indexOf(marker)
-      if (i < 0) None else Some(v.substring(i + marker.length).trim.stripPrefix("\"").stripSuffix("\""))
-    }
-}
-
-/** Progress pulse for an in-flight transfer (either direction). */
-case class FileProgress(transferId: String, bytesSoFar: Long, totalBytes: Long) {
-  /** Fraction complete in `[0, 1]`, or `0` when the total is unknown. */
-  def fraction: Double = if (totalBytes <= 0L) 0.0 else bytesSoFar.toDouble / totalBytes.toDouble
 }

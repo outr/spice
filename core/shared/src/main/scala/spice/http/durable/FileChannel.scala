@@ -9,9 +9,7 @@ import reactify.Channel
 import spice.http.Headers
 
 import java.nio.ByteBuffer
-import java.nio.channels.{FileChannel => NioFileChannel}
 import java.nio.charset.StandardCharsets.UTF_8
-import java.nio.file.{Files, Path, StandardOpenOption}
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.{AtomicInteger, AtomicLong}
@@ -25,17 +23,20 @@ import scala.jdk.CollectionConverters.*
  * are ephemeral relative to the durable event log; a reconnect resumes them from the receiver's
  * highest contiguous chunk rather than restarting.
  *
- * Both inbound and outbound bytes spool through a temp file so neither side holds a whole large
- * file in heap, and the sender can re-read for resume.
+
+ * Both inbound and outbound bytes spool through a [[FileSpool]] the sender can re-read for resume: a temp file on the
+ * JVM, so neither side holds a whole large file in heap, and memory in a browser, which has no file system. Sending a
+ * file where it is (a `Path` on the JVM, a `File` or `Blob` in a browser) is the platform's ([[FileChannelPlatform]]).
  */
-class FileChannel[F: RW](socket: DurableSocket[?, ?, ?], config: FileTransferConfig) {
-  /** Fires once a transfer has been fully received and sealed to a temp file. */
-  val onFile: Channel[ReceivedFile[F]] = Channel[ReceivedFile[F]]
+class FileChannel[F: RW](socket: DurableSocket[?, ?, ?], config: FileTransferConfig) extends FileChannelPlatform[F] {
+  /** Fires once a transfer has been fully received: sealed to a temp file on the JVM, held in memory in a browser. */
+  val onFile: Channel[ReceivedFile[F]] = socket.heard[ReceivedFile[F]](InboundHold.Files)
   /** Fires as bytes move in either direction. */
   val onProgress: Channel[FileProgress] = Channel[FileProgress]
 
   private val outbound = new ConcurrentHashMap[String, Outbound]()
   private val inbound = new ConcurrentHashMap[String, Inbound]()
+  private val ids = new java.util.Random()
 
   // Reassembly buffer for the binary channel (length-delimited frames). Guarded because, while
   // events arrive serially per connection, a reconnect can swap the delivering thread.
@@ -45,34 +46,24 @@ class FileChannel[F: RW](socket: DurableSocket[?, ?, ?], config: FileTransferCon
   // start a best-effort timeout sweeper
   sweepLoop().start()
 
-  // --- Public send API ---
-
-  def send(path: Path, value: F, headers: Headers): Task[String] = Task.defer {
-    val name = Option(path.getFileName).map(_.toString).getOrElse("file")
-    val ct = headers.first(Headers.`Content-Type`)
-      .orElse(Option(Files.probeContentType(path)))
-      .getOrElse("application/octet-stream")
-    startOutbound(name, ct, path, deleteWhenDone = false, value, headers)
-  }
-
-  def send(path: Path, value: F): Task[String] = send(path, value, Headers.empty)
-
-  def send(file: java.io.File, value: F, headers: Headers): Task[String] = send(file.toPath, value, headers)
-  def send(file: java.io.File, value: F): Task[String] = send(file.toPath, value, Headers.empty)
+  // --- Public send API (sending a file where it is: FileChannelPlatform) ---
 
   def send(name: String,
            contentType: String,
            bytes: rapid.Stream[Byte],
            value: F,
            headers: Headers): Task[String] = Task.defer {
-    val tmp = createTempFile()
-    val out = NioFileChannel.open(tmp, StandardOpenOption.WRITE)
+    val spool = FileSpools.create(config, 0L)
+    var position = 0L
     bytes.chunk(config.frameSize).foreach { chunk =>
-      out.write(ByteBuffer.wrap(chunk.toArray))
-      ()
+      val arr = chunk.toArray
+      spool.write(position, arr)
+      position += arr.length
     }.drain.flatMap { _ =>
-      out.close()
-      startOutbound(name, contentType, tmp, deleteWhenDone = true, value, headers)
+      sendSpool(name, contentType, spool, value, headers)
+    }.handleError { err =>
+      spool.release()
+      Task.error(err)
     }
   }
 
@@ -81,21 +72,20 @@ class FileChannel[F: RW](socket: DurableSocket[?, ?, ?], config: FileTransferCon
 
   // --- Outbound ---
 
-  private def startOutbound(name: String,
-                            contentType: String,
-                            source: Path,
-                            deleteWhenDone: Boolean,
-                            value: F,
-                            headers: Headers): Task[String] = Task.defer {
-    val transferId = UUID.randomUUID().toString
-    val size = Files.size(source)
+  protected def sendSpool(name: String,
+                          contentType: String,
+                          spool: FileSpool,
+                          value: F,
+                          headers: Headers): Task[String] = Task.defer {
+    // only tells this socket's transfers apart; UUID.randomUUID would need a SecureRandom, which a browser build lacks
+    val transferId = new UUID(ids.nextLong(), ids.nextLong()).toString
+    val size = spool.size
     val totalChunks = if (size == 0L) 0 else ((size + config.frameSize - 1) / config.frameSize).toInt
-    val fc = NioFileChannel.open(source, StandardOpenOption.READ)
     val envelope = headers
       .setHeader("Content-Type", contentType)
       .setHeader("Content-Length", size.toString)
       .setHeader("Content-Disposition", s"""attachment; filename="$name"""")
-    val t = new Outbound(transferId, source, fc, size, totalChunks, deleteWhenDone)
+    val t = new Outbound(transferId, spool, size, totalChunks)
     outbound.put(transferId, t)
     sendControl("file-start", FileStartMessage(
       transferId = transferId,
@@ -129,7 +119,7 @@ class FileChannel[F: RW](socket: DurableSocket[?, ?, ?], config: FileTransferCon
     } else {
       val idx = t.cursor.getAndIncrement()
       Task {
-        val payload = readChunk(t.fc, idx, t.size)
+        val payload = readChunk(t.spool, idx, t.size)
         socket.sendBinaryRaw(frameFor(t.transferId, idx, payload))
         t.touch()
         onProgress @= FileProgress(t.transferId, math.min((idx + 1).toLong * config.frameSize, t.size), t.size)
@@ -156,8 +146,7 @@ class FileChannel[F: RW](socket: DurableSocket[?, ?, ?], config: FileTransferCon
 
   private def closeOutbound(t: Outbound): Unit = {
     outbound.remove(t.transferId)
-    try t.fc.close() catch { case _: Throwable => () }
-    if (t.deleteWhenDone) try Files.deleteIfExists(t.source) catch { case _: Throwable => () }
+    t.spool.release()
   }
 
   // --- Inbound ---
@@ -169,9 +158,8 @@ class FileChannel[F: RW](socket: DurableSocket[?, ?, ?], config: FileTransferCon
       case None =>
         val value = msg.value.as[F]
         val headers = Headers(msg.headers)
-        val tmp = createTempFile()
-        val fc = NioFileChannel.open(tmp, StandardOpenOption.WRITE)
-        val in = new Inbound(msg.transferId, value, headers, tmp, fc, msg.size, msg.frameSize, msg.totalChunks)
+        val spool = FileSpools.create(config, msg.size)
+        val in = new Inbound(msg.transferId, value, headers, spool, msg.size, msg.frameSize, msg.totalChunks)
         inbound.put(msg.transferId, in)
     }
   }
@@ -190,8 +178,7 @@ class FileChannel[F: RW](socket: DurableSocket[?, ?, ?], config: FileTransferCon
 
   private def abortInbound(in: Inbound, reason: String): Unit = {
     if (inbound.remove(in.transferId) != null) {
-      try in.fc.close() catch { case _: Throwable => () }
-      try Files.deleteIfExists(in.path) catch { case _: Throwable => () }
+      in.spool.release()
       sendControl("file-abort", FileAbortMessage(in.transferId, reason).json)
     }
   }
@@ -235,7 +222,7 @@ class FileChannel[F: RW](socket: DurableSocket[?, ?, ?], config: FileTransferCon
       abortInbound(in, s"chunk $idx of ${payload.length} bytes falls outside the declared ${in.size}-byte file")
     } else if (in != null) {
       val isNew = !in.received.get(idx)
-      in.fc.write(ByteBuffer.wrap(payload), idx.toLong * in.frameSize)
+      in.spool.write(idx.toLong * in.frameSize, payload)
       if (isNew) {
         in.received.set(idx)
         in.bytesReceived.addAndGet(payload.length.toLong)
@@ -267,9 +254,9 @@ class FileChannel[F: RW](socket: DurableSocket[?, ?, ?], config: FileTransferCon
     val in = inbound.get(transferId)
     if (in != null && in.highestContiguous == in.totalChunks - 1 && in.bytesReceived.get() == in.size) {
       if (inbound.remove(transferId) != null) {
-        try { in.fc.force(true); in.fc.close() } catch { case _: Throwable => () }
+        val file = in.spool.received(transferId, in.value, in.headers)
         sendControl("file-ack", FileAckMessage(transferId, in.totalChunks - 1).json)
-        onFile @= ReceivedFile(transferId, in.value, in.headers, in.path)
+        onFile @= file
       }
     }
   }
@@ -306,8 +293,7 @@ class FileChannel[F: RW](socket: DurableSocket[?, ?, ?], config: FileTransferCon
       }
     }
     Option(inbound.remove(msg.transferId)).foreach { in =>
-      try in.fc.close() catch { case _: Throwable => () }
-      try Files.deleteIfExists(in.path) catch { case _: Throwable => () }
+      in.spool.release()
     }
   }
 
@@ -334,17 +320,9 @@ class FileChannel[F: RW](socket: DurableSocket[?, ?, ?], config: FileTransferCon
     socket.sendRaw(JsonFormatter.Default(withType))
   }
 
-  private def readChunk(fc: NioFileChannel, idx: Int, size: Long): Array[Byte] = {
+  private def readChunk(spool: FileSpool, idx: Int, size: Long): Array[Byte] = {
     val pos = idx.toLong * config.frameSize
-    val len = math.min(config.frameSize.toLong, size - pos).toInt
-    val arr = new Array[Byte](len)
-    val bb = ByteBuffer.wrap(arr)
-    var total = 0
-    while (total < len) {
-      val r = fc.read(bb, pos + total)
-      if (r < 0) total = len else total += r
-    }
-    arr
+    spool.read(pos, math.min(config.frameSize.toLong, size - pos).toInt)
   }
 
   private def frameFor(transferId: String, idx: Int, payload: Array[Byte]): ByteBuffer = {
@@ -360,13 +338,6 @@ class FileChannel[F: RW](socket: DurableSocket[?, ?, ?], config: FileTransferCon
     bb
   }
 
-  private def createTempFile(): Path = config.spoolDirectory match {
-    case Some(dir) =>
-      Files.createDirectories(dir)
-      Files.createTempFile(dir, "xfer-", ".part")
-    case None => Files.createTempFile("xfer-", ".part")
-  }
-
   private def sweepLoop(): Task[Unit] = Task.sleep(config.transferTimeout).flatMap { _ =>
     if (socket.state() == ProtocolState.Closed) Task.unit
     else {
@@ -374,8 +345,7 @@ class FileChannel[F: RW](socket: DurableSocket[?, ?, ?], config: FileTransferCon
       outbound.values().asScala.filter(_.lastActivity < cutoff).foreach(abortOutbound(_, "transfer timed out"))
       inbound.values().asScala.filter(_.lastActivity < cutoff).foreach { in =>
         inbound.remove(in.transferId)
-        try in.fc.close() catch { case _: Throwable => () }
-        try Files.deleteIfExists(in.path) catch { case _: Throwable => () }
+        in.spool.release()
       }
       sweepLoop()
     }
@@ -384,11 +354,9 @@ class FileChannel[F: RW](socket: DurableSocket[?, ?, ?], config: FileTransferCon
   // --- Per-transfer state ---
 
   private final class Outbound(val transferId: String,
-                               val source: Path,
-                               val fc: NioFileChannel,
+                               val spool: FileSpool,
                                val size: Long,
-                               val totalChunks: Int,
-                               val deleteWhenDone: Boolean) {
+                               val totalChunks: Int) {
     val cursor: AtomicInteger = new AtomicInteger(0)
     val ackedThrough: AtomicInteger = new AtomicInteger(-1)
     val completion: Completable[String] = Task.completable[String]
@@ -418,8 +386,7 @@ class FileChannel[F: RW](socket: DurableSocket[?, ?, ?], config: FileTransferCon
   private final class Inbound(val transferId: String,
                               val value: F,
                               val headers: Headers,
-                              val path: Path,
-                              val fc: NioFileChannel,
+                              val spool: FileSpool,
                               val size: Long,
                               val frameSize: Int,
                               val totalChunks: Int) {

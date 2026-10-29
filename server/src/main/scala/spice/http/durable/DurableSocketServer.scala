@@ -130,6 +130,8 @@ class DurableSocketServer[Id: RW, Event: RW, Info: RW](
           val info = json("info").as[Info]
           resolveChannel(clientId, info).map { channelId =>
             val ds = createSocket(channelId)
+            // the client sends once it hears it is connected; what it sends is kept until onSession's handlers attach
+            ds.holdUntilHeard()
             ds.bind(listener)
             ds.peerChunks(json)
             val durableSession = DurableSession(clientId, info, ds, reactify.Var(listener))
@@ -168,6 +170,7 @@ class DurableSocketServer[Id: RW, Event: RW, Info: RW](
           } else {
             resolveChannel(clientId, info).map { channelId =>
               val ds = createSocket(channelId)
+              ds.holdUntilHeard()
               ds.bind(listener)
               ds.peerChunks(json)
               val durableSession = DurableSession(clientId, info, ds, reactify.Var(listener))

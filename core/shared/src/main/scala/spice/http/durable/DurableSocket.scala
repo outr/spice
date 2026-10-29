@@ -5,6 +5,7 @@ import fabric.io.{JsonFormatter, JsonParser}
 import fabric.rw.*
 import rapid.Task
 import reactify.{Channel, Val, Var}
+import reactify.reaction.{Reaction, Reactions}
 import spice.http.{ByteBufferData, WebSocket}
 
 import java.nio.ByteBuffer
@@ -22,15 +23,34 @@ class DurableSocket[Id: RW, Event: RW, Info: RW](
   private val _channelId: Var[Id] = Var(initialChannelId)
   def channelId: Id = _channelId()
 
+  // What the peer sends while this side has not yet attached a handler for it: see [[holdUntilHeard]].
+  private val hold = new InboundHold(config.maxPendingInbound)
+
+  /** A channel whose first reaction releases what [[hold]] kept of `kind`. */
+  private[durable] def heard[T](kind: String): Channel[T] = new Channel[T] {
+    override lazy val reactions: Reactions[T] = new Reactions[T] {
+      override def +=(reaction: Reaction[T]): Reaction[T] = {
+        val added = super.+=(reaction)
+        hold.release(kind)
+        added
+      }
+    }
+  }
+
   // --- Reactive channels ---
-  val onEvent: Channel[(Long, Event)] = Channel[(Long, Event)]
+  val onEvent: Channel[(Long, Event)] = heard[(Long, Event)](InboundHold.Events)
   val onError: Channel[ErrorMessage] = Channel[ErrorMessage]
-  val onEphemeral: Channel[Json] = Channel[Json]
+  val onEphemeral: Channel[Json] = heard[Json](InboundHold.Ephemeral)
 
   /** Await durable receipt before acknowledging the inbound sequence. The handler builds its task at arrival
     * (so it can capture identity); tasks run in wire order. onEvent then observes successful processing.
     * Without a handler, synchronous channel delivery remains unchanged. */
-  @volatile var inboundHandler: Option[(Long, Event) => Task[Unit]] = None
+  @volatile private var _inboundHandler: Option[(Long, Event) => Task[Unit]] = None
+  def inboundHandler: Option[(Long, Event) => Task[Unit]] = _inboundHandler
+  def inboundHandler_=(handler: Option[(Long, Event) => Task[Unit]]): Unit = {
+    _inboundHandler = handler
+    if (handler.nonEmpty) hold.release(InboundHold.Events)
+  }
   private val inboundLock = new Object
   private var inboundTail: Task[Unit] = Task.unit
   private var pendingInbound = 0
@@ -73,6 +93,20 @@ class DurableSocket[Id: RW, Event: RW, Info: RW](
   def files[F: RW]: FileChannel[F] = synchronized {
     if (_files == null) _files = new FileChannel[F](this, fileTransfer)
     _files.asInstanceOf[FileChannel[F]]
+  }
+
+  /** Keep what the peer sends of each kind — events, ephemeral messages, file transfers — until a handler for it is
+    * attached here (to [[onEvent]] or [[inboundHandler]], to [[onEphemeral]], or to the [[files]] channel's
+    * `onFile`), and deliver it then, in order. A server session calls it before it is active: its client may send
+    * the moment it hears it is connected, and an application attaching its handlers after a lookup (who the session
+    * is) would otherwise miss what came first. A kind with nothing attached `within` is delivered as before. */
+  def holdUntilHeard(within: FiniteDuration = 30.seconds): Unit = {
+    hold.start(InboundHold.All)
+    Task.sleep(within).map { _ =>
+      hold.releaseAll().filter(_._2 > 0).foreach { case (kind, count) =>
+        scribe.warn(s"DurableSocket: nothing attached for $kind within $within; delivered the $count held")
+      }
+    }.start()
   }
 
   // --- Sending: Events (durable, EventLog seq) ---
@@ -170,6 +204,11 @@ class DurableSocket[Id: RW, Event: RW, Info: RW](
     rawWs @= Some(ws)
     ws.receive.text.attach(handleRawMessage)
     ws.receive.binary.attach {
+      case ByteBufferData(bb) if hold.holds(InboundHold.Files) =>
+        // kept past this event, so copied: the transport may reuse its buffer
+        val copy = ByteBuffer.allocate(bb.remaining())
+        copy.put(bb).flip()
+        hold(InboundHold.Files)(if (_files != null) _files.acceptChunk(copy))
       case ByteBufferData(bb) => if (_files != null) _files.acceptChunk(bb)
       case _                  =>
     }
@@ -193,6 +232,7 @@ class DurableSocket[Id: RW, Event: RW, Info: RW](
 
   def close(): Unit = {
     _state @= ProtocolState.Closed
+    hold.clear()
     val ws = rawWs()
     unbind()
     ws.foreach(_.disconnect())
@@ -422,10 +462,12 @@ class DurableSocket[Id: RW, Event: RW, Info: RW](
       case Some("event") =>
         val seq = json("seq").asLong
         val event = json("data").as[Event]
-        inboundHandler match {
-          case Some(handler) => enqueueInbound(seq, event, handler)
-          case None if tracker.acceptInbound(seq) => onEvent @= (seq, event); maybeAck()
-          case _ => ()
+        hold(InboundHold.Events) {
+          inboundHandler match {
+            case Some(handler) => enqueueInbound(seq, event, handler)
+            case None if tracker.acceptInbound(seq) => onEvent @= (seq, event); maybeAck()
+            case _ => ()
+          }
         }
 
       case Some("ack") =>
@@ -466,14 +508,14 @@ class DurableSocket[Id: RW, Event: RW, Info: RW](
         val c = pendingRequests.remove(json("id").asLong)
         if (c != null) c.failure(new RpcException(json("code").asString, json("message").asString))
 
-      case Some("file-start")  => if (_files != null) _files.acceptStart(json)
-      case Some("file-end")    => if (_files != null) _files.acceptEnd(json)
-      case Some("file-ack")    => if (_files != null) _files.acceptAck(json)
-      case Some("file-resume") => if (_files != null) _files.acceptResume(json)
-      case Some("file-abort")  => if (_files != null) _files.acceptAbort(json)
+      case Some("file-start")  => hold(InboundHold.Files)(if (_files != null) _files.acceptStart(json))
+      case Some("file-end")    => hold(InboundHold.Files)(if (_files != null) _files.acceptEnd(json))
+      case Some("file-ack")    => hold(InboundHold.Files)(if (_files != null) _files.acceptAck(json))
+      case Some("file-resume") => hold(InboundHold.Files)(if (_files != null) _files.acceptResume(json))
+      case Some("file-abort")  => hold(InboundHold.Files)(if (_files != null) _files.acceptAbort(json))
 
       case _ =>
-        onEphemeral @= json
+        hold(InboundHold.Ephemeral)(onEphemeral @= json)
     }
   }
 

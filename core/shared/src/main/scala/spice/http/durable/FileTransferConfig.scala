@@ -10,9 +10,11 @@ import scala.concurrent.duration.*
  * @param windowChunks     credit window — how many unacked chunks the sender may have in flight before it pauses
  * @param ackEvery         the receiver emits a `file-ack` at least once every this many received chunks
  * @param transferTimeout  an in-flight transfer with no activity for this long is aborted and its temp file reaped
- * @param spoolDirectory   where inbound chunks and spooled stream sources are written; system temp dir when None
+ * @param spoolDirectory   where inbound chunks and spooled stream sources are written on the JVM; system temp dir when
+ *                         None. A browser has no file system and holds a transfer in memory
  * @param maxInboundBytes  the largest file a peer may send; a transfer declaring more is refused at its start and one whose
- *                         chunks run past its declared size is aborted. No limit when None
+ *                         chunks run past its declared size is aborted. No limit when None (in a browser, set it: a file is
+ *                         held in memory as it arrives)
  */
 case class FileTransferConfig(
   frameSize: Int = 64 * 1024,
