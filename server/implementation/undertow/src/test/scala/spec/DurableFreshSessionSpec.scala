@@ -51,7 +51,7 @@ class DurableFreshSessionSpec extends AnyWordSpec with Matchers {
 
   "a resume that gets a fresh session" should {
     "start the server" in {
-      Profig.initConfiguration()
+      Profig.loadConfiguration()
       server.config.clearListeners().addListeners(HttpServerListener(port = None))
       server.handler(List(path"/ws" / durableServer))
       server.start().sync()

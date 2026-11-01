@@ -59,7 +59,7 @@ class DurableHandshakeStallSpec extends AnyWordSpec with Matchers {
 
   "a handshake that is never answered" should {
     "start the server" in {
-      Profig.initConfiguration()
+      Profig.loadConfiguration()
       server.config.clearListeners().addListeners(HttpServerListener(port = None))
       server.handler(List(path"/ws" / durableServer))
       server.start().sync()

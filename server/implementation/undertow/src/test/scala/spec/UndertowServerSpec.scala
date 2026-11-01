@@ -25,7 +25,7 @@ class UndertowServerSpec extends AnyWordSpec with Matchers {
     lazy val client = HttpClient.url(url"http://localhost".withPort(serverPort))
 
     "configure the server" in {
-      Profig.initConfiguration()
+      Profig.loadConfiguration()
       server.config.clearListeners().addListeners(HttpServerListener(port = None))
       server.handler.matcher(paths.exact("/test.txt"))
         .content(Content.string("test!", ContentType.`text/plain`))

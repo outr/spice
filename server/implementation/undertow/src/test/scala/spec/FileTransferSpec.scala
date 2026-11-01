@@ -69,7 +69,7 @@ class FileTransferSpec extends AnyWordSpec with Matchers {
 
   "DurableSocket file transfer" should {
     "start the server" in {
-      Profig.initConfiguration()
+      Profig.loadConfiguration()
       server.config.clearListeners().addListeners(HttpServerListener(port = None))
       server.handler(List(path"/wsf" / durableServer))
       server.start().sync()

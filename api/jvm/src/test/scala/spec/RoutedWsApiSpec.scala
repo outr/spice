@@ -56,7 +56,7 @@ class RoutedWsApiSpec extends AnyWordSpec with Matchers {
     }
 
     "configure and start server with routed WS" in {
-      Profig.initConfiguration()
+      Profig.loadConfiguration()
       server.config.clearListeners().addListeners(HttpServerListener(port = None))
       val events = WsServer.deriveRouted[RoutedEvents](server, path"/ws/events")
       server.start().sync()

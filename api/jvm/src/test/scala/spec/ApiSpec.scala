@@ -57,7 +57,7 @@ class ApiSpec extends AnyWordSpec with Matchers {
     def serverPort: Int = server.config.listeners().head.port.getOrElse(0)
 
     "configure and start server" in {
-      Profig.initConfiguration()
+      Profig.loadConfiguration()
       server.config.clearListeners().addListeners(HttpServerListener(port = None))
       ApiServer.mount[UserApi](new UserApiImpl, server, path"/api")
       server.start().sync()

@@ -168,7 +168,7 @@ class DartFileTransferSpec extends AnyWordSpec with Matchers {
         if (wired.add(session.protocol)) wire(session)
       }
 
-      Profig.initConfiguration()
+      Profig.loadConfiguration()
       server.config.clearListeners().addListeners(HttpServerListener(port = None))
       server.handler(List(path"/xfer" / durableServer))
       server.start().sync()

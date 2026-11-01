@@ -33,7 +33,7 @@ class RangeRequestSpec extends AnyWordSpec with Matchers {
     lazy val client = HttpClient.url(url"http://localhost".withPort(serverPort))
 
     "start the server" in {
-      Profig.initConfiguration()
+      Profig.loadConfiguration()
       server.config.clearListeners().addListeners(HttpServerListener(port = None))
       server.handler.matcher(paths.exact("/file.txt")).handle { exchange =>
         SenderHandler(Content.file(file.toFile), replace = true).handle(exchange)(using scribe.mdc.MDC.global)

@@ -19,7 +19,7 @@ object Benchmark {
   private val processed = new AtomicLong(0L)
 
   def main(args: Array[String]): Unit = {
-    Profig.initConfiguration()
+    Profig.loadConfiguration()
 
     val task = for {
       _ <- server.start()

@@ -69,7 +69,7 @@ class DurableDialStallSpec extends AnyWordSpec with Matchers {
 
   "a socket that never opens" should {
     "start the server" in {
-      Profig.initConfiguration()
+      Profig.loadConfiguration()
       server.config.clearListeners().addListeners(HttpServerListener(port = None))
       server.handler(List(path"/ws" / durableServer))
       server.start().sync()

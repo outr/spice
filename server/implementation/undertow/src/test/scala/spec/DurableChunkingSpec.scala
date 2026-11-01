@@ -40,7 +40,7 @@ class DurableChunkingSpec extends AnyWordSpec with Matchers {
 
   "A durable socket" should {
     "start the server" in {
-      Profig.initConfiguration()
+      Profig.loadConfiguration()
       server.config.clearListeners().addListeners(HttpServerListener(port = None))
       server.start().sync()
       server.isRunning should be(true)
