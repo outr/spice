@@ -722,12 +722,17 @@ case class DurableSocketDartGenerator(config: DurableSocketDartConfig) {
     val importsStr = if (imports.nonEmpty) imports.mkString("\n") + "\n" else ""
     if (hasFields) {
       val partFile = fileName.replace(".dart", ".g.dart")
+      // copy_with_extension emits both a callable proxy and one setter per field.
+      // A field named `call` collides with the proxy's call method. Keep the
+      // named-argument copyWith API and omit only the individual field setters.
+      val annotation = if (body.linesIterator.exists(_.trim.matches("final .+ call;")))
+        "@CopyWith(skipFields: true)" else "@CopyWith()"
       s"""$generatedComment
          |import 'package:copy_with_extension/copy_with_extension.dart';
          |
          |${importsStr}part '$partFile';
          |
-         |@CopyWith()
+         |$annotation
          |$body
          |""".stripMargin
     } else {
