@@ -31,6 +31,23 @@ import scala.jdk.CollectionConverters.*
 class FileChannel[F: RW](socket: DurableSocket[?, ?, ?], config: FileTransferConfig) extends FileChannelPlatform[F] {
   /** Fires once a transfer has been fully received: sealed to a temp file on the JVM, held in memory in a browser. */
   val onFile: Channel[ReceivedFile[F]] = socket.heard[ReceivedFile[F]](InboundHold.Files)
+  /** Outbound metadata and transfer id, after file-start is sent and before any binary frame. */
+  val onSendStarted: Channel[FileStartMessage] = Channel[FileStartMessage]
+
+  /** Abort this socket's inbound or outbound transfer, releasing its spool and waking a parked sender.
+    * Returns false if it has already finished or the id is unknown. */
+  def abort(transferId: String, reason: String = "Cancelled by user"): Boolean = {
+    val sending = outbound.get(transferId)
+    if (sending != null && !sending.done) {
+      abortOutbound(sending, reason)
+      true
+    } else {
+      val receiving = inbound.get(transferId)
+      if (receiving == null) false
+      else { abortInbound(receiving, reason); true }
+    }
+  }
+
   /** Fires as bytes move in either direction. */
   val onProgress: Channel[FileProgress] = Channel[FileProgress]
 
@@ -87,7 +104,7 @@ class FileChannel[F: RW](socket: DurableSocket[?, ?, ?], config: FileTransferCon
       .setHeader("Content-Disposition", s"""attachment; filename="$name"""")
     val t = new Outbound(transferId, spool, size, totalChunks)
     outbound.put(transferId, t)
-    sendControl("file-start", FileStartMessage(
+    val started = FileStartMessage(
       transferId = transferId,
       name = name,
       contentType = contentType,
@@ -96,7 +113,9 @@ class FileChannel[F: RW](socket: DurableSocket[?, ?, ?], config: FileTransferCon
       totalChunks = totalChunks,
       value = value.json,
       headers = envelope.map
-    ).json)
+    )
+    sendControl("file-start", started.json)
+    onSendStarted @= started
     pump(t).handleError { err =>
       abortOutbound(t, Option(err.getMessage).getOrElse("send failed"))
       Task.unit
@@ -137,10 +156,12 @@ class FileChannel[F: RW](socket: DurableSocket[?, ?, ?], config: FileTransferCon
 
   private def abortOutbound(t: Outbound, reason: String): Unit = {
     if (!t.done) {
+      t.aborted = true
       t.done = true
       sendControl("file-abort", FileAbortMessage(t.transferId, reason).json)
       closeOutbound(t)
       t.completion.failure(new RuntimeException(s"File transfer ${t.transferId} aborted: $reason"))
+      t.signal()
     }
   }
 
@@ -287,9 +308,11 @@ class FileChannel[F: RW](socket: DurableSocket[?, ?, ?], config: FileTransferCon
     val msg = json.as[FileAbortMessage]
     Option(outbound.get(msg.transferId)).foreach { t =>
       if (!t.done) {
+        t.aborted = true
         t.done = true
         closeOutbound(t)
         t.completion.failure(new RuntimeException(s"Peer aborted transfer ${msg.transferId}: ${msg.reason}"))
+        t.signal()
       }
     }
     Option(inbound.remove(msg.transferId)).foreach { in =>
