@@ -2,7 +2,7 @@ name := "spice"
 ThisBuild / organization := "com.outr"
 ThisBuild / version := "1.10.9-SNAPSHOT6"
 
-val scala3: String = "3.8.4"
+val scala3: String = "3.10.0"
 
 ThisBuild / scalaVersion := scala3
 // -Ylegacy-lazy-vals: Scala 3 holds a lazy val in a java.lang.invoke.VarHandle, whose compareAndSet is
