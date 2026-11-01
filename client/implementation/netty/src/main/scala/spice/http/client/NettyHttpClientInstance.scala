@@ -6,7 +6,7 @@ import io.netty.channel.nio.NioIoHandler
 import io.netty.channel.pool.SimpleChannelPool
 import io.netty.handler.proxy.{HttpProxyHandler, Socks5ProxyHandler}
 import io.netty.handler.codec.http.{DefaultFullHttpRequest, HttpClientCodec, HttpContent, HttpContentDecompressor, HttpHeaderNames, HttpHeaderValues, HttpHeaders, HttpObject, HttpVersion, LastHttpContent, HttpMethod as NettyHttpMethod, HttpRequest as NettyHttpRequest, HttpResponse as NettyHttpResponse}
-import io.netty.util.concurrent.{Future as NettyFuture}
+import io.netty.util.concurrent.{DefaultThreadFactory, Future as NettyFuture}
 import rapid.Task
 import spice.http.{HttpRequest, HttpResponse, *}
 import spice.http.content.*
@@ -31,7 +31,9 @@ import scala.jdk.CollectionConverters.*
 import scala.util.{Failure, Success, Try}
 
 class NettyHttpClientInstance(val client: HttpClient) extends HttpClientInstance {
-  private val eventLoopGroup = new MultiThreadIoEventLoopGroup(NioIoHandler.newFactory())
+  // Daemon threads: the group lives until the instance is disposed, and non-daemon threads would hold the JVM open.
+  private val eventLoopGroup =
+    new MultiThreadIoEventLoopGroup(0, new DefaultThreadFactory("spice-http", true), NioIoHandler.newFactory())
 
   // Initialize connection pool manager
   private val poolManager = new NettyConnectionPoolManager(
