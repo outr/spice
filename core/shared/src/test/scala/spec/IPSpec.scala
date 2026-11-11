@@ -10,6 +10,24 @@ import fabric.rw.*
 
 class IPSpec extends AnyWordSpec with Matchers {
   "IP" should {
+    "round-trip unsigned IPv4 octets" in {
+      val bytes = Array(192, 168, 254, 255).map(_.toByte)
+      val ip = IP.fromBytes(bytes).get
+      ip.addressString shouldBe "192.168.254.255"
+      ip.bytes.toList shouldBe bytes.toList
+    }
+    "preserve every IPv6 octet, including a DNS64 address and a scope" in {
+      List("2606:4700:3031:0:0:0:ac43:d73e", "64:ff9b:0:0:0:0:c000:201", "fe80:0:0:0:0:0:0:1%7").foreach { text =>
+        val ip = IP.fromString(text).get
+        val scope = ip match { case v: IP.v6 => v.scope; case _ => None }
+        ip.bytes.length shouldBe 16
+        IP.fromBytes(ip.bytes, scope).map(_.addressString) shouldBe Some(text)
+      }
+    }
+    "reject incomplete byte addresses" in {
+      List(0, 3, 5, 8, 15, 17).foreach(n => IP.fromBytes(new Array[Byte](n)) shouldBe None)
+    }
+
     "validate 127.0.0.1 via interpolation" in {
       val ip = ip"127.0.0.1"
       ip should be(IP.v4())

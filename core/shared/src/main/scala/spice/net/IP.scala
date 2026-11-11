@@ -10,6 +10,12 @@ sealed trait IP {
   val address: Vector[Int]
   val addressString: String
 
+  /** Network-order octets. IPv6's address contains eight 16-bit groups, not bytes. */
+  def bytes: Array[Byte] = this match {
+    case _: IP.v4 => address.map(_.toByte).toArray
+    case _: IP.v6 => address.flatMap(group => Vector((group >>> 8).toByte, group.toByte)).toArray
+  }
+
   override def equals(obj: Any): Boolean = obj match {
     case that: IP if this.addressString == that.addressString => true
     case _ => false
@@ -19,6 +25,18 @@ sealed trait IP {
 }
 
 object IP {
+  /** Decode a complete address without truncating IPv6 or sign-extending IPv4 octets. */
+  def fromBytes(bytes: Array[Byte], scope: Option[String] = None): Option[IP] = {
+    val octets = bytes.map(_ & 0xff)
+    octets.length match {
+      case 4 => Some(v4(octets(0), octets(1), octets(2), octets(3)))
+      case 16 =>
+        val groups = octets.grouped(2).map(pair => (pair(0) << 8) | pair(1)).toVector
+        Some(v6(groups(0), groups(1), groups(2), groups(3), groups(4), groups(5), groups(6), groups(7), scope))
+      case _ => None
+    }
+  }
+
   given rw: RW[IP] = RW.string[IP](
     asString = (ip: IP) => ip.addressString,
     fromString = (s: String) => fromString(s).getOrElse(throw UserException(s"Invalid IP address: $s"))

@@ -35,7 +35,12 @@ class OkHttpWebSocket(url: URL, instance: OkHttpClient) extends WebSocketListene
     case s => Task.pure(s)
   }
 
-  override def disconnect(): Unit = ws.close(1000, "disconnect requested")
+  override def disconnect(): Unit = {
+    if (status() == ConnectionStatus.Connecting) {
+      ws.cancel()
+      _status @= ConnectionStatus.Closed
+    } else ws.close(1000, "disconnect requested")
+  }
 
   override def onClosed(webSocket: okhttp3.WebSocket,
                         code: Int,
@@ -57,7 +62,6 @@ class OkHttpWebSocket(url: URL, instance: OkHttpClient) extends WebSocketListene
                          t: Throwable,
                          response: Response): Unit = {
     error @= t
-    Try(ws.close(1, t.getMessage))
     _status @= ConnectionStatus.Closed
   }
 
@@ -68,5 +72,8 @@ class OkHttpWebSocket(url: URL, instance: OkHttpClient) extends WebSocketListene
                          bytes: ByteString): Unit = receive.binary @= ByteBufferData(bytes.asByteBuffer())
 
   override def onOpen(webSocket: okhttp3.WebSocket,
-                      response: Response): Unit = _status @= ConnectionStatus.Open
+                      response: Response): Unit = {
+    if (status() == ConnectionStatus.Closed) webSocket.cancel()
+    else _status @= ConnectionStatus.Open
+  }
 }

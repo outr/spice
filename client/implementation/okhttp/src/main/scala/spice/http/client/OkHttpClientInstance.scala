@@ -12,10 +12,9 @@ import spice.streamer.*
 import spice.streamer.given
 
 import java.io.{File, IOException}
-import java.net.{InetAddress, InetSocketAddress, Socket}
+import java.net.InetSocketAddress
 import java.security.SecureRandom
 import java.security.cert.X509Certificate
-import java.util
 import java.util.concurrent.TimeUnit
 import javax.net.ssl.*
 import scala.jdk.CollectionConverters.*
@@ -53,14 +52,7 @@ class OkHttpClientInstance(client: HttpClient) extends HttpClientInstance {
     b.writeTimeout(client.timeout.toMillis, TimeUnit.MILLISECONDS)
     b.followRedirects(client.followRedirects)
     b.followSslRedirects(client.followRedirects)
-    b.dns((hostname: String) => {
-      val list = new util.ArrayList[InetAddress]()
-      client.dns.lookup(hostname).sync() match {
-        case Some(ip) => list.add(InetAddress.getByAddress(ip.address.map(_.toByte).toArray))
-        case None => // None
-      }
-      list
-    })
+    b.dns(OkHttpDNS(client.dns))
     client.pingInterval.foreach(d => b.pingInterval(d.toMillis, TimeUnit.MILLISECONDS))
     client.proxy.foreach {
       case Proxy(t, h, p, c) =>
