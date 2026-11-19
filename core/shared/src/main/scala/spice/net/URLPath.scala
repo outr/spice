@@ -114,11 +114,31 @@ object URLPath {
 
   val empty: URLPath = URLPath(Nil)
 
+  /**
+   * Splits a path into its runs of text and each "/" on its own, as `path.split("((?<=/)|(?=/))")` did (a lone
+   * empty string for an empty path), by a plain scan: a look-behind needs ECMAScript 2018 in Scala.js, which an ES 5.1
+   * link (Chromium 38, webOS 3) does not have.
+   */
+  private[net] def segments(path: String): List[String] = if (path.isEmpty) {
+    List("")
+  } else {
+    val b = List.newBuilder[String]
+    var start = 0
+    var i = 0
+    while (i < path.length) {
+      if (path.charAt(i) == '/') {
+        if (i > start) b += path.substring(start, i)
+        b += "/"
+        start = i + 1
+      }
+      i += 1
+    }
+    if (start < path.length) b += path.substring(start)
+    b.result()
+  }
+
   def parse(path: String, absolutize: Boolean = true): URLPath = {
-    val parts = path
-      .split("((?<=/)|(?=/))")
-      .toList
-      .flatMap(URLPathPart.apply)
+    val parts = segments(path).flatMap(URLPathPart.apply)
 
     URLPath(parts) match {
       case p if absolutize => p.absolute
