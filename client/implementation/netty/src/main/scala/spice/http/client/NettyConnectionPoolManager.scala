@@ -122,7 +122,7 @@ class NettyConnectionPoolManager(
           })
 
           // HTTP codec
-          p.addLast("httpCodec", new HttpClientCodec())
+          p.addLast("httpCodec", NettyHttpClientInstance.codec())
           p.addLast("httpDecompressor", new HttpContentDecompressor(0))
           
           // Add permanent exception handler to catch ReadTimeoutException and other exceptions

@@ -169,7 +169,7 @@ class NettyHttpClientInstance(val client: HttpClient) extends HttpClientInstance
         p.addLast("idleState", new IdleStateHandler(0L, 0L, timeoutMillis, TimeUnit.MILLISECONDS))
 
         // HTTP codec
-        p.addLast("httpCodec", new HttpClientCodec())
+        p.addLast("httpCodec", NettyHttpClientInstance.codec())
         p.addLast("httpDecompressor", new HttpContentDecompressor(0))
 
         // Response handler (not pooled)
@@ -455,6 +455,10 @@ class NettyHttpClientInstance(val client: HttpClient) extends HttpClientInstance
 
     override def channelRead0(ctx: ChannelHandlerContext, msg: HttpObject): Unit = {
       msg match {
+        // A response the decoder could not read (headers over the limit, a malformed line) fails the request now: it never
+        // completes as content would, and would otherwise wait out the read timeout.
+        case failed if failed.decoderResult().isFailure =>
+          exceptionCaught(ctx, NettyHttpClientInstance.undecodable(failed))
         case response: NettyHttpResponse =>
           statusCode = response.status().code()
           val headersMap = response.headers().entries().asScala
@@ -664,6 +668,8 @@ class NettyHttpClientInstance(val client: HttpClient) extends HttpClientInstance
               }
 
             override def channelRead0(ctx: ChannelHandlerContext, msg: HttpObject): Unit = msg match {
+              case failed if failed.decoderResult().isFailure =>
+                exceptionCaught(ctx, NettyHttpClientInstance.undecodable(failed))
               case response: NettyHttpResponse =>
                 headersSeen = true
                 val code = response.status().code()
@@ -833,5 +839,26 @@ class NettyHttpClientInstance(val client: HttpClient) extends HttpClientInstance
 
   private def clearActiveRequestTask(channel: Channel): Unit = {
     channel.attr(NettyConnectionPoolManager.ActiveRequestTaskKey).set(null)
+  }
+}
+object NettyHttpClientInstance {
+  /** The most bytes of response headers the client reads (Netty's own default is 8 KiB, which pages with a long
+    * Content-Security-Policy exceed). Set with the `spice.http.client.maxHeaderSize` system property; 64 KiB by default. */
+  val MaxHeaderSize: Int = Option(System.getProperty("spice.http.client.maxHeaderSize")).flatMap(_.trim.toIntOption)
+    .filter(_ > 0).getOrElse(64 * 1024)
+
+  /** The longest status line the client reads. */
+  val MaxInitialLineLength: Int = 4096
+
+  /** The largest chunk of content the decoder hands on at once. */
+  val MaxChunkSize: Int = 8192
+
+  /** The HTTP codec every client pipeline uses, reading headers up to [[MaxHeaderSize]]. */
+  def codec(): HttpClientCodec = new HttpClientCodec(MaxInitialLineLength, MaxHeaderSize, MaxChunkSize)
+
+  /** Why the decoder could not read `msg`, as the failure of the request it answered. */
+  def undecodable(msg: HttpObject): Throwable = {
+    val cause = msg.decoderResult().cause()
+    new io.netty.handler.codec.DecoderException(s"The response could not be decoded: ${Option(cause).map(_.getMessage).getOrElse("unknown")}", cause)
   }
 }

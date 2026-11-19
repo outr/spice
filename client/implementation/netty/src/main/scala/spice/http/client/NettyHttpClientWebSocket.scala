@@ -242,7 +242,7 @@ class NettyHttpClientWebSocket(url: URL, instance: NettyHttpClientInstance, requ
             p.addLast("idleState", new IdleStateHandler(0, 0, NettyHttpClientWebSocket.KeepAliveIdleSeconds))
 
             // HTTP codec for initial handshake
-            p.addLast("httpCodec", new HttpClientCodec())
+            p.addLast("httpCodec", NettyHttpClientInstance.codec())
             p.addLast("httpAggregator", new HttpObjectAggregator(67108864)) // 8MB max
 
             // WebSocket protocol handler with larger frame size
