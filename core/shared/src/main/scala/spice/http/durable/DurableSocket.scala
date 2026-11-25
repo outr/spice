@@ -40,6 +40,8 @@ class DurableSocket[Id: RW, Event: RW, Info: RW](
   // --- Reactive channels ---
   val onEvent: Channel[(Long, Event)] = heard[(Long, Event)](InboundHold.Events)
   val onError: Channel[ErrorMessage] = Channel[ErrorMessage]
+  /** Each logged event this side sends that is longer than one frame ([[OversizedMessage]]): it still goes out, in chunks. */
+  val onOversized: Channel[OversizedMessage] = Channel[OversizedMessage]
   val onEphemeral: Channel[Json] = heard[Json](InboundHold.Ephemeral)
 
   /** Await durable receipt before acknowledging the inbound sequence. The handler builds its task at arrival
@@ -130,18 +132,20 @@ class DurableSocket[Id: RW, Event: RW, Info: RW](
   }
 
   def sendLogged(seq: Long, event: Event): Unit = {
-    val eventJson = JsonFormatter.Default(obj(
+    val data = event.json
+    val eventJson = JsonFormatter.Compact(obj(
       "type" -> str("event"),
       "seq" -> num(seq),
-      "data" -> event.json
+      "data" -> data
     ))
+    if (eventJson.length > config.maxFrameChars) onOversized @= OversizedMessage(seq, eventJson.length, data)
     sendRaw(eventJson)
   }
 
   // --- Sending: Ephemeral (not logged) ---
 
   def sendEphemeral(json: Json): Unit = {
-    sendRaw(JsonFormatter.Default(json))
+    sendRaw(JsonFormatter.Compact(json))
   }
 
   // --- Sending: RPC requests ---
@@ -155,7 +159,7 @@ class DurableSocket[Id: RW, Event: RW, Info: RW](
     val id = rpcCounter.incrementAndGet()
     val completable = Task.completable[Json]
     pendingRequests.put(id, completable)
-    sendRaw(JsonFormatter.Default(obj(
+    sendRaw(JsonFormatter.Compact(obj(
       "type" -> str("request"),
       "id" -> num(id),
       "data" -> request.json
@@ -171,7 +175,7 @@ class DurableSocket[Id: RW, Event: RW, Info: RW](
   def switch(newChannelId: Id, lastSeqForChannel: Long = 0L): Task[Unit] = Task.defer {
     val completable = Task.completable[Unit]
     pendingSwitch = completable
-    val msg = JsonFormatter.Default(obj(
+    val msg = JsonFormatter.Compact(obj(
       "type" -> str("switch"),
       "channelId" -> newChannelId.json,
       "lastSeq" -> num(lastSeqForChannel)
@@ -262,7 +266,7 @@ class DurableSocket[Id: RW, Event: RW, Info: RW](
 
   def sendConnect(clientId: String, info: Info): Unit = {
     _state @= ProtocolState.Handshaking
-    sendRaw(JsonFormatter.Default(obj(
+    sendRaw(JsonFormatter.Compact(obj(
       "type" -> str("connect"),
       "clientId" -> str(clientId),
       "info" -> info.json,
@@ -272,7 +276,7 @@ class DurableSocket[Id: RW, Event: RW, Info: RW](
 
   def sendResume(clientId: String, lastSeq: Long, info: Info): Unit = {
     _state @= ProtocolState.Handshaking
-    sendRaw(JsonFormatter.Default(obj(
+    sendRaw(JsonFormatter.Compact(obj(
       "type" -> str("resume"),
       "clientId" -> str(clientId),
       "lastSeq" -> num(lastSeq),
@@ -285,14 +289,14 @@ class DurableSocket[Id: RW, Event: RW, Info: RW](
     * [[DurableSocketClient.reconnect]]). Application-level, so it works even where the transport can't
     * surface a coded close; a graceful drain follows it with a WS 1001 close for stragglers. */
   def sendGoingAway(reason: String): Unit = {
-    sendRaw(JsonFormatter.Default(obj(
+    sendRaw(JsonFormatter.Compact(obj(
       "type" -> str("going-away"),
       "reason" -> str(reason)
     )))
   }
 
   def sendConnected(lastClientSeq: Long, resumed: Boolean): Unit = {
-    sendRaw(JsonFormatter.Default(obj(
+    sendRaw(JsonFormatter.Compact(obj(
       "type" -> str("connected"),
       "lastClientSeq" -> num(lastClientSeq),
       "resumed" -> bool(resumed),
@@ -344,7 +348,7 @@ class DurableSocket[Id: RW, Event: RW, Info: RW](
   def sendAck(): Unit = {
     val seq = tracker.highestProcessedSeq
     if (seq > 0) {
-      sendRaw(JsonFormatter.Default(obj("type" -> str("ack"), "seq" -> num(seq))))
+      sendRaw(JsonFormatter.Compact(obj("type" -> str("ack"), "seq" -> num(seq))))
       tracker.resetAckCount()
     }
   }
@@ -380,10 +384,10 @@ class DurableSocket[Id: RW, Event: RW, Info: RW](
     scribe.warn(s"DurableSocket: refused a message of ${text.length} characters ($code): $message")
     (TypePrefix.findFirstMatchIn(head).map(_.group(1)), IdPrefix.findFirstMatchIn(head).map(_.group(1).toLong)) match {
       case (Some("request"), Some(id)) =>
-        sendRaw(JsonFormatter.Default(obj("type" -> str("response-error"), "id" -> num(id), "code" -> str(code), "message" -> str(message))))
+        sendRaw(JsonFormatter.Compact(obj("type" -> str("response-error"), "id" -> num(id), "code" -> str(code), "message" -> str(message))))
       case _ =>
         val seq = SeqPrefix.findFirstMatchIn(head).map(m => "seq" -> num(m.group(1).toLong)).toList
-        sendRaw(JsonFormatter.Default(obj((List("type" -> str("error"), "code" -> str(code), "message" -> str(message)) ++ seq)*)))
+        sendRaw(JsonFormatter.Compact(obj((List("type" -> str("error"), "code" -> str(code), "message" -> str(message)) ++ seq)*)))
     }
   }
 
@@ -490,13 +494,13 @@ class DurableSocket[Id: RW, Event: RW, Info: RW](
         val id = json("id").asLong
         val data = json("data")
         requestHandler(data).map { result =>
-          sendRaw(JsonFormatter.Default(obj("type" -> str("response"), "id" -> num(id), "data" -> result)))
+          sendRaw(JsonFormatter.Compact(obj("type" -> str("response"), "id" -> num(id), "data" -> result)))
         }.handleError { throwable =>
           val (code, message) = throwable match {
             case e: RpcException => (e.code, Option(e.getMessage).getOrElse("RPC error"))
             case other          => ("error", Option(other.getMessage).getOrElse("RPC error"))
           }
-          sendRaw(JsonFormatter.Default(obj("type" -> str("response-error"), "id" -> num(id), "code" -> str(code), "message" -> str(message))))
+          sendRaw(JsonFormatter.Compact(obj("type" -> str("response-error"), "id" -> num(id), "code" -> str(code), "message" -> str(message))))
           Task.unit
         }.start()
 

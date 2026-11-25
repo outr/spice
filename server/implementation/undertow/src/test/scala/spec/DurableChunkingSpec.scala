@@ -106,6 +106,58 @@ class DurableChunkingSpec extends AnyWordSpec with Matchers {
       c.close()
     }
 
+    "send each frame as compact JSON that reads back to the same values" in {
+      val sent = new java.util.concurrent.ConcurrentLinkedQueue[String]()
+      val socket = new DurableSocket[String, ChatEvent, ConnectInfo](base, new InMemoryEventLog[String, ChatEvent], "compact") {
+        override protected[durable] def sendRaw(text: String): Unit = sent.add(text)
+      }
+      val event = ChatEvent("héllo 😀 \"quoted\"\nsecond line", "compact")
+      socket.sendLogged(7L, event)
+      socket.sendEphemeral(obj("type" -> str("note"), "items" -> arr(num(1), str("two"))))
+      val frames = sent.toArray(Array.empty[String]).toList
+      frames should have size 2
+      frames.foreach { f =>
+        f shouldBe fabric.io.JsonFormatter.Compact(fabric.io.JsonParser(f))
+        // A newline appears only escaped inside a string: no indentation between values.
+        f should not include "\n"
+      }
+      val logged = fabric.io.JsonParser(frames.head)
+      (logged("type").asString, logged("seq").asLong, logged("data").as[ChatEvent]) shouldBe ("event", 7L, event)
+    }
+
+    "announce a logged event longer than a frame, and no shorter one, while sending both" in {
+      val sent = new java.util.concurrent.ConcurrentLinkedQueue[String]()
+      val socket = new DurableSocket[String, ChatEvent, ConnectInfo](chunked, new InMemoryEventLog[String, ChatEvent], "oversized") {
+        override protected[durable] def sendRaw(text: String): Unit = sent.add(text)
+      }
+      val seen = new java.util.concurrent.ConcurrentLinkedQueue[OversizedMessage]()
+      socket.onOversized.attach(m => seen.add(m))
+      socket.sendLogged(1L, ChatEvent("short", "a"))
+      socket.sendLogged(2L, ChatEvent(long, "a"))
+      sent.size shouldBe 2
+      val announced = seen.toArray(Array.empty[OversizedMessage]).toList
+      announced.map(_.seq) shouldBe List(2L)
+      announced.head.length shouldBe sent.toArray(Array.empty[String])(1).length
+      announced.head.data.as[ChatEvent].message shouldBe long
+    }
+
+    "read a pretty-printed frame from a peer that still sends them" in {
+      val log = new InMemoryEventLog[String, ChatEvent]
+      val durable = new DurableSocketServer[String, ChatEvent, ConnectInfo](config = base, eventLog = log,
+        resolveChannel = (_, info) => Task.pure(info.room))
+      server.handler(List(path"/ws-pretty" / durable))
+      @volatile var atServer: Option[ChatEvent] = None
+      durable.onSession.attach(session => session.protocol.onEvent.attach { case (_, event) => atServer = Some(event) })
+      val c = client(path"/ws-pretty", base, log, "pretty")
+      c.connect().sync()
+      val event = ChatEvent("from an older peer ✓", "pretty")
+      c.protocol.sendRaw(fabric.io.JsonFormatter.Default(obj("type" -> str("event"), "seq" -> num(1), "data" -> event.json)))
+      eventually(timeout(Span(5, Seconds))) {
+        atServer shouldBe Some(event)
+      }
+      c.close()
+    }
+
     "refuse at the sender a message over its own limit" in {
       val log = new InMemoryEventLog[String, ChatEvent]
       val durable = new DurableSocketServer[String, ChatEvent, ConnectInfo](config = base, eventLog = log,

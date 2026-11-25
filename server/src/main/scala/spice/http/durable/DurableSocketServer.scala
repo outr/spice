@@ -227,7 +227,7 @@ class DurableSocketServer[Id: RW, Event: RW, Info: RW](
         newMap.put(s.clientId, s)
         s.touch()
 
-        val switched = JsonFormatter.Default(obj(
+        val switched = JsonFormatter.Compact(obj(
           "type" -> str("switched"),
           "channelId" -> newChannelId.json,
           "lastSeq" -> num(ds.highestProcessedSeq)
@@ -235,7 +235,7 @@ class DurableSocketServer[Id: RW, Event: RW, Info: RW](
         ds.sendRaw(switched)
         replay.start()
       }.handleError { throwable =>
-        val errorMsg = JsonFormatter.Default(obj(
+        val errorMsg = JsonFormatter.Compact(obj(
           "type" -> str("error"),
           "code" -> str("access_denied"),
           "message" -> str(Option(throwable.getMessage).getOrElse("Channel access denied"))
@@ -261,7 +261,7 @@ class DurableSocketServer[Id: RW, Event: RW, Info: RW](
         newMap.put(s.clientId, s)
         s.touch()
 
-        val switched = JsonFormatter.Default(obj(
+        val switched = JsonFormatter.Compact(obj(
           "type" -> str("switched"),
           "channelId" -> newChannelId.json,
           "lastSeq" -> num(ds.highestProcessedSeq)
@@ -280,7 +280,7 @@ class DurableSocketServer[Id: RW, Event: RW, Info: RW](
   }
 
   private def sendError(listener: WebSocketListener, code: String, throwable: Throwable): Unit = {
-    val errorMsg = JsonFormatter.Default(obj(
+    val errorMsg = JsonFormatter.Compact(obj(
       "type" -> str("error"),
       "code" -> str(code),
       "message" -> str(Option(throwable.getMessage).getOrElse("Connection rejected"))

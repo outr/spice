@@ -340,7 +340,7 @@ class FileChannel[F: RW](socket: DurableSocket[?, ?, ?], config: FileTransferCon
       case o: Obj => Obj(o.value + ("type" -> str(tpe)))
       case other  => obj("type" -> str(tpe), "data" -> other)
     }
-    socket.sendRaw(JsonFormatter.Default(withType))
+    socket.sendRaw(JsonFormatter.Compact(withType))
   }
 
   private def readChunk(spool: FileSpool, idx: Int, size: Long): Array[Byte] = {
